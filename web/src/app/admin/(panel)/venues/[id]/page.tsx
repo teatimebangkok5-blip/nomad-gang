@@ -6,10 +6,10 @@ import { Suspense, type ReactNode } from "react";
 import { requireAdmin } from "@/lib/auth";
 import { venuePhotoUrl } from "@/lib/env";
 import { generatePassword } from "@/lib/password";
-import type { Deal, Venue, VenueAccount } from "@/lib/types";
+import type { Venue, VenueAccount } from "@/lib/types";
 import { updateVenue } from "../actions";
 import { VenueForm } from "../venue-form";
-import { DealForm } from "./deal-form";
+import { Promotions, type PromotionRow } from "./promotions";
 import { DeleteVenueButton } from "./delete-venue-button";
 import { PhotoUpload } from "./photo-upload";
 import { VenueLogins } from "./venue-logins";
@@ -46,12 +46,9 @@ async function VenueEditor({ params }: { params: PageProps<"/admin/venues/[id]">
       .select("*, deal_coupons(coupon_code)")
       .eq("venue_id", id)
       .order("is_active", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(1),
+      .order("created_at"),
     supabase.from("venue_accounts").select("*").eq("venue_id", id).order("created_at"),
   ]);
-
-  const dealRow = (deals?.[0] ?? null) as (Deal & { deal_coupons: { coupon_code: string } | null }) | null;
 
   return (
     <>
@@ -79,14 +76,10 @@ async function VenueEditor({ params }: { params: PageProps<"/admin/venues/[id]">
         </Section>
 
         <Section
-          title="Deal"
-          description="What TableMeet groups of 3 or more get. The coupon code is shown only to venue staff after they log in."
+          title="Promotions"
+          description="Discounts and offers are unlocked with the coupon code when 3+ people check in. Events and parties are dated listings. Changes show in the app right away."
         >
-          <DealForm
-            venueId={venue.id}
-            deal={dealRow}
-            couponCode={dealRow?.deal_coupons?.coupon_code ?? ""}
-          />
+          <Promotions venueId={venue.id} promotions={(deals ?? []) as PromotionRow[]} />
         </Section>
 
         <Section

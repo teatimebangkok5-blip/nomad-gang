@@ -84,20 +84,35 @@ r = await tryQuery("authenticated", admin, `update public.venues set lat = 13.75
 check("location re-synced on update", r.rows?.[0]?.wkt === "POINT(100.49 13.75)");
 
 r = await tryQuery("authenticated", admin,
-  `select public.admin_save_deal($1, null, '15% off', 'ลด 15%', '', '', 'percent', 15, 'TM15', true) as id`, [venueId]);
+  `select public.admin_save_promotion($1, null, 'discount', '15% off', 'ลด 15%', '', '', 'percent', 15, 'TM15', null, null, true) as id`, [venueId]);
 check("admin can save deal", !r.error);
 const dealId = r.rows?.[0]?.id;
 r = await tryQuery("authenticated", admin,
-  `select public.admin_save_deal($1, $2, '20% off', 'ลด 20%', '', '', 'percent', 20, 'TM20', true) as id`, [venueId, dealId]);
+  `select public.admin_save_promotion($1, $2, 'discount', '20% off', 'ลด 20%', '', '', 'percent', 20, 'TM20', null, null, true) as id`, [venueId, dealId]);
 check("admin can update deal", r.rows?.[0]?.id === dealId);
 r = await tryQuery("authenticated", admin, `select coupon_code from public.deal_coupons where deal_id = $1`, [dealId]);
 check("coupon code updated", r.rows?.[0]?.coupon_code === "TM20");
 r = await tryQuery("authenticated", admin,
-  `select public.admin_save_deal($1, null, 'x', 'x', '', '', 'percent', 150, 'X', true)`, [venueId]);
+  `select public.admin_save_promotion($1, null, 'discount', 'x', 'x', '', '', 'percent', 150, 'X', null, null, true)`, [venueId]);
 check("percent over 100 rejected", !!r.error);
 r = await tryQuery("authenticated", admin,
-  `select public.admin_save_deal($1, null, 'Free drink', 'ฟรี', '', '', 'other', null, 'FREE', true)`, [venueId]);
-check("second active deal for same venue rejected", !!r.error);
+  `select public.admin_save_promotion($1, null, 'offer', 'Free drink', 'ฟรี', '', '', 'other', null, 'FREE', null, null, true)`, [venueId]);
+check("second active coupon (offer) for same venue rejected", !!r.error);
+r = await tryQuery("authenticated", admin,
+  `select public.admin_save_promotion($1, null, 'event', 'Live jazz', 'แจ๊สสด', '', '', 'other', null, null, now() + interval '1 day', now() + interval '1 day 3 hours', true) as id`, [venueId]);
+check("event added alongside the discount", !r.error);
+const eventId = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", admin, `select count(*)::int n from public.deal_coupons where deal_id = $1`, [eventId]);
+check("events have no coupon code", r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", admin,
+  `select public.admin_save_promotion($1, null, 'party', 'DJ night', 'ดีเจ', '', '', 'other', null, null, null, null, true)`, [venueId]);
+check("party without dates rejected", !!r.error);
+r = await tryQuery("authenticated", admin,
+  `select public.admin_save_promotion($1, null, 'offer', 'x', 'x', '', '', 'other', null, '', null, null, false)`, [venueId]);
+check("offer without coupon code rejected", !!r.error);
+r = await tryQuery("authenticated", admin,
+  `select public.admin_save_promotion($1, null, 'party', 'Pool party', 'ปาร์ตี้', '', '', 'other', null, null, now() + interval '2 days', now() + interval '2 days 4 hours', true)`, [venueId]);
+check("several events/parties per venue allowed", !r.error);
 
 r = await tryQuery("authenticated", admin, `select public.admin_create_venue_account($1, ' SkyBar-Staff ', 'password123') as id`, [venueId]);
 check("admin can create venue login", !r.error);
@@ -132,7 +147,7 @@ await tryQuery("authenticated", admin, `update public.venues set is_active = tru
 r = await tryQuery("anon", null, `select id from public.venues`);
 check("anon sees live venue", r.rows?.length === 1);
 r = await tryQuery("authenticated", user, `select id, title_en from public.deals`);
-check("app user sees active deal", r.rows?.length === 1);
+check("app user sees active promotions (discount + event + party)", r.rows?.length === 3);
 r = await tryQuery("authenticated", user, `select * from public.deal_coupons`);
 check("app user can't read coupon codes", !r.error && r.rows.length === 0);
 r = await tryQuery("anon", null, `select * from public.deal_coupons`);
@@ -149,7 +164,7 @@ r = await tryQuery("authenticated", user, `insert into public.venues (name_en, n
 check("app user can't create venues", !!r.error);
 r = await tryQuery("authenticated", user, `select public.admin_create_venue_account($1, 'hacker', 'password123')`, [venueId]);
 check("app user can't create venue logins", !!r.error);
-r = await tryQuery("authenticated", user, `select public.admin_save_deal($1, $2, 'x', 'x', '', '', 'percent', 99, 'X', true)`, [venueId, dealId]);
+r = await tryQuery("authenticated", user, `select public.admin_save_promotion($1, $2, 'discount', 'x', 'x', '', '', 'percent', 99, 'X', null, null, true)`, [venueId, dealId]);
 check("app user can't edit deals", !!r.error);
 r = await tryQuery("authenticated", user, `update public.venues set name_en = 'hacked' where id = $1 returning id`, [venueId]);
 check("app user can't update venues", !r.error && r.rows.length === 0);
@@ -230,17 +245,40 @@ for (let i = 0; i < 3; i++) await tryQuery("authenticated", guests[0], `select p
 r = await tryQuery("authenticated", guests[0], `select public.create_meetup($1, $2, 3)`, [venueId, inHours(5)]);
 check("a person can host at most 3 open tables", /too_many_open/.test(r.error ?? ""));
 
+// --- Tables at Google places
+const fn = `select public.create_meetup_at_place($1, $2, $3, $4, $5, 4) as id`;
+r = await tryQuery("authenticated", user, fn, ["ChIJgoogle1", "Somtam Der", 13.7290, 100.5340, inHours(2)]);
+check("table at any Google place", !r.error);
+const placeMeetupId = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", user, `select venue_id, place_name from public.list_open_meetups() where id = $1`, [placeMeetupId]);
+check("Google-place table listed with its name", r.rows?.[0]?.venue_id === null && r.rows?.[0]?.place_name === "Somtam Der");
+r = await tryQuery("authenticated", guests[1], `select public.join_meetup($1)`, [placeMeetupId]);
+check("people can join a Google-place table", !r.error);
+r = await tryQuery("authenticated", user, fn, ["ChIJgoogle2", "Far away", 48.85, 2.35, inHours(2)]);
+check("place outside Thailand rejected", /venue_unavailable/.test(r.error ?? ""));
+r = await tryQuery("authenticated", user, fn, ["", "No id", 13.7, 100.5, inHours(2)]);
+check("place without id rejected", /venue_unavailable/.test(r.error ?? ""));
+await tryQuery("authenticated", admin, `update public.venues set google_place_id = 'ChIJskybar' where id = $1`, [venueId]);
+r = await tryQuery("authenticated", user, fn, ["ChIJskybar", "Sky Bar (Google name)", 13.75, 100.49, inHours(4)]);
+const linkedId = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", user, `select venue_id, place_name from public.meetups where id = $1`, [linkedId]);
+check("Google place linked to a partner venue becomes a venue table", r.rows?.[0]?.venue_id === venueId && r.rows?.[0]?.place_name === null);
+r = await tryQuery("authenticated", unverified, fn, ["ChIJgoogle3", "Cafe", 13.7, 100.5, inHours(2)]);
+check("unverified user can't create at a Google place", /not_allowed/.test(r.error ?? ""));
+r = await tryQuery("authenticated", user, `insert into public.meetups (google_place_id, place_name, place_lat, place_lng, host_id, starts_at, ends_at, max_people) values ('x', 'x', 13.7, 100.5, $1, now(), now() + interval '1 hour', 3)`, [user]);
+check("direct insert of a Google-place table blocked", !!r.error);
+
 await tryQuery("authenticated", admin, `update public.venues set is_active = false where id = $1`, [venueId]);
 r = await tryQuery("authenticated", user, `select public.create_meetup($1, $2, 3)`, [venueId, inHours(2)]);
 check("can't create a table at a hidden venue", /venue_unavailable/.test(r.error ?? ""));
 r = await tryQuery("authenticated", user, `select count(*)::int n from public.list_open_meetups()`);
-check("tables at hidden venues aren't listed", r.rows?.[0]?.n === 0);
+check("tables at hidden venues aren't listed; Google-place tables still are", r.rows?.[0]?.n === 1);
 r = await tryQuery("anon", null, `select count(*)::int n from public.meetups`);
 check("signed-out visitors can't read tables", !r.error && r.rows[0].n === 0);
 
 // --- Deleting a venue cascades
 await tryQuery("authenticated", admin, `delete from public.venues where id = $1`, [venueId]);
-r = await tryQuery("service_role", null, `select (select count(*) from public.deals)::int d, (select count(*) from public.deal_coupons)::int c, (select count(*) from public.venue_accounts)::int a, (select count(*) from public.venue_account_secrets)::int s, (select count(*) from public.meetups)::int m, (select count(*) from public.meetup_members)::int mm`);
+r = await tryQuery("service_role", null, `select (select count(*) from public.deals)::int d, (select count(*) from public.deal_coupons)::int c, (select count(*) from public.venue_accounts)::int a, (select count(*) from public.venue_account_secrets)::int s, (select count(*) from public.meetups where venue_id is not null)::int m, (select count(*) from public.meetup_members mm join public.meetups m on m.id = mm.meetup_id where m.venue_id is not null)::int mm`);
 const c = r.rows?.[0];
 check("deleting venue removes deal, coupon, logins, tables", c && c.d + c.c + c.a + c.s + c.m + c.mm === 0);
 

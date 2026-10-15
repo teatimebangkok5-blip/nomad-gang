@@ -4,7 +4,7 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
-import { DISCOUNT_TYPES, VENUE_CATEGORIES, type FormState } from "@/lib/types";
+import { COUPON_KINDS, DISCOUNT_TYPES, PROMOTION_KINDS, VENUE_CATEGORIES, type FormState } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Venues
@@ -36,6 +36,10 @@ const venueSchema = z.object({
   coordinates: coordinatesSchema,
   checkin_radius_m: z.coerce.number().int().min(10, "At least 10 m").max(500, "At most 500 m"),
   is_active: z.boolean(),
+  google_place_id: z
+    .string()
+    .trim()
+    .transform((value) => value || null),
 });
 
 function parseVenue(formData: FormData) {
@@ -50,6 +54,7 @@ function parseVenue(formData: FormData) {
     coordinates: formData.get("coordinates") ?? "",
     checkin_radius_m: formData.get("checkin_radius_m") ?? "50",
     is_active: formData.get("is_active") === "on",
+    google_place_id: formData.get("google_place_id") ?? "",
   });
 }
 
@@ -135,74 +140,180 @@ export async function setVenuePhoto(venueId: string, photoPath: string | null): 
 }
 
 // ---------------------------------------------------------------------------
-// Deal + coupon code
+// Promotions: discount and offer (coupon code), event and party (dated)
 // ---------------------------------------------------------------------------
 
-const dealSchema = z
+// <input type="datetime-local"> gives "2026-10-20T20:00" with no zone; the admin works in Bangkok time.
+function fromBangkokInput(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}:00+07:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+const promotionSchema = z
   .object({
-    deal_id: z.uuid().nullable(),
+    promotion_id: z.uuid().nullable(),
+    kind: z.enum(PROMOTION_KINDS),
     title_en: z.string().trim().min(1, "Required"),
     title_th: z.string().trim().min(1, "Required"),
     details_en: z.string().trim(),
     details_th: z.string().trim(),
-    discount_type: z.enum(DISCOUNT_TYPES),
+    discount_type: z.enum(DISCOUNT_TYPES).nullable(),
     discount_value: z.string().trim(),
-    coupon_code: z.string().trim().min(1, "Required").max(60, "Too long"),
+    coupon_code: z.string().trim().max(60, "Too long"),
+    starts_at: z.string().trim(),
+    ends_at: z.string().trim(),
     is_active: z.boolean(),
   })
   .transform((data, ctx) => {
-    if (data.discount_type === "other") {
-      return { ...data, discount_value: null };
+    const hasCoupon = COUPON_KINDS.includes(data.kind);
+    if (hasCoupon && !data.coupon_code) {
+      ctx.addIssue({ code: "custom", path: ["coupon_code"], message: "Required" });
     }
-    const value = Number(data.discount_value);
-    const max = data.discount_type === "percent" ? 100 : 100000;
-    if (!data.discount_value || !Number.isFinite(value) || value <= 0 || value > max) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["discount_value"],
-        message: data.discount_type === "percent" ? "Enter a percent between 1 and 100" : "Enter an amount in baht",
-      });
-      return z.NEVER;
+
+    let discountValue: number | null = null;
+    let discountType: (typeof DISCOUNT_TYPES)[number] = "other";
+    if (data.kind === "discount") {
+      discountType = data.discount_type === "fixed_thb" ? "fixed_thb" : "percent";
+      const value = Number(data.discount_value);
+      const max = discountType === "percent" ? 100 : 100000;
+      if (!data.discount_value || !Number.isFinite(value) || value <= 0 || value > max) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["discount_value"],
+          message: discountType === "percent" ? "Enter a percent between 1 and 100" : "Enter an amount in baht",
+        });
+      }
+      discountValue = value;
     }
-    return { ...data, discount_value: value };
+
+    let startsAt: Date | null = null;
+    let endsAt: Date | null = null;
+    if (!hasCoupon) {
+      startsAt = fromBangkokInput(data.starts_at);
+      endsAt = fromBangkokInput(data.ends_at);
+      if (!startsAt) ctx.addIssue({ code: "custom", path: ["starts_at"], message: "Pick a start date and time" });
+      if (!endsAt) ctx.addIssue({ code: "custom", path: ["ends_at"], message: "Pick an end date and time" });
+      if (startsAt && endsAt && endsAt <= startsAt) {
+        ctx.addIssue({ code: "custom", path: ["ends_at"], message: "Must be after the start" });
+      }
+    }
+
+    return { ...data, discount_type: discountType, discount_value: discountValue, starts_at: startsAt, ends_at: endsAt };
   });
 
-export async function saveDeal(venueId: string, _prev: FormState, formData: FormData): Promise<FormState> {
+export async function savePromotion(venueId: string, _prev: FormState, formData: FormData): Promise<FormState> {
   const supabase = await requireAdmin();
-  const parsed = dealSchema.safeParse({
-    deal_id: formData.get("deal_id") || null,
+  const parsed = promotionSchema.safeParse({
+    promotion_id: formData.get("promotion_id") || null,
+    kind: formData.get("kind"),
     title_en: formData.get("title_en") ?? "",
     title_th: formData.get("title_th") ?? "",
     details_en: formData.get("details_en") ?? "",
     details_th: formData.get("details_th") ?? "",
-    discount_type: formData.get("discount_type"),
+    discount_type: formData.get("discount_type") || null,
     discount_value: formData.get("discount_value") ?? "",
     coupon_code: formData.get("coupon_code") ?? "",
+    starts_at: formData.get("starts_at") ?? "",
+    ends_at: formData.get("ends_at") ?? "",
     is_active: formData.get("is_active") === "on",
   });
   if (!parsed.success) {
     return { error: "Please fix the highlighted fields.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
   }
 
-  const d = parsed.data;
-  const { error } = await supabase.rpc("admin_save_deal", {
+  const p = parsed.data;
+  const { error } = await supabase.rpc("admin_save_promotion", {
     p_venue_id: venueId,
-    p_deal_id: d.deal_id,
-    p_title_en: d.title_en,
-    p_title_th: d.title_th,
-    p_details_en: d.details_en,
-    p_details_th: d.details_th,
-    p_discount_type: d.discount_type,
-    p_discount_value: d.discount_value,
-    p_coupon_code: d.coupon_code,
-    p_is_active: d.is_active,
+    p_promotion_id: p.promotion_id,
+    p_kind: p.kind,
+    p_title_en: p.title_en,
+    p_title_th: p.title_th,
+    p_details_en: p.details_en,
+    p_details_th: p.details_th,
+    p_discount_type: p.discount_type,
+    p_discount_value: p.discount_value,
+    p_coupon_code: p.coupon_code || null,
+    p_starts_at: p.starts_at?.toISOString() ?? null,
+    p_ends_at: p.ends_at?.toISOString() ?? null,
+    p_is_active: p.is_active,
   });
   if (error) {
-    return { error: `Could not save deal: ${error.message}` };
+    if (error.code === "23505") {
+      return { error: "This place already has an active discount or offer. Turn that one off first: one coupon per place." };
+    }
+    return { error: `Could not save: ${error.message}` };
   }
 
   refresh();
-  return { ok: true, message: "Deal saved." };
+  return { ok: true, message: p.promotion_id ? "Saved." : "Added. The app shows it right away." };
+}
+
+export async function deletePromotion(promotionId: string): Promise<FormState> {
+  const supabase = await requireAdmin();
+  const { error } = await supabase.from("deals").delete().eq("id", promotionId);
+  if (error) {
+    return { error: `Could not delete: ${error.message}` };
+  }
+  refresh();
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Google place link
+// ---------------------------------------------------------------------------
+
+export type GooglePlaceResult = { id: string; name: string; address: string; lat: number; lng: number };
+
+// Search Google Places (New) from the server, biased to Bangkok. Needs GOOGLE_PLACES_API_KEY in web/.env.local.
+export async function searchGooglePlaces(query: string): Promise<{ results?: GooglePlaceResult[]; error?: string }> {
+  await requireAdmin();
+  const key = process.env.GOOGLE_PLACES_API_KEY;
+  if (!key) {
+    return { error: "Google search isn't set up yet (GOOGLE_PLACES_API_KEY is missing in web/.env.local)." };
+  }
+  const text = query.trim();
+  if (text.length < 2) return { results: [] };
+
+  const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": key,
+      "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location",
+    },
+    body: JSON.stringify({
+      textQuery: text,
+      maxResultCount: 8,
+      locationBias: { circle: { center: { latitude: 13.7466, longitude: 100.5393 }, radius: 50000 } },
+    }),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    return { error: `Google search failed (${response.status}). Check the Places API key.` };
+  }
+  const data = (await response.json()) as {
+    places?: {
+      id: string;
+      displayName?: { text: string };
+      formattedAddress?: string;
+      location?: { latitude: number; longitude: number };
+    }[];
+  };
+  const results = (data.places ?? []).flatMap((place) =>
+    place.location
+      ? [
+          {
+            id: place.id,
+            name: place.displayName?.text ?? "",
+            address: place.formattedAddress ?? "",
+            lat: place.location.latitude,
+            lng: place.location.longitude,
+          },
+        ]
+      : [],
+  );
+  return { results };
 }
 
 // ---------------------------------------------------------------------------

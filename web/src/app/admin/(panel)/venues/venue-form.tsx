@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import { Field, FormMessage, SubmitButton, inputClass } from "@/components/form";
 import { CATEGORY_LABELS, VENUE_CATEGORIES, type FormState, type Venue } from "@/lib/types";
+import { GooglePlaceSearch } from "./google-place-search";
 
 type VenueFormAction = (prev: FormState, formData: FormData) => Promise<FormState>;
 
@@ -10,6 +11,9 @@ export function VenueForm({ action, venue }: { action: VenueFormAction; venue?: 
   const [state, formAction, pending] = useActionState(action, {});
   const errors = state.fieldErrors ?? {};
   const [coordinates, setCoordinates] = useState(venue ? `${venue.lat}, ${venue.lng}` : "");
+  const [googlePlaceId, setGooglePlaceId] = useState(venue?.google_place_id ?? "");
+  const nameRef = useRef<HTMLInputElement>(null);
+  const addressRef = useRef<HTMLInputElement>(null);
   const mapsUrl = /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(coordinates.trim())
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(coordinates.replace(/\s/g, ""))}`
     : null;
@@ -18,9 +22,27 @@ export function VenueForm({ action, venue }: { action: VenueFormAction; venue?: 
     <form action={formAction} className="space-y-6">
       <FormMessage state={state} />
 
+      <input type="hidden" name="google_place_id" value={googlePlaceId} />
+      <GooglePlaceSearch
+        onPick={(place) => {
+          setGooglePlaceId(place.id);
+          setCoordinates(`${place.lat.toFixed(6)}, ${place.lng.toFixed(6)}`);
+          if (nameRef.current && !nameRef.current.value) nameRef.current.value = place.name;
+          if (addressRef.current && !addressRef.current.value) addressRef.current.value = place.address;
+        }}
+      />
+      {googlePlaceId && (
+        <p className="-mt-3 text-xs text-ink-600">
+          Linked to a Google Maps place. Tables people create there in the app get this venue&apos;s promotions.{" "}
+          <button type="button" className="text-brand-700 underline" onClick={() => setGooglePlaceId("")}>
+            Unlink
+          </button>
+        </p>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Name (English)" name="name_en" errors={errors.name_en}>
-          <input id="name_en" name="name_en" defaultValue={venue?.name_en} required className={inputClass} />
+          <input ref={nameRef} id="name_en" name="name_en" defaultValue={venue?.name_en} required className={inputClass} />
         </Field>
         <Field label="Name (Thai)" name="name_th" errors={errors.name_th}>
           <input id="name_th" name="name_th" lang="th" defaultValue={venue?.name_th} required className={inputClass} />
@@ -61,7 +83,7 @@ export function VenueForm({ action, venue }: { action: VenueFormAction; venue?: 
           />
         </Field>
         <Field label="Address (English)" name="address_en" errors={errors.address_en}>
-          <input id="address_en" name="address_en" defaultValue={venue?.address_en} className={inputClass} />
+          <input ref={addressRef} id="address_en" name="address_en" defaultValue={venue?.address_en} className={inputClass} />
         </Field>
         <Field label="Address (Thai)" name="address_th" errors={errors.address_th}>
           <input id="address_th" name="address_th" lang="th" defaultValue={venue?.address_th} className={inputClass} />

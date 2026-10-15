@@ -4,12 +4,12 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { requireAdmin } from "@/lib/auth";
 import { buttonClass } from "@/components/form";
-import { CATEGORY_LABELS, describeDiscount, type Deal, type Venue } from "@/lib/types";
+import { CATEGORY_LABELS, COUPON_KINDS, PROMOTION_LABELS, describeDiscount, type Deal, type Venue } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Venues" };
 
 type VenueRow = Pick<Venue, "id" | "name_en" | "name_th" | "category" | "is_active"> & {
-  deals: Pick<Deal, "discount_type" | "discount_value" | "title_en" | "is_active">[];
+  deals: Pick<Deal, "kind" | "discount_type" | "discount_value" | "title_en" | "is_active">[];
   venue_accounts: { count: number }[];
 };
 
@@ -41,7 +41,7 @@ async function VenueList() {
   const supabase = await requireAdmin();
   const { data, error } = await supabase
     .from("venues")
-    .select("id, name_en, name_th, category, is_active, deals(discount_type, discount_value, title_en, is_active), venue_accounts(count)")
+    .select("id, name_en, name_th, category, is_active, deals(kind, discount_type, discount_value, title_en, is_active), venue_accounts(count)")
     .order("created_at", { ascending: false });
 
   const venues = (data ?? []) as VenueRow[];
@@ -67,9 +67,11 @@ async function VenueList() {
       {venues.length > 0 && (
         <ul className="mt-6 divide-y divide-ink-200 overflow-hidden rounded-xl border border-ink-200 bg-white">
           {venues.map((venue) => {
-            const deal = venue.deals.find((d) => d.is_active);
+            const active = venue.deals.filter((d) => d.is_active);
+            const coupon = active.find((d) => COUPON_KINDS.includes(d.kind));
+            const listings = active.filter((d) => !COUPON_KINDS.includes(d.kind)).map((d) => PROMOTION_LABELS[d.kind]);
             const logins = venue.venue_accounts[0]?.count ?? 0;
-            const missing = [!deal && "no active deal", logins === 0 && "no staff login"].filter(Boolean);
+            const missing = [active.length === 0 && "no promotions", coupon && logins === 0 && "no staff login"].filter(Boolean);
             return (
               <li key={venue.id}>
                 <Link
@@ -82,7 +84,8 @@ async function VenueList() {
                     </p>
                     <p className="mt-0.5 text-sm text-ink-600">
                       {CATEGORY_LABELS[venue.category]}
-                      {deal && <> · {describeDiscount(deal)}</>}
+                      {coupon && <> · {coupon.kind === "discount" ? describeDiscount(coupon) : coupon.title_en}</>}
+                      {listings.length > 0 && <> · {listings.join(", ")}</>}
                       {missing.length > 0 && <span className="text-amber-700"> · {missing.join(", ")}</span>}
                     </p>
                   </div>

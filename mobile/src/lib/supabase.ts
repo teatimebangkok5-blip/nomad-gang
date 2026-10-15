@@ -33,6 +33,14 @@ AppState.addEventListener('change', (state) => {
   }
 });
 
+// Each Realtime subscription needs its own channel name: supabase.channel(name) returns the existing channel when
+// the name is already in use, and adding listeners to it after subscribe() throws.
+let channelCount = 0;
+export function uniqueChannelName(prefix: string): string {
+  channelCount += 1;
+  return `${prefix}-${channelCount}`;
+}
+
 export function venuePhotoUrl(path: string): string {
   return `${supabaseUrl}/storage/v1/object/public/venue-photos/${path}`;
 }

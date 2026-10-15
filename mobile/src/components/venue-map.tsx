@@ -40,15 +40,25 @@ export function VenueMap({
   onPinPress,
   userCoords,
   height,
+  fullScreen = false,
+  mapPadding,
 }: {
   pins: MapPin[];
   onPinPress: (key: string) => void;
   userCoords: Coords | null;
-  height: number;
+  // Fixed height for an inline map; ignored when fullScreen.
+  height?: number;
+  // Fill the parent edge to edge (home screen), without the rounded frame.
+  fullScreen?: boolean;
+  // Space covered by floating UI, so Google's logo, the my-location button and centering stay visible.
+  mapPadding?: { top: number; right: number; bottom: number; left: number };
 }) {
   const { t } = useTranslation();
   const mapRef = useRef<MapView>(null);
   const centeredOnUser = useRef(false);
+  // react-native-maps on Android crashes (NullPointerException in setPadding) if mapPadding is set before the
+  // Google map exists, so padding is only passed once onMapReady has fired.
+  const [ready, setReady] = useState(false);
 
   // Move to the user once their location arrives (only the first time, so we don't fight their panning).
   useEffect(() => {
@@ -60,9 +70,11 @@ export function VenueMap({
     );
   }, [userCoords]);
 
+  const frameStyle = fullScreen ? StyleSheet.absoluteFill : [styles.frame, { height }];
+
   if (!mapsEnabled) {
     return (
-      <View style={[styles.frame, styles.placeholder, { height }]}>
+      <View style={[frameStyle, styles.placeholder]}>
         <Icon name="location" size={28} color={Colors.textMuted} />
         <Text style={styles.placeholderText}>{t('tables.mapUnavailable')}</Text>
       </View>
@@ -71,7 +83,7 @@ export function VenueMap({
 
   const start = userCoords ?? BANGKOK;
   return (
-    <View style={[styles.frame, { height }]}>
+    <View style={[frameStyle, styles.mapBackground]}>
       <MapView
         ref={mapRef}
         provider={PROVIDER_GOOGLE}
@@ -80,7 +92,9 @@ export function VenueMap({
         initialRegion={{ latitude: start.lat, longitude: start.lng, latitudeDelta: DELTA, longitudeDelta: DELTA }}
         showsUserLocation={Boolean(userCoords)}
         showsMyLocationButton={Boolean(userCoords)}
-        toolbarEnabled={false}>
+        toolbarEnabled={false}
+        mapPadding={ready ? mapPadding : undefined}
+        onMapReady={() => setReady(true)}>
         {pins.map((pin) => (
           // The key includes what the pin shows, so a changed pin remounts and re-renders its snapshot.
           <PinMarker key={`${pin.key}-${pin.count ?? 0}-${pin.selected ? 1 : 0}`} pin={pin} onPress={onPinPress} />
@@ -130,7 +144,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     backgroundColor: Colors.surface,
   },
-  placeholder: { alignItems: 'center', justifyContent: 'center', gap: Spacing.sm },
+  mapBackground: { backgroundColor: Colors.surface },
+  placeholder: { alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, backgroundColor: Colors.surface },
   placeholderText: { ...Type.small, color: Colors.textMuted },
   pinWrap: { alignItems: 'center', paddingTop: 6, paddingRight: 8 },
   pin: {

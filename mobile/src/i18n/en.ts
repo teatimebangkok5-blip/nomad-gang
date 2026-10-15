@@ -59,6 +59,8 @@ const en = {
     openTables: 'Open tables',
     tablesAt: 'Tables at {{venue}}',
     showAll: 'Show all',
+    showList: 'List',
+    showMap: 'Map',
     partnerPlaces: 'Partner places',
     noTablesTitle: 'No open tables yet',
     noTablesBody: 'Be the first: create a table and others can join you.',

@@ -25,6 +25,9 @@ const ICONS = {
   minus: { android: 'remove', ios: 'minus' },
   time: { android: 'schedule', ios: 'clock' },
   person: { android: 'person', ios: 'person.fill' },
+  list: { android: 'list', ios: 'list.bullet' },
+  map: { android: 'map', ios: 'map' },
+  add: { android: 'add', ios: 'plus' },
 } satisfies Record<string, { android: AndroidName; ios: IosName }>;
 
 export type IconName = keyof typeof ICONS;

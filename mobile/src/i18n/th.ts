@@ -61,6 +61,8 @@ const th: Translation = {
     openTables: 'โต๊ะที่เปิดอยู่',
     tablesAt: 'โต๊ะที่ {{venue}}',
     showAll: 'ดูทั้งหมด',
+    showList: 'รายการ',
+    showMap: 'แผนที่',
     partnerPlaces: 'ร้านพาร์ทเนอร์',
     noTablesTitle: 'ยังไม่มีโต๊ะที่เปิดอยู่',
     noTablesBody: 'สร้างโต๊ะเป็นคนแรก แล้วให้คนอื่นมาร่วมกับคุณ',

@@ -5,16 +5,24 @@ This file guides Claude Code when working in this repository.
 ## Project status
 Product spec and tech stack below are agreed. Built so far:
 - **Done:** database for venues, deals, coupon codes, venue staff logins and the admin role (`supabase/`), the
-  admin panel for managing them (`web/`), and the Android app's welcome/Google sign-in, phone verification and
-  home screen of nearby venues (`mobile/`).
-- **Not started:** venue detail screen, meetups, check-ins, QR codes and redemptions, staff QR page, redemption feed
-  and push notifications, app user profiles (Instagram handle), app user management in the admin panel.
+  admin panel for managing them (`web/`), and the Android app's welcome/Google sign-in, phone verification, home
+  (**full-screen Google map** of open tables; logo, language and category chips float on top over a dark fade; a
+  swipeable row of table cards, "Create table" and a "List" button float at the bottom; "List" slides up a panel
+  with open tables + partner places; tapping a pin filters the cards to that venue), the Create table flow and the
+  table screen (join / leave / cancel) (`mobile/`). `VenueMap` takes `fullScreen` + `mapPadding` (measured overlay
+  heights) so Google's logo and centering stay clear of the floating UI.
+- **Not started:** check-ins (50 m), QR codes and redemptions, staff QR page, redemption feed and push
+  notifications, Instagram on profiles, tables/users in the admin panel.
 - Running on the founder's Redmi as a local release APK, connected to the real Supabase project
   (`zxghiilryqzexzvacbrl`, migrations applied by Supabase's GitHub integration on push to `main`).
 - Google sign-in and phone verification are **not configured yet** (no Google OAuth clients, providers off in
   Supabase). Until they are, `mobile/.env.local` has the **temporary** `EXPO_PUBLIC_SKIP_LOGIN=true`
-  (`src/lib/preview.ts`): the app opens straight to home as an anonymous visitor and shows a "Preview mode" notice.
-  **Set it to false or remove it before any build for real users or Google Play.**
+  (`src/lib/preview.ts`): the app opens straight to home, signs in as an **anonymous guest** (needs "Anonymous
+  sign-ins" on in Supabase) and shows a "Preview mode" notice. Guests may create/join tables only while
+  `app_settings.allow_guest_meetups` is true. **Before any build for real users or Google Play: set the switch to
+  false and set `allow_guest_meetups = false`.**
+- The Google Maps key (`GOOGLE_MAPS_API_KEY` in `mobile/.env.local`, read by `mobile/app.config.ts`) may still be
+  missing; without it the map area shows a "Map not set up yet" placeholder instead of crashing.
 
 Setup steps (Supabase, Google, SMS, Android development build) are in `README.md`.
 
@@ -142,6 +150,17 @@ How the key rules map onto this:
     Realtime changes and when the app returns to the foreground. Realtime can't deliver a venue being *hidden*.
   - `src/lib/location.ts`: foreground location permission and haversine distance (display only; the 50 m check-in
     rule must be enforced on the server).
+  - `src/lib/meetups.ts`: tables ("meetups" in the DB). `useOpenMeetups(enabled)` (RPC `list_open_meetups`, Realtime +
+    foreground + 5-min refetch), `useMeetup(id)` (one table with members' `profiles.display_name`),
+    `createMeetup/joinMeetup/leaveMeetup/cancelMeetup` return `{ data, error }` where error is a key translated via
+    `tables.errors.*`. `src/lib/bangkok-time.ts`: Bangkok (UTC+7, no DST) day/time maths and labels; 24-hour clock.
+  - Screens: `src/app/create-table.tsx` (modal: pick a venue on the map or list, then day chips for 7 days, 30-min
+    slots 06:00–23:30, 3–12 people, optional 80-char title) and `src/app/table/[id].tsx` (members, join/leave; host
+    sees Cancel). Both are registered inside the signed-in guard in `_layout.tsx`.
+  - Maps: `src/components/venue-map.tsx` wraps react-native-maps (Google provider, dark style in
+    `src/constants/map-style.ts`). Marker contents are emoji + text only (native icon views can render blank in
+    Android marker snapshots) and briefly use `tracksViewChanges`. `mapsEnabled` comes from `app.config.ts`
+    (`extra`); without a key it renders a placeholder because Google Maps crashes on Android without one.
   - `src/i18n/`: i18next with `en.ts` (source, typed keys) and `th.ts` (must match). `localized(row, 'name', lang)`
     picks `name_th`/`name_en` columns. The language choice is saved on the phone; the default follows the phone language.
   - `src/components/`: `Button`, `Icon` (expo-symbols: Material names on Android, SF Symbols for iOS; add new icons
@@ -182,6 +201,13 @@ How the key rules map onto this:
   `verify_venue_login()`, which only `service_role` may call. It locks a login for 15 minutes after 5 wrong
   passwords.
 - Multi-step writes go in one SQL function so they succeed or fail together, e.g. `admin_save_deal`.
+- Tables: `meetups` + `meetup_members` are read-only through the API; every change goes through
+  `create_meetup` / `join_meetup` / `leave_meetup` / `cancel_meetup` (security definer, check `auth.uid()`; join
+  locks the meetup row with `for update` so the last seat can't be taken twice). Rules: live venue, start between
+  now−15 min and now+7 days, 3–12 people, lasts 3 hours, max 3 open tables hosted per person, host leaving =
+  cancel. Callers must be phone-verified, or anonymous while `app_settings.allow_guest_meetups`. Errors are short
+  keys (`meetup_full`, `invalid_time`, …) that the app translates. `profiles` rows are created by a trigger on
+  `auth.users` (Google `full_name`, else "Guest XXXX").
 - `venues.lat`/`lng` are the source of truth. A trigger keeps the PostGIS `location` column in sync for distance
   checks.
 - Use the `extensions.` prefix for PostGIS/pgcrypto functions and set `search_path = ''` on every function.

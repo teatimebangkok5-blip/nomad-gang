@@ -78,7 +78,24 @@ live from your PC.
 2. For testing without paying for SMS, add a **test phone number and code** on the same page, e.g.
    `66812345678=123456`. Typing `081 234 5678` in the app then accepts the code `123456`.
 
-### 3. Build and install
+### 3. Google Maps (home map and "Create table")
+
+1. In the same Google Cloud project: **APIs & Services → Library → Maps SDK for Android → Enable**. Google asks
+   for a billing account; maps in mobile apps are free, but a card must be on file.
+2. **Credentials → Create credentials → API key**. Edit it: **Application restrictions → Android apps → Add**:
+   package `com.tablemeet.app`, SHA-1 `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25` (the test
+   signing key). **API restrictions → Maps SDK for Android.** Save.
+3. Add it to `mobile/.env.local` as `GOOGLE_MAPS_API_KEY=...` (no `EXPO_PUBLIC_` prefix) and rebuild the app.
+   Without a key the app shows "Map not set up yet" where the map goes.
+
+### 4. Guest testing before sign-in is ready
+
+While `EXPO_PUBLIC_SKIP_LOGIN=true` is in `mobile/.env.local`, the app skips sign-in and uses a temporary guest
+account. Turn on **Supabase → Authentication → Sign In / Providers → Allow anonymous sign-ins** so guests can create
+and join tables. Before launch, set the switch to `false` and run in the SQL Editor:
+`update public.app_settings set allow_guest_meetups = false;`
+
+### 5. Build and install
 
 ```bash
 cd mobile

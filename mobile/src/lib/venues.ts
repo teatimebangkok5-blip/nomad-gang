@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 
-import { supabase } from '@/lib/supabase';
+import { supabase, uniqueChannelName } from '@/lib/supabase';
 
 export const VENUE_CATEGORIES = ['cafe', 'restaurant', 'rooftop', 'bar'] as const;
 export type VenueCategory = (typeof VENUE_CATEGORIES)[number];
@@ -85,7 +85,7 @@ export function useVenues() {
       if (next === 'active') load();
     });
     const channel = supabase
-      .channel('venues-and-deals')
+      .channel(uniqueChannelName('venues-and-deals'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'venues' }, () => load())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'deals' }, () => load())
       .subscribe();

@@ -2,7 +2,7 @@ import type { PostgrestError } from '@supabase/supabase-js';
 import { useCallback, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 
-import { supabase } from '@/lib/supabase';
+import { supabase, uniqueChannelName } from '@/lib/supabase';
 
 // "Tables" in the app are `meetups` in the database (TABLE is an SQL keyword).
 // All writes go through database functions that enforce the rules (see supabase/migrations/*_meetups.sql).
@@ -133,7 +133,7 @@ export function useOpenMeetups(enabled: boolean) {
       if (next === 'active') load();
     });
     const channel = supabase
-      .channel('open-tables')
+      .channel(uniqueChannelName('open-tables'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'meetups' }, () => load())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'meetup_members' }, () => load())
       .subscribe();
@@ -196,7 +196,7 @@ export function useMeetup(id: string) {
   useEffect(() => {
     load();
     const channel = supabase
-      .channel(`table-${id}`)
+      .channel(uniqueChannelName(`table-${id}`))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'meetups', filter: `id=eq.${id}` }, () => load())
       .on(
         'postgres_changes',

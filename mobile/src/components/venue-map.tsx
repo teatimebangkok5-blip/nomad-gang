@@ -8,20 +8,23 @@ import { Icon } from '@/components/icon';
 import { darkMapStyle } from '@/constants/map-style';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import type { Coords } from '@/lib/location';
+import type { GooglePlace } from '@/lib/meetups';
 import type { VenueCategory } from '@/lib/venues';
 
 export type MapPin = {
   key: string;
   lat: number;
   lng: number;
-  category: VenueCategory;
+  emoji: string;
+  // Violet for tables at Google places; orange (default) for partner venues.
+  tone?: 'orange' | 'violet';
   // Shown as a badge, e.g. the number of open tables at the venue.
   count?: number;
   selected?: boolean;
 };
 
 // Emoji render reliably inside map markers (native icon views can come out blank in the marker snapshot).
-const CATEGORY_EMOJI: Record<VenueCategory, string> = {
+export const CATEGORY_EMOJI: Record<VenueCategory, string> = {
   cafe: '☕',
   restaurant: '🍽️',
   rooftop: '🌆',
@@ -38,6 +41,7 @@ const mapsEnabled = Constants.expoConfig?.extra?.mapsEnabled === true;
 export function VenueMap({
   pins,
   onPinPress,
+  onPlacePress,
   userCoords,
   height,
   fullScreen = false,
@@ -45,6 +49,8 @@ export function VenueMap({
 }: {
   pins: MapPin[];
   onPinPress: (key: string) => void;
+  // Tap on one of Google's own places (restaurants, cafes, bars, …) on the map.
+  onPlacePress?: (place: GooglePlace) => void;
   userCoords: Coords | null;
   // Fixed height for an inline map; ignored when fullScreen.
   height?: number;
@@ -93,6 +99,11 @@ export function VenueMap({
         showsUserLocation={Boolean(userCoords)}
         showsMyLocationButton={Boolean(userCoords)}
         toolbarEnabled={false}
+        onPoiClick={(event) => {
+          const { placeId, name, coordinate } = event.nativeEvent;
+          // Google's label can wrap onto two lines ("Somtam\nDer").
+          onPlacePress?.({ placeId, name: name.replace(/\s+/g, ' ').trim(), lat: coordinate.latitude, lng: coordinate.longitude });
+        }}
         mapPadding={ready ? mapPadding : undefined}
         onMapReady={() => setReady(true)}>
         {pins.map((pin) => (
@@ -120,10 +131,10 @@ function PinMarker({ pin, onPress }: { pin: MapPin; onPress: (key: string) => vo
       tracksViewChanges={tracks}
       onPress={() => onPress(pin.key)}>
       <View style={styles.pinWrap}>
-        <View style={[styles.pin, pin.selected && styles.pinSelected]}>
-          <Text style={styles.emoji}>{CATEGORY_EMOJI[pin.category]}</Text>
+        <View style={[styles.pin, pin.tone === 'violet' && styles.pinViolet, pin.selected && styles.pinSelected]}>
+          <Text style={styles.emoji}>{pin.emoji}</Text>
         </View>
-        <View style={[styles.tail, pin.selected && styles.tailSelected]} />
+        <View style={[styles.tail, pin.tone === 'violet' && styles.pinViolet, pin.selected && styles.tailSelected]} />
         {pin.count ? (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{pin.count}</Text>
@@ -158,6 +169,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  pinViolet: { backgroundColor: Colors.violet },
   pinSelected: { backgroundColor: Colors.pink, transform: [{ scale: 1.15 }] },
   emoji: { fontSize: 20 },
   tail: {

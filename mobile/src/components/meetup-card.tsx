@@ -39,7 +39,7 @@ export function MeetupCard({
 
       <View style={styles.body}>
         <Text style={styles.venue} numberOfLines={1}>
-          {venue ? localized(venue, 'name', language) : '—'}
+          {venue ? localized(venue, 'name', language) : (meetup.place_name ?? '—')}
         </Text>
         {meetup.title ? (
           <Text style={styles.title} numberOfLines={1}>

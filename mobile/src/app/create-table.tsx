@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -10,13 +10,17 @@ import { Chip } from '@/components/chip';
 import { Icon } from '@/components/icon';
 import { ScreenHeader } from '@/components/screen-header';
 import { VenueCard } from '@/components/venue-card';
-import { VenueMap } from '@/components/venue-map';
+import { CATEGORY_EMOJI, VenueMap } from '@/components/venue-map';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { bangkokDay, bangkokMinutes, formatClock, formatDayLabel, fromBangkok, type BangkokDay } from '@/lib/bangkok-time';
+import { checkPlace, type PlaceCheck } from '@/lib/google-places';
 import { distanceMeters, useCurrentLocation } from '@/lib/location';
-import { createMeetup, type MeetupErrorKey } from '@/lib/meetups';
-import { useVenues } from '@/lib/venues';
+import { createMeetup, createMeetupAtPlace, type GooglePlace, type MeetupErrorKey } from '@/lib/meetups';
+import { PROMOTION_EMOJI, useVenues } from '@/lib/venues';
+
+// Picked on the step-1 map: a partner venue, or a Google place being checked (Bangkok, food or drink).
+type Picked = { type: 'venue'; venueId: string } | { type: 'place'; place: GooglePlace; check: PlaceCheck | 'checking' };
 
 const DAYS_AHEAD = 7; // today + 6 more days (the server allows up to 7 days ahead)
 const FIRST_SLOT = 6 * 60; // 06:00
@@ -34,7 +38,8 @@ function timeSlots(day: BangkokDay, now: Date): number[] {
   return slots;
 }
 
-// Create a table: 1) pick a partner place on the map or list, 2) day, time, size and an optional title.
+// Create a table: 1) pick a partner place or any Google food place on the map, 2) day, time, size and a title.
+// Opened with ?venueId=… or ?placeId=…&name=…&lat=…&lng=… (from "Create table here"), step 1 is skipped.
 export default function CreateTableScreen() {
   const { t } = useTranslation();
   const language = currentLanguage();
@@ -42,9 +47,15 @@ export default function CreateTableScreen() {
   const location = useCurrentLocation();
   const coords = location.state.status === 'granted' ? location.state.coords : null;
 
+  const params = useLocalSearchParams<{ venueId?: string; placeId?: string; name?: string; lat?: string; lng?: string }>();
   const [category, setCategory] = useState<CategoryFilterValue>('all');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [venueId, setVenueId] = useState<string | null>(null);
+  const [picked, setPicked] = useState<Picked | null>(null);
+  const [venueId, setVenueId] = useState<string | null>(params.venueId ?? null);
+  const [place, setPlace] = useState<GooglePlace | null>(() =>
+    params.placeId && params.name && params.lat && params.lng
+      ? { placeId: params.placeId, name: params.name, lat: Number(params.lat), lng: Number(params.lng) }
+      : null,
+  );
 
   const [now] = useState(() => new Date());
   const today = bangkokDay(now);
@@ -61,19 +72,41 @@ export default function CreateTableScreen() {
     .filter((venue) => category === 'all' || venue.category === category)
     .map((venue) => ({ venue, distance: coords ? distanceMeters(coords, venue) : null }))
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
-  const selected = venues.venues.find((venue) => venue.id === selectedId);
-  const chosen = venues.venues.find((venue) => venue.id === venueId);
+  const pickedVenue = picked?.type === 'venue' ? venues.venues.find((venue) => venue.id === picked.venueId) : undefined;
+  const chosen = venueId ? venues.venues.find((venue) => venue.id === venueId) : undefined;
+  const chosenName = chosen ? localized(chosen, 'name', language) : place?.name;
+
+  async function handlePlacePress(tapped: GooglePlace) {
+    const linked = venues.venues.find((venue) => venue.google_place_id === tapped.placeId);
+    if (linked) {
+      setPicked({ type: 'venue', venueId: linked.id });
+      return;
+    }
+    setPicked({ type: 'place', place: tapped, check: 'checking' });
+    const check = await checkPlace(tapped);
+    setPicked((current) =>
+      current?.type === 'place' && current.place.placeId === tapped.placeId ? { ...current, check } : current,
+    );
+  }
+
+  function choosePicked() {
+    if (picked?.type === 'venue') setVenueId(picked.venueId);
+    else if (picked?.type === 'place') setPlace(picked.place);
+  }
+
+  function changePlace() {
+    setVenueId(null);
+    setPlace(null);
+  }
 
   async function handleCreate() {
-    if (!chosen || minutes === null) return;
+    if ((!chosen && !place) || minutes === null) return;
     setError(null);
     setCreating(true);
-    const result = await createMeetup({
-      venueId: chosen.id,
-      startsAt: fromBangkok(day, minutes),
-      maxPeople,
-      title: title.trim(),
-    });
+    const common = { startsAt: fromBangkok(day, minutes), maxPeople, title: title.trim() };
+    const result = chosen
+      ? await createMeetup({ venueId: chosen.id, ...common })
+      : await createMeetupAtPlace({ place: place as GooglePlace, ...common });
     setCreating(false);
     if (result.error) {
       setError(result.error);
@@ -83,7 +116,7 @@ export default function CreateTableScreen() {
   }
 
   // Step 1: choose the place.
-  if (!chosen) {
+  if (!chosen && !place) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <ScreenHeader />
@@ -103,17 +136,35 @@ export default function CreateTableScreen() {
                 key: venue.id,
                 lat: venue.lat,
                 lng: venue.lng,
-                category: venue.category,
-                selected: venue.id === selectedId,
+                emoji: venue.deal ? PROMOTION_EMOJI[venue.deal.kind] : CATEGORY_EMOJI[venue.category],
+                selected: picked?.type === 'venue' && venue.id === picked.venueId,
               }))}
-              onPinPress={setSelectedId}
+              onPinPress={(id) => setPicked({ type: 'venue', venueId: id })}
+              onPlacePress={handlePlacePress}
             />
-            {selected && (
+            <Text style={styles.hint}>{t('tables.pickAnyPlace')}</Text>
+            {picked && (
               <View style={styles.choose}>
-                <Text style={styles.chooseName} numberOfLines={1}>
-                  {localized(selected, 'name', language)}
+                <Text style={styles.chooseName} numberOfLines={2}>
+                  {pickedVenue ? localized(pickedVenue, 'name', language) : picked.type === 'place' ? picked.place.name : ''}
                 </Text>
-                <Button title={t('tables.choosePlace')} onPress={() => setVenueId(selected.id)} />
+                {picked.type === 'place' && picked.check === 'checking' && (
+                  <Text style={styles.hint}>{t('tables.checkingPlace')}</Text>
+                )}
+                {picked.type === 'place' && picked.check === 'not_food' && (
+                  <Text style={styles.warning}>{t('tables.notFood')}</Text>
+                )}
+                {picked.type === 'place' && picked.check === 'outside_bangkok' && (
+                  <Text style={styles.warning}>{t('tables.outsideBangkok')}</Text>
+                )}
+                <Button
+                  title={t('tables.choosePlace')}
+                  disabled={
+                    picked.type === 'place' &&
+                    (picked.check === 'checking' || picked.check === 'not_food' || picked.check === 'outside_bangkok')
+                  }
+                  onPress={choosePicked}
+                />
               </View>
             )}
             <View style={styles.list}>
@@ -122,7 +173,7 @@ export default function CreateTableScreen() {
                   key={venue.id}
                   venue={venue}
                   distance={distance}
-                  selected={venue.id === selectedId}
+                  selected={picked?.type === 'venue' && venue.id === picked.venueId}
                   onPress={() => setVenueId(venue.id)}
                 />
               ))}
@@ -142,18 +193,20 @@ export default function CreateTableScreen() {
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <View style={styles.pad}>
             <View style={styles.placeRow}>
-              <Icon name={chosen.category} size={20} color={Colors.orange} />
+              <Icon name={chosen ? chosen.category : 'store'} size={20} color={Colors.orange} />
               <Text style={styles.placeName} numberOfLines={1}>
-                {localized(chosen, 'name', language)}
+                {chosenName}
               </Text>
-              <Pressable accessibilityRole="button" hitSlop={8} onPress={() => setVenueId(null)}>
+              <Pressable accessibilityRole="button" hitSlop={8} onPress={changePlace}>
                 <Text style={styles.link}>{t('tables.change')}</Text>
               </Pressable>
             </View>
-            {chosen.deal && (
+            {chosen?.deal ? (
               <Text style={styles.deal} numberOfLines={2}>
                 {localized(chosen.deal, 'title', language)}
               </Text>
+            ) : (
+              <Text style={styles.hint}>{t('tables.noDealHere')}</Text>
             )}
 
             <Text style={styles.heading}>{t('tables.detailsTitle')}</Text>
@@ -285,6 +338,7 @@ const styles = StyleSheet.create({
   chipRow: { gap: Spacing.sm, paddingHorizontal: Spacing.lg },
   slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   hint: { ...Type.small, color: Colors.textMuted, marginTop: Spacing.sm },
+  warning: { ...Type.body, color: Colors.danger },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: Spacing.lg },
   stepButton: {
     width: 48,

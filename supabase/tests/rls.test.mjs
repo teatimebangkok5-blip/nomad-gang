@@ -256,6 +256,8 @@ r = await tryQuery("authenticated", guests[1], `select public.join_meetup($1)`, 
 check("people can join a Google-place table", !r.error);
 r = await tryQuery("authenticated", user, fn, ["ChIJgoogle2", "Far away", 48.85, 2.35, inHours(2)]);
 check("place outside Thailand rejected", /venue_unavailable/.test(r.error ?? ""));
+r = await tryQuery("authenticated", user, fn, ["ChIJchiangmai", "Chiang Mai cafe", 18.79, 98.98, inHours(2)]);
+check("place in Thailand but outside Bangkok rejected", /venue_unavailable/.test(r.error ?? ""));
 r = await tryQuery("authenticated", user, fn, ["", "No id", 13.7, 100.5, inHours(2)]);
 check("place without id rejected", /venue_unavailable/.test(r.error ?? ""));
 await tryQuery("authenticated", admin, `update public.venues set google_place_id = 'ChIJskybar' where id = $1`, [venueId]);

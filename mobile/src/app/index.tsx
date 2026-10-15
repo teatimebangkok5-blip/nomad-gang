@@ -7,6 +7,7 @@ import {
   Alert,
   BackHandler,
   FlatList,
+  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -29,10 +30,19 @@ import { VenueMap, type MapPin } from '@/components/venue-map';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { signOut, useAuth } from '@/lib/auth';
+import { PromoFilter } from '@/components/promo-filter';
+import { CATEGORY_EMOJI } from '@/components/venue-map';
+import { formatWhen } from '@/lib/bangkok-time';
+import { checkPlace, type PlaceCheck } from '@/lib/google-places';
 import { distanceMeters, useCurrentLocation } from '@/lib/location';
-import { joinMeetup, useOpenMeetups, type OpenMeetup } from '@/lib/meetups';
+import { googleMapsUrl, joinMeetup, useOpenMeetups, type GooglePlace, type OpenMeetup } from '@/lib/meetups';
 import { skipLogin } from '@/lib/preview';
-import { useVenues, type Venue } from '@/lib/venues';
+import { PROMOTION_EMOJI, useVenues, type PromotionKind, type Venue } from '@/lib/venues';
+
+// What the bottom card shows: a partner venue, or any Google place someone tapped (checked for food/Bangkok).
+type Selection =
+  | { type: 'venue'; venueId: string }
+  | { type: 'place'; place: GooglePlace; check: PlaceCheck | 'checking' };
 
 // Home: a full-screen map of open tables. Logo and category chips float on top; a swipeable row of table cards,
 // "Create table" and a "List" button float at the bottom. "List" slides up a panel with all tables and places.
@@ -45,7 +55,8 @@ export default function HomeScreen() {
   const meetups = useOpenMeetups(Boolean(session));
   const location = useCurrentLocation();
   const [category, setCategory] = useState<CategoryFilterValue>('all');
-  const [selectedVenueId, setSelectedVenueId] = useState<string | null>(null);
+  const [promo, setPromo] = useState<PromotionKind | null>(null);
+  const [selection, setSelection] = useState<Selection | null>(null);
   const [joiningId, setJoiningId] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
   const [topHeight, setTopHeight] = useState(0);
@@ -63,30 +74,94 @@ export default function HomeScreen() {
 
   const coords = location.state.status === 'granted' ? location.state.coords : null;
   const venueById = new Map(venues.venues.map((venue) => [venue.id, venue]));
-  const inCategory = (venue: Venue | undefined) => Boolean(venue) && (category === 'all' || venue?.category === category);
+  const filtersOn = category !== 'all' || promo !== null;
+  const venueMatches = (venue: Venue | undefined) =>
+    Boolean(venue) &&
+    (category === 'all' || venue?.category === category) &&
+    (promo === null || Boolean(venue?.promotions.some((p) => p.kind === promo)));
+  // Tables at Google places have no category or promotions, so they only show when no filter is on.
+  const meetupMatches = (meetup: OpenMeetup) =>
+    meetup.venue_id ? venueMatches(venueById.get(meetup.venue_id)) : !filtersOn;
 
-  const visibleMeetups = meetups.meetups.filter((meetup) => inCategory(venueById.get(meetup.venue_id)));
-  const listedMeetups = selectedVenueId
-    ? visibleMeetups.filter((meetup) => meetup.venue_id === selectedVenueId)
-    : visibleMeetups;
+  const visibleMeetups = meetups.meetups.filter(meetupMatches);
+  const meetupsAtSelection = (s: Selection) =>
+    meetups.meetups.filter((meetup) =>
+      s.type === 'venue' ? meetup.venue_id === s.venueId : !meetup.venue_id && meetup.google_place_id === s.place.placeId,
+    );
 
-  // One pin per venue that has open tables, with the number of tables as a badge.
-  const tableCounts = new Map<string, number>();
-  for (const meetup of visibleMeetups) tableCounts.set(meetup.venue_id, (tableCounts.get(meetup.venue_id) ?? 0) + 1);
-  const pins: MapPin[] = [...tableCounts].flatMap(([venueId, count]) => {
-    const venue = venueById.get(venueId);
-    return venue
-      ? [{ key: venue.id, lat: venue.lat, lng: venue.lng, category: venue.category, count, selected: venue.id === selectedVenueId }]
-      : [];
-  });
+  // Partner venues: pin shows the promotion type (or the place type), badge = open tables there.
+  const tablesAtVenue = new Map<string, number>();
+  const tablesAtPlace = new Map<string, OpenMeetup[]>();
+  for (const meetup of visibleMeetups) {
+    if (meetup.venue_id) tablesAtVenue.set(meetup.venue_id, (tablesAtVenue.get(meetup.venue_id) ?? 0) + 1);
+    else if (meetup.google_place_id) tablesAtPlace.set(meetup.google_place_id, [...(tablesAtPlace.get(meetup.google_place_id) ?? []), meetup]);
+  }
+  const selectedVenueId = selection?.type === 'venue' ? selection.venueId : null;
+  const selectedPlaceId = selection?.type === 'place' ? selection.place.placeId : null;
+  const pins: MapPin[] = [
+    ...venues.venues.filter(venueMatches).map((venue) => {
+      const shown = (promo && venue.promotions.find((p) => p.kind === promo)) || venue.deal || venue.promotions[0];
+      return {
+        key: `v:${venue.id}`,
+        lat: venue.lat,
+        lng: venue.lng,
+        emoji: shown ? PROMOTION_EMOJI[shown.kind] : CATEGORY_EMOJI[venue.category],
+        count: tablesAtVenue.get(venue.id),
+        selected: venue.id === selectedVenueId,
+      };
+    }),
+    ...[...tablesAtPlace].flatMap(([placeId, list]) => {
+      const first = list[0];
+      return first.place_lat !== null && first.place_lng !== null
+        ? [{ key: `p:${placeId}`, lat: first.place_lat, lng: first.place_lng, emoji: '👥', tone: 'violet' as const, count: list.length, selected: placeId === selectedPlaceId }]
+        : [];
+    }),
+  ];
 
   const places = venues.venues
-    .filter((venue) => inCategory(venue))
+    .filter(venueMatches)
     .map((venue) => ({ venue, distance: coords ? distanceMeters(coords, venue) : null }))
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
 
-  const selectedVenue = selectedVenueId ? venueById.get(selectedVenueId) : undefined;
   const cardWidth = Math.min(width - Spacing.lg * 2 - Spacing.xl, 420);
+
+  function handlePinPress(key: string) {
+    if (key.startsWith('v:')) {
+      const venueId = key.slice(2);
+      setSelection((current) => (current?.type === 'venue' && current.venueId === venueId ? null : { type: 'venue', venueId }));
+      return;
+    }
+    const placeId = key.slice(2);
+    const first = tablesAtPlace.get(placeId)?.[0];
+    if (first?.place_name && first.place_lat !== null && first.place_lng !== null) {
+      // A table already exists here, so the place was checked when it was created.
+      setSelection({ type: 'place', place: { placeId, name: first.place_name, lat: first.place_lat, lng: first.place_lng }, check: 'food' });
+    }
+  }
+
+  // Tap on one of Google's places: a linked partner venue opens as that venue; anything else is checked
+  // (Bangkok, food or drink) before "Create table here" is offered.
+  async function handlePlacePress(place: GooglePlace) {
+    const venue = venues.venues.find((v) => v.google_place_id === place.placeId);
+    if (venue) {
+      setSelection({ type: 'venue', venueId: venue.id });
+      return;
+    }
+    setSelection({ type: 'place', place, check: 'checking' });
+    const check = await checkPlace(place);
+    setSelection((current) =>
+      current?.type === 'place' && current.place.placeId === place.placeId ? { ...current, check } : current,
+    );
+  }
+
+  function createAt(s: Selection) {
+    if (s.type === 'venue') {
+      router.push({ pathname: '/create-table', params: { venueId: s.venueId } });
+    } else {
+      const { placeId, name, lat, lng } = s.place;
+      router.push({ pathname: '/create-table', params: { placeId, name, lat: String(lat), lng: String(lng) } });
+    }
+  }
 
   function confirmSignOut() {
     Alert.alert(t('home.signOutConfirm'), undefined, [
@@ -108,7 +183,7 @@ export default function HomeScreen() {
   const renderMeetup = (meetup: OpenMeetup) => (
     <MeetupCard
       meetup={meetup}
-      venue={venueById.get(meetup.venue_id)}
+      venue={meetup.venue_id ? venueById.get(meetup.venue_id) : undefined}
       joining={joiningId === meetup.id}
       onJoin={() => handleJoin(meetup.id)}
       onPress={() => openTable(meetup)}
@@ -121,7 +196,8 @@ export default function HomeScreen() {
         fullScreen
         pins={pins}
         userCoords={coords}
-        onPinPress={(venueId) => setSelectedVenueId((current) => (current === venueId ? null : venueId))}
+        onPinPress={handlePinPress}
+        onPlacePress={handlePlacePress}
         mapPadding={{ top: topHeight, right: 0, bottom: bottomHeight, left: 0 }}
       />
 
@@ -156,11 +232,18 @@ export default function HomeScreen() {
         )}
 
         <View style={styles.chips}>
+          <PromoFilter
+            value={promo}
+            onChange={(value) => {
+              setPromo(value);
+              setSelection(null);
+            }}
+          />
           <CategoryFilter
             value={category}
             onChange={(value) => {
               setCategory(value);
-              setSelectedVenueId(null);
+              setSelection(null);
             }}
           />
         </View>
@@ -183,30 +266,29 @@ export default function HomeScreen() {
         style={[styles.bottom, { paddingBottom: insets.bottom + Spacing.md }]}
         pointerEvents="box-none"
         onLayout={(e) => setBottomHeight(e.nativeEvent.layout.height)}>
-        {selectedVenue && (
-          <View style={styles.selectedRow}>
-            <Text style={styles.selectedTitle} numberOfLines={1}>
-              {t('tables.tablesAt', { venue: localized(selectedVenue, 'name', currentLanguage()) })}
-            </Text>
-            <Pressable accessibilityRole="button" hitSlop={8} onPress={() => setSelectedVenueId(null)}>
-              <Text style={styles.link}>{t('tables.showAll')}</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {!session ? null : meetups.status === 'loading' ? (
+        {selection ? (
+          <PlaceCard
+            selection={selection}
+            venue={selection.type === 'venue' ? venueById.get(selection.venueId) : undefined}
+            tables={meetupsAtSelection(selection)}
+            renderMeetup={renderMeetup}
+            onCreate={() => createAt(selection)}
+            onClose={() => setSelection(null)}
+          />
+        ) : !session ? null : meetups.status === 'loading' ? (
           <ActivityIndicator color={Colors.orange} style={styles.cardsSpinner} />
-        ) : listedMeetups.length === 0 ? (
+        ) : visibleMeetups.length === 0 ? (
           <View style={[styles.emptyCard, { marginHorizontal: Spacing.lg }]}>
             <Text style={styles.emptyTitle}>
               {meetups.status === 'error' ? t('tables.errorLoad') : t('tables.noTablesTitle')}
             </Text>
             {meetups.status !== 'error' && <Text style={styles.emptyBody}>{t('tables.noTablesBody')}</Text>}
+            {meetups.status !== 'error' && <Text style={styles.tip}>{t('tables.pickAnyPlace')}</Text>}
           </View>
         ) : (
           <FlatList
             horizontal
-            data={listedMeetups}
+            data={visibleMeetups}
             keyExtractor={(meetup) => meetup.id}
             renderItem={({ item }) => <View style={{ width: cardWidth }}>{renderMeetup(item)}</View>}
             showsHorizontalScrollIndicator={false}
@@ -269,6 +351,109 @@ export default function HomeScreen() {
           </Animated.View>
         </>
       )}
+    </View>
+  );
+}
+
+function PlaceCard({
+  selection,
+  venue,
+  tables,
+  renderMeetup,
+  onCreate,
+  onClose,
+}: {
+  selection: Selection;
+  venue: Venue | undefined;
+  tables: OpenMeetup[];
+  renderMeetup: (meetup: OpenMeetup) => React.ReactNode;
+  onCreate: () => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const language = currentLanguage();
+  const name = venue ? localized(venue, 'name', language) : selection.type === 'place' ? selection.place.name : '';
+  const check = selection.type === 'place' ? selection.check : 'food';
+  const canCreate = check === 'food' || check === 'unknown';
+  const mapsTarget =
+    selection.type === 'place'
+      ? selection.place
+      : venue
+        ? { lat: venue.lat, lng: venue.lng, placeId: venue.google_place_id, name: venue.name_en }
+        : null;
+
+  return (
+    <View style={styles.placeCard}>
+      <View style={styles.placeHeader}>
+        <Text style={styles.placeName} numberOfLines={2}>
+          {name}
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('common.back')}
+          hitSlop={10}
+          onPress={onClose}
+          style={({ pressed }) => [styles.closeButton, pressed && styles.roundButtonPressed]}>
+          <Text style={styles.closeText}>✕</Text>
+        </Pressable>
+      </View>
+
+      {venue && venue.promotions.length > 0 ? (
+        <View style={styles.promoList}>
+          {venue.promotions.map((promotion) => (
+            <View key={promotion.id} style={styles.promoRow}>
+              <Text style={styles.promoEmoji}>{PROMOTION_EMOJI[promotion.kind]}</Text>
+              <View style={styles.promoBody}>
+                <Text style={styles.promoTitle} numberOfLines={1}>
+                  {localized(promotion, 'title', language)}
+                </Text>
+                <Text style={styles.promoMeta} numberOfLines={1}>
+                  {t(`promo.${promotion.kind}`)}
+                  {promotion.starts_at ? ` · ${formatWhen(promotion.starts_at, t)}` : ` · ${t('home.groupRule')}`}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : check === 'checking' ? (
+        <Text style={styles.placeNote}>{t('tables.checkingPlace')}</Text>
+      ) : check === 'not_food' ? (
+        <Text style={styles.placeWarning}>{t('tables.notFood')}</Text>
+      ) : check === 'outside_bangkok' ? (
+        <Text style={styles.placeWarning}>{t('tables.outsideBangkok')}</Text>
+      ) : (
+        <Text style={styles.placeNote}>{t('tables.noDealHere')}</Text>
+      )}
+
+      {tables.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.placeTables}>
+          {tables.map((meetup) => (
+            <View key={meetup.id} style={styles.placeTable}>
+              {renderMeetup(meetup)}
+            </View>
+          ))}
+        </ScrollView>
+      )}
+
+      <View style={styles.placeActions}>
+        <View style={styles.createButton}>
+          <Button
+            title={t('tables.createHere')}
+            icon={<Icon name="add" size={20} color={canCreate ? Colors.onBrand : Colors.textMuted} />}
+            disabled={!canCreate}
+            onPress={onCreate}
+          />
+        </View>
+        {mapsTarget && (
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={t('tables.openInMaps')}
+            onPress={() => Linking.openURL(googleMapsUrl(mapsTarget))}
+            style={({ pressed }) => [styles.listButton, pressed && styles.roundButtonPressed]}>
+            <Icon name="map" size={20} color={Colors.text} />
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 }
@@ -383,7 +568,46 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     overflow: 'hidden',
   },
-  chips: { marginTop: Spacing.md },
+  chips: { marginTop: Spacing.md, gap: Spacing.sm },
+  tip: { ...Type.small, color: Colors.glow, marginTop: Spacing.xs },
+  placeCard: {
+    marginHorizontal: Spacing.lg,
+    padding: Spacing.md,
+    gap: Spacing.md,
+    borderRadius: Radius.lg,
+    backgroundColor: 'rgba(22, 13, 36, 0.97)',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  placeHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
+  placeName: { ...Type.heading, color: Colors.text, flex: 1 },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surfaceRaised,
+  },
+  closeText: { ...Type.label, color: Colors.textSecondary },
+  promoList: { gap: Spacing.sm },
+  promoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.sm,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.orangeTint,
+  },
+  promoEmoji: { fontSize: 20 },
+  promoBody: { flex: 1 },
+  promoTitle: { ...Type.label, color: Colors.glow },
+  promoMeta: { ...Type.small, color: Colors.textSecondary },
+  placeNote: { ...Type.body, color: Colors.textSecondary },
+  placeWarning: { ...Type.body, color: Colors.danger },
+  placeTables: { gap: Spacing.sm },
+  placeTable: { width: 300 },
+  placeActions: { flexDirection: 'row', gap: Spacing.sm },
   locationPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -400,19 +624,6 @@ const styles = StyleSheet.create({
   },
   locationPillText: { ...Type.label, color: Colors.text },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, gap: Spacing.md },
-  selectedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
-    marginHorizontal: Spacing.lg,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.pill,
-    backgroundColor: 'rgba(10, 6, 18, 0.85)',
-  },
-  selectedTitle: { ...Type.label, color: Colors.text, flexShrink: 1 },
-  link: { ...Type.label, color: Colors.orange },
   cards: { gap: Spacing.md, paddingHorizontal: Spacing.lg },
   cardsSpinner: { marginVertical: Spacing.lg },
   actions: { flexDirection: 'row', gap: Spacing.sm, paddingHorizontal: Spacing.lg },

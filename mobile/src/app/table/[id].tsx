@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
@@ -12,7 +12,7 @@ import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { formatWhen } from '@/lib/bangkok-time';
-import { cancelMeetup, joinMeetup, leaveMeetup, useMeetup, type MeetupErrorKey } from '@/lib/meetups';
+import { cancelMeetup, googleMapsUrl, joinMeetup, leaveMeetup, useMeetup, type MeetupErrorKey } from '@/lib/meetups';
 import { venuePhotoUrl } from '@/lib/supabase';
 import { useVenues } from '@/lib/venues';
 
@@ -59,7 +59,12 @@ export default function TableScreen() {
   }
 
   const meetup = state.meetup;
-  const venue = venues.venues.find((v) => v.id === meetup.venue_id);
+  const venue = meetup.venue_id ? venues.venues.find((v) => v.id === meetup.venue_id) : undefined;
+  const mapsTarget = venue
+    ? { lat: venue.lat, lng: venue.lng, placeId: venue.google_place_id, name: venue.name_en }
+    : meetup.place_lat !== null && meetup.place_lng !== null
+      ? { lat: meetup.place_lat, lng: meetup.place_lng, placeId: meetup.google_place_id, name: meetup.place_name }
+      : null;
   const userId = session?.user.id;
   const isHost = meetup.host_id === userId;
   const isMember = meetup.members.some((m) => m.user_id === userId);
@@ -88,7 +93,7 @@ export default function TableScreen() {
         ) : null}
 
         <View style={styles.pad}>
-          <Text style={styles.venue}>{venue ? localized(venue, 'name', language) : '—'}</Text>
+          <Text style={styles.venue}>{venue ? localized(venue, 'name', language) : (meetup.place_name ?? '—')}</Text>
           {meetup.title ? <Text style={styles.title}>{meetup.title}</Text> : null}
 
           <View style={styles.facts}>
@@ -109,6 +114,12 @@ export default function TableScreen() {
                 <Text style={styles.factText}>{localized(venue, 'address', language)}</Text>
               </View>
             ) : null}
+            {mapsTarget && (
+              <Pressable accessibilityRole="link" onPress={() => Linking.openURL(googleMapsUrl(mapsTarget))} style={styles.fact}>
+                <Icon name="map" size={18} color={Colors.orange} />
+                <Text style={styles.mapsLink}>{t('tables.openInMaps')}</Text>
+              </Pressable>
+            )}
           </View>
 
           {venue?.deal && (
@@ -192,6 +203,7 @@ const styles = StyleSheet.create({
   facts: { marginTop: Spacing.lg, gap: Spacing.sm },
   fact: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   factText: { ...Type.body, color: Colors.text, flex: 1 },
+  mapsLink: { ...Type.body, color: Colors.orange, fontWeight: '600' },
   deal: {
     flexDirection: 'row',
     gap: Spacing.md,

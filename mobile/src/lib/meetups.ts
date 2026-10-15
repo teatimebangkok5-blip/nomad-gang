@@ -7,9 +7,17 @@ import { supabase, uniqueChannelName } from '@/lib/supabase';
 // "Tables" in the app are `meetups` in the database (TABLE is an SQL keyword).
 // All writes go through database functions that enforce the rules (see supabase/migrations/*_meetups.sql).
 
-export type OpenMeetup = {
+// Where a table is: a partner venue (venue_id) or any Google Maps place (venue_id null, place_* set).
+export type MeetupPlace = {
+  venue_id: string | null;
+  google_place_id: string | null;
+  place_name: string | null;
+  place_lat: number | null;
+  place_lng: number | null;
+};
+
+export type OpenMeetup = MeetupPlace & {
   id: string;
-  venue_id: string;
   host_id: string;
   title: string;
   starts_at: string;
@@ -21,9 +29,8 @@ export type OpenMeetup = {
 
 export type MeetupMember = { user_id: string; joined_at: string; display_name: string };
 
-export type MeetupDetail = {
+export type MeetupDetail = MeetupPlace & {
   id: string;
-  venue_id: string;
   host_id: string;
   title: string;
   starts_at: string;
@@ -78,6 +85,34 @@ export async function createMeetup(input: {
     p_title: input.title,
   });
   return result(data as string | null, error);
+}
+
+// A table at any Google Maps place. The database moves it to the partner venue if one is linked to that place.
+export async function createMeetupAtPlace(input: {
+  place: GooglePlace;
+  startsAt: Date;
+  maxPeople: number;
+  title: string;
+}): Promise<Result<string>> {
+  const { data, error } = await supabase.rpc('create_meetup_at_place', {
+    p_google_place_id: input.place.placeId,
+    p_place_name: input.place.name,
+    p_lat: input.place.lat,
+    p_lng: input.place.lng,
+    p_starts_at: input.startsAt.toISOString(),
+    p_max_people: input.maxPeople,
+    p_title: input.title,
+  });
+  return result(data as string | null, error);
+}
+
+export type GooglePlace = { placeId: string; name: string; lat: number; lng: number };
+
+// Opens the place in Google Maps (app or browser).
+export function googleMapsUrl(place: { lat: number; lng: number; placeId?: string | null; name?: string | null }) {
+  const query = encodeURIComponent(place.name ? place.name : `${place.lat},${place.lng}`);
+  const id = place.placeId ? `&query_place_id=${encodeURIComponent(place.placeId)}` : '';
+  return `https://www.google.com/maps/search/?api=1&query=${query}${id}`;
 }
 
 export async function joinMeetup(id: string): Promise<Result<null>> {
@@ -157,7 +192,8 @@ async function fetchMeetup(id: string): Promise<MeetupDetail | null | 'error'> {
   const { data, error } = await supabase
     .from('meetups')
     .select(
-      'id, venue_id, host_id, title, starts_at, ends_at, max_people, status, meetup_members(user_id, joined_at, profiles(display_name))',
+      'id, venue_id, google_place_id, place_name, place_lat, place_lng, host_id, title, starts_at, ends_at, max_people, status, ' +
+        'meetup_members(user_id, joined_at, profiles(display_name))',
     )
     .eq('id', id)
     .maybeSingle();

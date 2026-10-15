@@ -12,5 +12,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ...config.extra,
     // Google Maps crashes on Android without a key, so the app shows a placeholder instead when this is false.
     mapsEnabled: Boolean(googleMapsApiKey),
+    // Same restricted key, used for Places API (New) place-type lookups (src/lib/google-places.ts). It is already
+    // visible inside the APK's manifest, so exposing it here adds no risk; the Android-app restriction protects it.
+    googleApiKey: googleMapsApiKey,
   },
 });

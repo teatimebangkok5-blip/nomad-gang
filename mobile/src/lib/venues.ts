@@ -6,12 +6,29 @@ import { supabase, uniqueChannelName } from '@/lib/supabase';
 export const VENUE_CATEGORIES = ['cafe', 'restaurant', 'rooftop', 'bar'] as const;
 export type VenueCategory = (typeof VENUE_CATEGORIES)[number];
 
+export const PROMOTION_KINDS = ['discount', 'offer', 'event', 'party'] as const;
+export type PromotionKind = (typeof PROMOTION_KINDS)[number];
+
+// Discount and offer use the coupon (unlocked when 3+ people check in); event and party are dated listings.
+export const COUPON_KINDS: readonly PromotionKind[] = ['discount', 'offer'];
+
+// Used on the floating filter buttons and on map pins.
+export const PROMOTION_EMOJI: Record<PromotionKind, string> = {
+  discount: '💸',
+  offer: '🎁',
+  event: '🎵',
+  party: '🎉',
+};
+
 export type VenueDeal = {
   id: string;
+  kind: PromotionKind;
   title_en: string;
   title_th: string;
   details_en: string;
   details_th: string;
+  starts_at: string | null;
+  ends_at: string | null;
 };
 
 export type Venue = {
@@ -24,14 +41,18 @@ export type Venue = {
   lat: number;
   lng: number;
   photo_path: string | null;
+  google_place_id: string | null;
+  // The active discount or offer (coupon), if any.
   deal: VenueDeal | null;
+  // Every active promotion, events/parties that have not ended yet, soonest first.
+  promotions: VenueDeal[];
 };
 
-type VenueRow = Omit<Venue, 'deal'> & { deals: VenueDeal[] };
+type VenueRow = Omit<Venue, 'deal' | 'promotions'> & { deals: VenueDeal[] };
 
-// Row Level Security only returns live venues and their active deal, so no filters are needed here.
+// Row Level Security only returns live venues and their active promotions, so no filters are needed here.
 const VENUE_COLUMNS =
-  'id, name_en, name_th, category, address_en, address_th, lat, lng, photo_path, deals(id, title_en, title_th, details_en, details_th)';
+  'id, name_en, name_th, category, address_en, address_th, lat, lng, photo_path, google_place_id, deals(id, kind, title_en, title_th, details_en, details_th, starts_at, ends_at)';
 
 type VenuesState =
   | { status: 'loading'; venues: Venue[] }
@@ -45,7 +66,13 @@ async function fetchVenues(): Promise<Venue[] | null> {
     console.warn('Loading venues failed', error.message);
     return null;
   }
-  return (data as VenueRow[]).map(({ deals, ...venue }) => ({ ...venue, deal: deals[0] ?? null }));
+  const now = Date.now();
+  return (data as VenueRow[]).map(({ deals, ...venue }) => {
+    const promotions = deals
+      .filter((deal) => !deal.ends_at || new Date(deal.ends_at).getTime() > now)
+      .sort((a, b) => (a.starts_at ?? '').localeCompare(b.starts_at ?? ''));
+    return { ...venue, promotions, deal: promotions.find((deal) => COUPON_KINDS.includes(deal.kind)) ?? null };
+  });
 }
 
 // Live list of partner venues. Updates by itself when the founder changes venues or deals in the admin panel.

@@ -2,12 +2,17 @@ import 'expo-sqlite/localStorage/install';
 import { createClient } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabasePublishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-
-if (!supabaseUrl || !supabasePublishableKey) {
-  throw new Error('Missing Supabase settings. Copy mobile/.env.example to mobile/.env.local and fill it in.');
+// False in preview builds made before Supabase is set up (no mobile/.env.local). The app still opens so the screens
+// can be looked at; sign-in and loading venues fail with their normal error messages.
+export const supabaseConfigured = Boolean(
+  process.env.EXPO_PUBLIC_SUPABASE_URL && process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+);
+if (!supabaseConfigured) {
+  console.warn('Missing Supabase settings. Copy mobile/.env.example to mobile/.env.local and fill it in.');
 }
+
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://not-configured.invalid';
+const supabasePublishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'not-configured';
 
 export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
   auth: {

@@ -8,6 +8,7 @@ import { Icon, type IconName } from '@/components/icon';
 import { LanguageToggle } from '@/components/language-toggle';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { signInWithGoogle } from '@/lib/auth';
+import { supabaseConfigured } from '@/lib/supabase';
 
 // First screen: what TableMeet is, and sign in with Google.
 export default function WelcomeScreen() {
@@ -60,6 +61,9 @@ export default function WelcomeScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
+        {!supabaseConfigured && (
+          <Text style={styles.previewNotice}>Preview build: not connected to the TableMeet server yet.</Text>
+        )}
         {error && (
           <Text accessibilityRole="alert" style={styles.error}>
             {error}
@@ -119,4 +123,12 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
   },
   note: { ...Type.small, color: Colors.ink500, textAlign: 'center' },
+  previewNotice: {
+    ...Type.small,
+    color: Colors.ink700,
+    backgroundColor: Colors.ink100,
+    padding: Spacing.md,
+    borderRadius: Radius.sm,
+    textAlign: 'center',
+  },
 });

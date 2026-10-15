@@ -1,0 +1,68 @@
+const en = {
+  common: {
+    cancel: 'Cancel',
+    tryAgain: 'Try again',
+    switchLanguage: 'ไทย',
+    switchLanguageA11y: 'เปลี่ยนเป็นภาษาไทย',
+  },
+  welcome: {
+    title: 'Never eat alone in Bangkok',
+    subtitle: 'Meet new people over food and drinks at partner cafes, restaurants, rooftops and bars.',
+    step1: 'Pick a place near you',
+    step2: 'Join a table or start one',
+    step3: 'Check in with 3+ people to unlock an exclusive discount',
+    continueWithGoogle: 'Continue with Google',
+    nextStepNote: "Next, we'll verify your phone number.",
+    errorSignIn: "Couldn't sign in. Please try again.",
+    errorPlayServices: 'Google Play services is not available on this phone.',
+  },
+  phone: {
+    title: 'Verify your phone',
+    subtitle: "We'll text you a 6-digit code. This keeps TableMeet safe for everyone.",
+    phoneLabel: 'Phone number',
+    phonePlaceholder: '081 234 5678',
+    phoneHint: 'Thai number, or start with + for other countries',
+    sendCode: 'Send code',
+    codeLabel: '6-digit code',
+    codeSentTo: 'We sent a code to {{phone}}',
+    verify: 'Verify',
+    resend: 'Send a new code',
+    resendIn: 'Send a new code in {{seconds}}s',
+    changeNumber: 'Change number',
+    useDifferentAccount: 'Use a different account',
+    errorInvalidPhone: 'Enter a valid phone number',
+    errorInvalidCode: 'That code is wrong or has expired',
+    errorPhoneTaken: 'This number is already used by another account',
+    errorTooMany: 'Too many tries. Please wait a minute and try again.',
+    errorSend: "Couldn't send the code. Please try again.",
+  },
+  home: {
+    title: 'Where to tonight?',
+    subtitle: 'Partner places in Bangkok with TableMeet deals',
+    signOut: 'Sign out',
+    signOutConfirm: 'Sign out of TableMeet?',
+    groupRule: 'Groups of 3+',
+    distanceMeters: '{{count}} m',
+    distanceKm: '{{km}} km',
+    locationOffTitle: 'See places near you',
+    locationOffBody: 'Turn on location to sort places by distance.',
+    locationTurnOn: 'Turn on',
+    locationOpenSettings: 'Open settings',
+    emptyTitle: 'No places here yet',
+    emptyBody: "We're adding new partners every week.",
+    errorTitle: "Couldn't load places",
+    errorBody: 'Check your internet connection and try again.',
+  },
+  category: {
+    all: 'All',
+    cafe: 'Cafe',
+    restaurant: 'Restaurant',
+    rooftop: 'Rooftop',
+    bar: 'Bar',
+  },
+};
+
+export default en;
+
+type Strings<T> = { [K in keyof T]: T[K] extends string ? string : Strings<T[K]> };
+export type Translation = Strings<typeof en>;

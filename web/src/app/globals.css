@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-geist-sans), var(--font-noto-thai), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Brand: warm terracotta, like a lit table at dinner. */
+  --color-brand-50: #fdf4ef;
+  --color-brand-100: #fbe4d6;
+  --color-brand-200: #f6c4a8;
+  --color-brand-300: #ef9c72;
+  --color-brand-500: #e0612f;
+  --color-brand-600: #c94d1f;
+  --color-brand-700: #a73c1a;
+  --color-brand-800: #85321b;
+
+  /* Neutrals */
+  --color-ink-50: #fafaf9;
+  --color-ink-100: #f4f3f1;
+  --color-ink-200: #e7e5e2;
+  --color-ink-300: #d6d3cf;
+  --color-ink-400: #a8a29c;
+  --color-ink-500: #78726c;
+  --color-ink-600: #57524d;
+  --color-ink-700: #44403c;
+  --color-ink-800: #292524;
+  --color-ink-900: #1c1917;
+}
+
+body {
+  background: var(--color-ink-50);
+  color: var(--color-ink-900);
+}

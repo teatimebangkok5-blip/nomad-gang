@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "TableMeet",
+    "slug": "tablemeet",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "tablemeet",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "icon": "./assets/expo.icon"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FDF4EF",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.tablemeet.app",
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FDF4EF",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 76
+        }
+      ],
+      "expo-sqlite",
+      "expo-localization",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "TableMeet uses your location to show partner places near you and to check you in when you arrive."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

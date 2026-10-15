@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import type { ReactNode } from "react";
+import { connection } from "next/server";
+import { Suspense, type ReactNode } from "react";
 import { requireAdmin } from "@/lib/auth";
 import { venuePhotoUrl } from "@/lib/env";
 import { generatePassword } from "@/lib/password";
@@ -15,8 +16,23 @@ import { VenueLogins } from "./venue-logins";
 
 export const metadata: Metadata = { title: "Edit venue" };
 
-export default async function VenuePage({ params }: PageProps<"/admin/venues/[id]">) {
+export default function VenuePage({ params }: PageProps<"/admin/venues/[id]">) {
+  return (
+    <div className="max-w-3xl">
+      <Link href="/admin/venues" className="text-sm text-ink-600 hover:text-ink-900">
+        ← Venues
+      </Link>
+      <Suspense fallback={<VenueEditorSkeleton />}>
+        <VenueEditor params={params} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function VenueEditor({ params }: { params: PageProps<"/admin/venues/[id]">["params"] }) {
   const { id } = await params;
+  // The Supabase session check reads the current time.
+  await connection();
   const supabase = await requireAdmin();
 
   const { data: venue } = await supabase.from("venues").select("*").eq("id", id).maybeSingle<Venue>();
@@ -38,10 +54,7 @@ export default async function VenuePage({ params }: PageProps<"/admin/venues/[id
   const dealRow = (deals?.[0] ?? null) as (Deal & { deal_coupons: { coupon_code: string } | null }) | null;
 
   return (
-    <div className="max-w-3xl">
-      <Link href="/admin/venues" className="text-sm text-ink-600 hover:text-ink-900">
-        ← Venues
-      </Link>
+    <>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">
           {venue.name_en} <span className="font-normal text-ink-500">· {venue.name_th}</span>
@@ -90,6 +103,25 @@ export default async function VenuePage({ params }: PageProps<"/admin/venues/[id
         <Section title="Delete venue" description="Removes the venue, its deal and its staff logins. This can't be undone.">
           <DeleteVenueButton venueId={venue.id} venueName={venue.name_en} />
         </Section>
+      </div>
+    </>
+  );
+}
+
+function VenueEditorSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Loading venue" className="animate-pulse">
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <div className="h-8 w-64 rounded bg-ink-200" />
+        <div className="h-5 w-14 rounded-full bg-ink-100" />
+      </div>
+      <div className="mt-6 space-y-6">
+        {["h-96", "h-48", "h-72", "h-56"].map((height) => (
+          <div key={height} className={`${height} rounded-xl border border-ink-200 bg-white p-6`}>
+            <div className="h-5 w-32 rounded bg-ink-200" />
+            <div className="mt-3 h-3 w-2/3 rounded bg-ink-100" />
+          </div>
+        ))}
       </div>
     </div>
   );

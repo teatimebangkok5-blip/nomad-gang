@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { connection } from "next/server";
+import { Suspense } from "react";
 import { requireAdmin } from "@/lib/auth";
 import { buttonClass } from "@/components/form";
 import { CATEGORY_LABELS, describeDiscount, type Deal, type Venue } from "@/lib/types";
@@ -11,15 +13,7 @@ type VenueRow = Pick<Venue, "id" | "name_en" | "name_th" | "category" | "is_acti
   venue_accounts: { count: number }[];
 };
 
-export default async function VenuesPage() {
-  const supabase = await requireAdmin();
-  const { data, error } = await supabase
-    .from("venues")
-    .select("id, name_en, name_th, category, is_active, deals(discount_type, discount_value, title_en, is_active), venue_accounts(count)")
-    .order("created_at", { ascending: false });
-
-  const venues = (data ?? []) as VenueRow[];
-
+export default function VenuesPage() {
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -34,6 +28,26 @@ export default async function VenuesPage() {
         </Link>
       </div>
 
+      <Suspense fallback={<VenueListSkeleton />}>
+        <VenueList />
+      </Suspense>
+    </div>
+  );
+}
+
+async function VenueList() {
+  // The Supabase session check reads the current time.
+  await connection();
+  const supabase = await requireAdmin();
+  const { data, error } = await supabase
+    .from("venues")
+    .select("id, name_en, name_th, category, is_active, deals(discount_type, discount_value, title_en, is_active), venue_accounts(count)")
+    .order("created_at", { ascending: false });
+
+  const venues = (data ?? []) as VenueRow[];
+
+  return (
+    <>
       {error && (
         <p role="alert" className="mt-6 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">
           Could not load venues: {error.message}
@@ -79,7 +93,27 @@ export default async function VenuesPage() {
           })}
         </ul>
       )}
-    </div>
+    </>
+  );
+}
+
+function VenueListSkeleton() {
+  return (
+    <ul
+      aria-busy="true"
+      aria-label="Loading venues"
+      className="mt-6 animate-pulse divide-y divide-ink-200 overflow-hidden rounded-xl border border-ink-200 bg-white"
+    >
+      {[0, 1, 2].map((row) => (
+        <li key={row} className="flex items-center justify-between gap-3 px-4 py-3">
+          <div className="space-y-2">
+            <div className="h-4 w-48 rounded bg-ink-200" />
+            <div className="h-3 w-32 rounded bg-ink-100" />
+          </div>
+          <div className="h-5 w-12 rounded-full bg-ink-100" />
+        </li>
+      ))}
+    </ul>
   );
 }
 

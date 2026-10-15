@@ -33,6 +33,10 @@ const ICONS = {
   lightMode: { android: 'light_mode', ios: 'sun.max.fill' },
   language: { android: 'language', ios: 'globe' },
   check: { android: 'check', ios: 'checkmark' },
+  chat: { android: 'chat', ios: 'bubble.left.and.bubble.right.fill' },
+  send: { android: 'send', ios: 'paperplane.fill' },
+  more: { android: 'more_vert', ios: 'ellipsis' },
+  travellers: { android: 'person_pin_circle', ios: 'person.2.wave.2.fill' },
 } satisfies Record<string, { android: AndroidName; ios: IosName }>;
 
 export type IconName = keyof typeof ICONS;

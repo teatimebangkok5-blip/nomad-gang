@@ -29,6 +29,7 @@ import { VenueMap, type MapPin } from '@/components/venue-map';
 import { Radius, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { useAuth } from '@/lib/auth';
+import { useThreads } from '@/lib/chat';
 import { PromoFilter } from '@/components/promo-filter';
 import { CATEGORY_EMOJI } from '@/components/venue-map';
 import { formatWhen } from '@/lib/bangkok-time';
@@ -55,6 +56,10 @@ export default function HomeScreen() {
   const { session } = useAuth();
   const venues = useVenues();
   const meetups = useOpenMeetups(Boolean(session));
+  const { threads } = useThreads(Boolean(session));
+  const incomingRequests = (threads ?? []).filter(
+    (thread) => thread.status === 'pending' && thread.requested_by !== session?.user.id,
+  ).length;
   const location = useCurrentLocation();
   const [promo, setPromo] = useState<PromotionKind | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -206,6 +211,15 @@ export default function HomeScreen() {
           <Logo size={20} />
           <View style={styles.topActions}>
             <LanguageToggle />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('travellers.open')}
+              hitSlop={8}
+              onPress={() => router.push('/travellers')}
+              style={({ pressed }) => [styles.roundButton, pressed && styles.roundButtonPressed]}>
+              <Icon name="travellers" size={20} color={Colors.accent} />
+              {incomingRequests > 0 && <View style={styles.dot} />}
+            </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('settings.open')}
@@ -543,6 +557,18 @@ const useStyles = makeStyles((Colors) => ({
     backgroundColor: Colors.surface,
   },
   roundButtonPressed: { opacity: 0.7 },
+  // New message requests waiting on the Travellers button.
+  dot: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: Colors.pink,
+    borderWidth: 2,
+    borderColor: Colors.bg,
+  },
   previewNotice: {
     ...Type.small,
     fontSize: 12,

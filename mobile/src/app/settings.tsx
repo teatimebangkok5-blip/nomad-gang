@@ -1,21 +1,25 @@
 import { useTranslation } from 'react-i18next';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Icon, type IconName } from '@/components/icon';
 import { ScreenHeader } from '@/components/screen-header';
 import { Radius, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, setLanguage, type Language } from '@/i18n';
-import { signOut } from '@/lib/auth';
+import { signOut, useAuth } from '@/lib/auth';
 import { skipLogin } from '@/lib/preview';
 import { makeStyles, useColors, useTheme, type ThemeName } from '@/lib/theme';
+import { useDiscoverable } from '@/lib/travellers';
 
-// Settings: appearance (dark / light), language, and sign out.
+// Settings: appearance (dark / light), language, visibility to travellers, and sign out.
 export default function SettingsScreen() {
   const styles = useStyles();
   const { t } = useTranslation();
   const { name: theme, setTheme } = useTheme();
   const language = currentLanguage();
+  const Colors = useColors();
+  const { session } = useAuth();
+  const visibility = useDiscoverable(session?.user.id);
 
   const themes: { value: ThemeName; label: string; icon: IconName }[] = [
     { value: 'dark', label: t('settings.dark'), icon: 'darkMode' },
@@ -62,6 +66,27 @@ export default function SettingsScreen() {
               onPress={() => setLanguage(option.value)}
             />
           ))}
+        </View>
+
+        <Text style={styles.sectionTitle}>{t('settings.privacy')}</Text>
+        <View style={styles.group}>
+          <View style={styles.row}>
+            <Icon name="travellers" size={22} color={visibility.on ? Colors.accent : Colors.textSecondary} />
+            <View style={styles.switchText}>
+              <Text style={styles.rowLabel}>{t('travellers.turnOn')}</Text>
+              <Text style={styles.rowHint}>{t('travellers.visibleHint')}</Text>
+            </View>
+            <Switch
+              accessibilityLabel={t('travellers.turnOn')}
+              value={visibility.on === true}
+              disabled={visibility.on === null}
+              onValueChange={(next) => {
+                visibility.set(next);
+              }}
+              trackColor={{ false: Colors.borderStrong, true: Colors.orange }}
+              thumbColor={Colors.white}
+            />
+          </View>
         </View>
 
         {!skipLogin && (
@@ -136,4 +161,6 @@ const useStyles = makeStyles((Colors) => ({
   rowPressed: { backgroundColor: Colors.pressed },
   rowLabel: { ...Type.body, fontSize: 16, color: Colors.text, flex: 1 },
   rowDanger: { color: Colors.danger },
+  switchText: { flex: 1, paddingVertical: Spacing.sm },
+  rowHint: { ...Type.small, color: Colors.textMuted },
 }));

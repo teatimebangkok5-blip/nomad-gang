@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Text, View } from 'react-native';
@@ -159,6 +159,16 @@ export default function TableScreen() {
             <Text accessibilityRole="alert" style={styles.error}>
               {t(`tables.errors.${error}`)}
             </Text>
+          )}
+
+          {isMember && !cancelled && (
+            <View style={styles.actions}>
+              <Button
+                title={t('chat.openChat')}
+                icon={<Icon name="chat" size={20} color={Colors.onBrand} />}
+                onPress={() => router.push({ pathname: '/table-chat/[id]', params: { id } })}
+              />
+            </View>
           )}
 
           {!cancelled && !ended && (

@@ -15,6 +15,16 @@ Product spec and tech stack below are agreed. Built so far:
   place or a pin opens a place card (promotions, tables there, "Create table here", Open in Google Maps).
   Admin: per-venue **Promotions** editor and **Find on Google Maps** (server action `searchGooglePlaces`, needs
   `GOOGLE_PLACES_API_KEY` in `web/.env.local`).
+- **Chat and Travellers** (added 2026-10-16): table group chat for members (`src/app/table-chat/[id].tsx`), a
+  **Travellers** screen (top-right button on the map, `src/app/travellers.tsx`) with Nearby (opt-in, people within
+  5 km as fuzzy violet dots + list) and Messages (inbox) tabs, and direct messages (`src/app/dm/[userId].tsx`).
+  Shared UI: `src/components/chat-view.tsx`; data: `src/lib/chat.ts`, `src/lib/travellers.ts`; Block/Report menu:
+  `src/lib/safety-menu.ts`. Settings has a "Show me to travellers nearby" switch.
+  Rules (database, `*_chat_and_travellers.sql`): visibility is **opt-in** (`profiles.discoverable`; off deletes the
+  location); exact locations are never returned (`user_locations` has no API access); dots are moved 150–400 m in a
+  direction fixed per person per day; distances rounded to 0.5 km; locations older than 2 h are ignored; you must be
+  visible to see others. A first DM is a **request** (one message until the receiver replies or accepts); blocking
+  hides both ways; reports are readable only by admins. Sending DMs needs a verified phone or an allowed guest.
 - **Not started:** check-ins (50 m), QR codes and redemptions, staff QR page, redemption feed and push
   notifications, Instagram on profiles, tables/users in the admin panel. Hiding non-food businesses on the map
   needs a Google Cloud **Map ID** with POI filtering (JSON map styles can't tell food from shops).

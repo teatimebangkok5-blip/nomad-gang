@@ -48,6 +48,9 @@ function RootNavigator() {
           <Stack.Screen name="create-table" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="table/[id]" />
           <Stack.Screen name="settings" />
+          <Stack.Screen name="travellers" />
+          <Stack.Screen name="dm/[userId]" />
+          <Stack.Screen name="table-chat/[id]" />
         </Stack.Protected>
       </Stack>
     </>

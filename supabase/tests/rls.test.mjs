@@ -284,5 +284,113 @@ r = await tryQuery("service_role", null, `select (select count(*) from public.de
 const c = r.rows?.[0];
 check("deleting venue removes deal, coupon, logins, tables", c && c.d + c.c + c.a + c.s + c.m + c.mm === 0);
 
+// --- Travellers (opt-in, 5 km, fuzzy) and direct messages
+const [g0, g1, g2] = guests;
+const loc = (who, lat, lng) => tryQuery("authenticated", who, `select public.update_my_location($1, $2)`, [lat, lng]);
+const BKK = [13.7466, 100.5393];
+await loc(user, ...BKK);
+r = await tryQuery("service_role", null, `select count(*)::int n from public.user_locations`);
+check("location not stored while not discoverable", r.rows?.[0]?.n === 0);
+for (const who of [user, g0, g1]) await tryQuery("authenticated", who, `select public.set_discoverable(true)`);
+await loc(user, ...BKK);
+await loc(g0, BKK[0] + 0.009, BKK[1]); // ~1 km north
+await loc(g1, BKK[0] + 0.072, BKK[1]); // ~8 km north
+await loc(g2, BKK[0] + 0.001, BKK[1]); // not discoverable
+r = await tryQuery("authenticated", user, `select * from public.nearby_travellers()`);
+check("nearby shows only discoverable people within 5 km", r.rows?.length === 1 && r.rows[0].user_id === g0);
+check("distance rounded to 0.5 km", Number(r.rows?.[0]?.distance_km) === 1);
+const fuzz = r.rows?.[0];
+r = await tryQuery("service_role", null,
+  `select extensions.st_distance(extensions.st_setsrid(extensions.st_makepoint($2, $1), 4326)::extensions.geography, l.location) d from public.user_locations l where l.user_id = $3`,
+  [fuzz?.fuzzy_lat, fuzz?.fuzzy_lng, g0]);
+const fuzzMeters = Number(r.rows?.[0]?.d);
+check("dot is moved 150-400 m from the real spot", fuzzMeters >= 140 && fuzzMeters <= 410);
+r = await tryQuery("authenticated", user, `select fuzzy_lat from public.nearby_travellers()`);
+check("dot stays put on repeat looks (no averaging)", r.rows?.[0]?.fuzzy_lat === fuzz?.fuzzy_lat);
+r = await tryQuery("authenticated", g2, `select count(*)::int n from public.nearby_travellers()`);
+check("people who aren't discoverable can't browse travellers", r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", user, `select * from public.user_locations`);
+check("exact locations unreadable through the API", !!r.error);
+await db.exec(`update public.user_locations set updated_at = now() - interval '3 hours' where user_id = '${g0}'`);
+r = await tryQuery("authenticated", user, `select count(*)::int n from public.nearby_travellers()`);
+check("locations older than 2 hours are hidden", r.rows?.[0]?.n === 0);
+await loc(g0, BKK[0] + 0.009, BKK[1]);
+
+const dm = (from, to, body) => tryQuery("authenticated", from, `select public.send_direct_message($1, $2) as id`, [to, body]);
+r = await dm(user, g0, "Hi! Want to grab noodles?");
+check("first message to someone nearby starts a request", !r.error);
+const threadId = r.rows?.[0]?.id;
+r = await dm(user, g0, "Hello??");
+check("only one message until the request is answered", /request_pending/.test(r.error ?? ""));
+r = await dm(g0, user, "Sure!");
+check("receiver replying accepts the request", !r.error);
+r = await dm(user, g0, "Great, 7pm?");
+check("after accepting, both can keep messaging", !r.error);
+r = await tryQuery("authenticated", g0, `select count(*)::int n from public.direct_messages where thread_id = $1`, [threadId]);
+check("participants read the conversation", r.rows?.[0]?.n === 3);
+r = await tryQuery("authenticated", g1, `select count(*)::int n from public.direct_messages where thread_id = $1`, [threadId]);
+check("outsiders can't read it", r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", user, `insert into public.direct_messages (thread_id, sender_id, body) values ($1, $2, 'x')`, [threadId, user]);
+check("direct inserts blocked (must use send_direct_message)", !!r.error);
+r = await dm(user, g1, "hey");
+check("can't message someone 8 km away", /too_far/.test(r.error ?? ""));
+r = await dm(user, g2, "hey");
+check("can't message someone who isn't discoverable", /not_visible/.test(r.error ?? ""));
+r = await dm(user, g0, "   ");
+check("empty message rejected", /empty_message/.test(r.error ?? ""));
+r = await dm(unverified, g0, "hey");
+check("unverified users can't send messages", /not_allowed/.test(r.error ?? ""));
+r = await tryQuery("authenticated", user, `select * from public.list_my_threads()`);
+check("inbox lists the thread with the other person's name", r.rows?.length === 1 && r.rows[0].other_id === g0 && r.rows[0].last_body === "Great, 7pm?");
+
+await loc(g1, BKK[0] + 0.02, BKK[1]); // g1 moves within 5 km
+r = await dm(g1, user, "Hi from nearby");
+const reqId = r.rows?.[0]?.id;
+check("second person sends a request", !r.error);
+r = await tryQuery("authenticated", g1, `select public.respond_direct_request($1, true)`, [reqId]);
+check("sender can't accept their own request", /not_found/.test(r.error ?? ""));
+r = await tryQuery("authenticated", user, `select public.respond_direct_request($1, false)`, [reqId]);
+check("receiver declines", !r.error);
+r = await dm(g1, user, "Please?");
+check("declined requester can't keep messaging", /request_declined/.test(r.error ?? ""));
+r = await tryQuery("authenticated", user, `select count(*)::int n from public.list_my_threads() where thread_id = $1`, [reqId]);
+check("declined request disappears from the decliner's inbox", r.rows?.[0]?.n === 0);
+
+r = await tryQuery("authenticated", g0, `insert into public.blocks (blocker_id, blocked_id) values ($1, $2)`, [g0, user]);
+check("user can block someone", !r.error);
+r = await dm(user, g0, "still there?");
+check("blocked people can't message", /blocked/.test(r.error ?? ""));
+r = await tryQuery("authenticated", user, `select count(*)::int n from public.list_my_threads() where thread_id = $1`, [threadId]);
+check("blocked conversation hidden from both", r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", g0, `select count(*)::int n from public.nearby_travellers() where user_id = $1`, [user]);
+check("blocked people don't see each other nearby", r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", user, `insert into public.blocks (blocker_id, blocked_id) values ($1, $2)`, [g0, g1]);
+check("can't create blocks for someone else", !!r.error);
+
+r = await tryQuery("authenticated", user, `insert into public.reports (reporter_id, reported_id, context, reason) values ($1, $2, 'traveller', 'Rude messages')`, [user, g1]);
+check("user can report someone", !r.error);
+r = await tryQuery("authenticated", user, `insert into public.reports (reporter_id, reported_id, context, reason) values ($1, $2, 'traveller', 'x')`, [g1, user]);
+check("can't file a report as someone else", !!r.error);
+r = await tryQuery("authenticated", user, `select count(*)::int n from public.reports`);
+check("users can't read reports", r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", admin, `select count(*)::int n from public.reports`);
+check("founder reads reports", r.rows?.[0]?.n === 1);
+
+await tryQuery("authenticated", user, `select public.set_discoverable(false)`);
+r = await tryQuery("service_role", null, `select count(*)::int n from public.user_locations where user_id = $1`, [user]);
+check("turning visibility off deletes the stored location", r.rows?.[0]?.n === 0);
+
+// --- Table chat
+r = await tryQuery("authenticated", user, `insert into public.meetup_messages (meetup_id, sender_id, body) values ($1, $2, 'See you at 8!')`, [placeMeetupId, user]);
+check("table member can post in the table chat", !r.error);
+r = await tryQuery("authenticated", g1, `select count(*)::int n from public.meetup_messages where meetup_id = $1`, [placeMeetupId]);
+check("other members read the table chat", r.rows?.[0]?.n === 1);
+r = await tryQuery("authenticated", g2, `select count(*)::int n from public.meetup_messages where meetup_id = $1`, [placeMeetupId]);
+check("non-members can't read the table chat", r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", g2, `insert into public.meetup_messages (meetup_id, sender_id, body) values ($1, $2, 'hi')`, [placeMeetupId, g2]);
+check("non-members can't post in the table chat", !!r.error);
+r = await tryQuery("authenticated", g1, `insert into public.meetup_messages (meetup_id, sender_id, body) values ($1, $2, 'fake')`, [placeMeetupId, user]);
+check("can't post as someone else", !!r.error);
+
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

@@ -33,17 +33,15 @@ import { useThreads } from '@/lib/chat';
 import { PromoFilter } from '@/components/promo-filter';
 import { CATEGORY_EMOJI } from '@/components/venue-map';
 import { formatWhen } from '@/lib/bangkok-time';
-import { checkPlace, type PlaceCheck } from '@/lib/google-places';
 import { distanceMeters, useCurrentLocation } from '@/lib/location';
-import { googleMapsUrl, joinMeetup, useOpenMeetups, type GooglePlace, type OpenMeetup } from '@/lib/meetups';
+import { directionsUrl, joinMeetup, useOpenMeetups, type OpenMeetup } from '@/lib/meetups';
+import { placeName, usePlacesInView, type Place } from '@/lib/places';
 import { skipLogin } from '@/lib/preview';
 import { PROMOTION_EMOJI, useVenues, type PromotionKind, type Venue } from '@/lib/venues';
 import { makeStyles, useColors } from '@/lib/theme';
 
-// What the bottom card shows: a partner venue, or any Google place someone tapped (checked for food/Bangkok).
-type Selection =
-  | { type: 'venue'; venueId: string }
-  | { type: 'place'; place: GooglePlace; check: PlaceCheck | 'checking' };
+// What the bottom card shows: a partner venue, or any Bangkok food place (OpenStreetMap) someone tapped.
+type Selection = { type: 'venue'; venueId: string } | { type: 'place'; place: Place };
 
 // Home: a full-screen map of open tables. Logo and the Discount/Offer/Event/Party buttons float on top; a swipeable row of table cards,
 // "Create table" and a "List" button float at the bottom. "List" slides up a panel with all tables and places.
@@ -63,6 +61,7 @@ export default function HomeScreen() {
   const location = useCurrentLocation();
   const [promo, setPromo] = useState<PromotionKind | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
+  const { places: mapPlaces, onBoundsChange } = usePlacesInView();
   const [joiningId, setJoiningId] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
   const [topHeight, setTopHeight] = useState(0);
@@ -84,14 +83,14 @@ export default function HomeScreen() {
   const venueMatches = (venue: Venue | undefined) =>
     Boolean(venue) &&
     (promo === null || Boolean(venue?.promotions.some((p) => p.kind === promo)));
-  // Tables at Google places have no promotions, so they only show when no filter is on.
+  // Tables at other places have no promotions, so they only show when no filter is on.
   const meetupMatches = (meetup: OpenMeetup) =>
     meetup.venue_id ? venueMatches(venueById.get(meetup.venue_id)) : !filtersOn;
 
   const visibleMeetups = meetups.meetups.filter(meetupMatches);
   const meetupsAtSelection = (s: Selection) =>
     meetups.meetups.filter((meetup) =>
-      s.type === 'venue' ? meetup.venue_id === s.venueId : !meetup.venue_id && meetup.google_place_id === s.place.placeId,
+      s.type === 'venue' ? meetup.venue_id === s.venueId : !meetup.venue_id && meetup.place_id === s.place.id,
     );
 
   // Partner venues: pin shows the promotion type (or the place type), badge = open tables there.
@@ -99,10 +98,10 @@ export default function HomeScreen() {
   const tablesAtPlace = new Map<string, OpenMeetup[]>();
   for (const meetup of visibleMeetups) {
     if (meetup.venue_id) tablesAtVenue.set(meetup.venue_id, (tablesAtVenue.get(meetup.venue_id) ?? 0) + 1);
-    else if (meetup.google_place_id) tablesAtPlace.set(meetup.google_place_id, [...(tablesAtPlace.get(meetup.google_place_id) ?? []), meetup]);
+    else if (meetup.place_id) tablesAtPlace.set(meetup.place_id, [...(tablesAtPlace.get(meetup.place_id) ?? []), meetup]);
   }
   const selectedVenueId = selection?.type === 'venue' ? selection.venueId : null;
-  const selectedPlaceId = selection?.type === 'place' ? selection.place.placeId : null;
+  const selectedPlaceId = selection?.type === 'place' ? selection.place.id : null;
   const pins: MapPin[] = [
     ...venues.venues.filter(venueMatches).map((venue) => {
       const shown = (promo && venue.promotions.find((p) => p.kind === promo)) || venue.deal || venue.promotions[0];
@@ -139,32 +138,32 @@ export default function HomeScreen() {
     const placeId = key.slice(2);
     const first = tablesAtPlace.get(placeId)?.[0];
     if (first?.place_name && first.place_lat !== null && first.place_lng !== null) {
-      // A table already exists here, so the place was checked when it was created.
-      setSelection({ type: 'place', place: { placeId, name: first.place_name, lat: first.place_lat, lng: first.place_lng }, check: 'food' });
+      setSelection({
+        type: 'place',
+        place: {
+          id: placeId,
+          name: first.place_name,
+          name_en: first.place_name_en,
+          name_th: first.place_name_th,
+          kind: 'restaurant',
+          lat: first.place_lat,
+          lng: first.place_lng,
+        },
+      });
     }
   }
 
-  // Tap on one of Google's places: a linked partner venue opens as that venue; anything else is checked
-  // (Bangkok, food or drink) before "Create table here" is offered.
-  async function handlePlacePress(place: GooglePlace) {
-    const venue = venues.venues.find((v) => v.google_place_id === place.placeId);
-    if (venue) {
-      setSelection({ type: 'venue', venueId: venue.id });
-      return;
-    }
-    setSelection({ type: 'place', place, check: 'checking' });
-    const check = await checkPlace(place);
-    setSelection((current) =>
-      current?.type === 'place' && current.place.placeId === place.placeId ? { ...current, check } : current,
-    );
+  // Tap on a place dot: a place linked to a partner venue opens as that venue.
+  function handlePlacePress(place: Place) {
+    const venue = venues.venues.find((v) => v.place_id === place.id);
+    setSelection(venue ? { type: 'venue', venueId: venue.id } : { type: 'place', place });
   }
 
   function createAt(s: Selection) {
     if (s.type === 'venue') {
       router.push({ pathname: '/create-table', params: { venueId: s.venueId } });
     } else {
-      const { placeId, name, lat, lng } = s.place;
-      router.push({ pathname: '/create-table', params: { placeId, name, lat: String(lat), lng: String(lng) } });
+      router.push({ pathname: '/create-table', params: { placeId: s.place.id } });
     }
   }
 
@@ -195,7 +194,9 @@ export default function HomeScreen() {
         pins={pins}
         userCoords={coords}
         onPinPress={handlePinPress}
+        places={mapPlaces}
         onPlacePress={handlePlacePress}
+        onBoundsChange={onBoundsChange}
         mapPadding={{ top: topHeight, right: 0, bottom: bottomHeight, left: 0 }}
       />
 
@@ -372,14 +373,16 @@ function PlaceCard({
   const Colors = useColors();
   const { t } = useTranslation();
   const language = currentLanguage();
-  const name = venue ? localized(venue, 'name', language) : selection.type === 'place' ? selection.place.name : '';
-  const check = selection.type === 'place' ? selection.check : 'food';
-  const canCreate = check === 'food' || check === 'unknown';
+  const name = venue
+    ? localized(venue, 'name', language)
+    : selection.type === 'place'
+      ? placeName(selection.place, language)
+      : '';
   const mapsTarget =
     selection.type === 'place'
-      ? selection.place
+      ? { lat: selection.place.lat, lng: selection.place.lng, name }
       : venue
-        ? { lat: venue.lat, lng: venue.lng, placeId: venue.google_place_id, name: venue.name_en }
+        ? { lat: venue.lat, lng: venue.lng, name }
         : null;
 
   return (
@@ -415,12 +418,6 @@ function PlaceCard({
             </View>
           ))}
         </View>
-      ) : check === 'checking' ? (
-        <Text style={styles.placeNote}>{t('tables.checkingPlace')}</Text>
-      ) : check === 'not_food' ? (
-        <Text style={styles.placeWarning}>{t('tables.notFood')}</Text>
-      ) : check === 'outside_bangkok' ? (
-        <Text style={styles.placeWarning}>{t('tables.outsideBangkok')}</Text>
       ) : (
         <Text style={styles.placeNote}>{t('tables.noDealHere')}</Text>
       )}
@@ -439,8 +436,7 @@ function PlaceCard({
         <View style={styles.createButton}>
           <Button
             title={t('tables.createHere')}
-            icon={<Icon name="add" size={20} color={canCreate ? Colors.onBrand : Colors.textMuted} />}
-            disabled={!canCreate}
+            icon={<Icon name="add" size={20} color={Colors.onBrand} />}
             onPress={onCreate}
           />
         </View>
@@ -448,7 +444,7 @@ function PlaceCard({
           <Pressable
             accessibilityRole="link"
             accessibilityLabel={t('tables.openInMaps')}
-            onPress={() => Linking.openURL(googleMapsUrl(mapsTarget))}
+            onPress={() => Linking.openURL(directionsUrl(mapsTarget))}
             style={({ pressed }) => [styles.listButton, pressed && styles.roundButtonPressed]}>
             <Icon name="map" size={20} color={Colors.text} />
           </Pressable>
@@ -618,7 +614,6 @@ const useStyles = makeStyles((Colors) => ({
   promoTitle: { ...Type.label, color: Colors.glow },
   promoMeta: { ...Type.small, color: Colors.textSecondary },
   placeNote: { ...Type.body, color: Colors.textSecondary },
-  placeWarning: { ...Type.body, color: Colors.danger },
   placeTables: { gap: Spacing.sm },
   placeTable: { width: 300 },
   placeActions: { flexDirection: 'row', gap: Spacing.sm },

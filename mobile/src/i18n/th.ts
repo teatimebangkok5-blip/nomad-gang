@@ -64,7 +64,7 @@ const th: Translation = {
     showList: 'รายการ',
     showMap: 'แผนที่',
     createHere: 'สร้างโต๊ะที่นี่',
-    openInMaps: 'เปิดใน Google Maps',
+    openInMaps: 'เปิดในแผนที่',
     noDealHere: 'ร้านนี้ยังไม่มีดีลจาก TableMeet แต่ยังนัดเจอกันที่นี่ได้',
     checkingPlace: 'กำลังตรวจสอบสถานที่…',
     notFood: 'สร้างโต๊ะได้เฉพาะร้านอาหารและเครื่องดื่มเท่านั้น',

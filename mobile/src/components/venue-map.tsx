@@ -1,30 +1,32 @@
-import Constants from 'expo-constants';
-import { useEffect, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { Camera, GeoJSONSource, Layer, Map, Marker, UserLocation, type CameraRef } from '@maplibre/maplibre-react-native';
+import { useEffect, useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
-import { Icon } from '@/components/icon';
-import { darkMapStyle, lightMapStyle } from '@/constants/map-style';
-import { Radius, Spacing, Type } from '@/constants/theme';
+import { Radius } from '@/constants/theme';
 import type { Coords } from '@/lib/location';
-import type { GooglePlace } from '@/lib/meetups';
-import type { VenueCategory } from '@/lib/venues';
+import { type MapBounds, type Place } from '@/lib/places';
 import { makeStyles, useColors, useTheme } from '@/lib/theme';
+import type { VenueCategory } from '@/lib/venues';
+
+// Free map: MapLibre with OpenFreeMap tiles (OpenStreetMap data). No API key, no billing.
+// The style includes the required "© OpenStreetMap" credit, shown via the map's attribution button.
+const MAP_STYLES = {
+  dark: 'https://tiles.openfreemap.org/styles/dark',
+  light: 'https://tiles.openfreemap.org/styles/positron',
+} as const;
 
 export type MapPin = {
   key: string;
   lat: number;
   lng: number;
   emoji: string;
-  // Violet for tables at Google places; orange (default) for partner venues.
+  // Violet for tables at places and travellers; orange (default) for partner venues.
   tone?: 'orange' | 'violet';
   // Shown as a badge, e.g. the number of open tables at the venue.
   count?: number;
   selected?: boolean;
 };
 
-// Emoji render reliably inside map markers (native icon views can come out blank in the marker snapshot).
 export const CATEGORY_EMOJI: Record<VenueCategory, string> = {
   cafe: '☕',
   restaurant: '🍽️',
@@ -34,15 +36,13 @@ export const CATEGORY_EMOJI: Record<VenueCategory, string> = {
 
 // Siam / central Bangkok, used until the phone's location is known.
 const BANGKOK: Coords = { lat: 13.7466, lng: 100.5393 };
-const DELTA = 0.06;
-
-// False when the build has no Google Maps key (see app.config.ts); Google Maps would crash without one.
-const mapsEnabled = Constants.expoConfig?.extra?.mapsEnabled === true;
 
 export function VenueMap({
   pins,
   onPinPress,
+  places = [],
   onPlacePress,
+  onBoundsChange,
   userCoords,
   height,
   fullScreen = false,
@@ -50,103 +50,111 @@ export function VenueMap({
 }: {
   pins: MapPin[];
   onPinPress: (key: string) => void;
-  // Tap on one of Google's own places (restaurants, cafes, bars, …) on the map.
-  onPlacePress?: (place: GooglePlace) => void;
+  // Bangkok food places (OpenStreetMap) drawn as small dots; tapping one calls onPlacePress.
+  places?: Place[];
+  onPlacePress?: (place: Place) => void;
+  // Called when the visible area changes (used to load the places in view).
+  onBoundsChange?: (bounds: MapBounds) => void;
   userCoords: Coords | null;
   // Fixed height for an inline map; ignored when fullScreen.
   height?: number;
   // Fill the parent edge to edge (home screen), without the rounded frame.
   fullScreen?: boolean;
-  // Space covered by floating UI, so Google's logo, the my-location button and centering stay visible.
+  // Space covered by floating UI, so centering and the attribution stay visible.
   mapPadding?: { top: number; right: number; bottom: number; left: number };
 }) {
   const styles = useStyles();
   const Colors = useColors();
   const { name: themeName } = useTheme();
-  const { t } = useTranslation();
-  const mapRef = useRef<MapView>(null);
+  const cameraRef = useRef<CameraRef>(null);
   const centeredOnUser = useRef(false);
-  // react-native-maps on Android crashes (NullPointerException in setPadding) if mapPadding is set before the
-  // Google map exists, so padding is only passed once onMapReady has fired.
-  const [ready, setReady] = useState(false);
 
   // Move to the user once their location arrives (only the first time, so we don't fight their panning).
   useEffect(() => {
     if (!userCoords || centeredOnUser.current) return;
     centeredOnUser.current = true;
-    mapRef.current?.animateToRegion(
-      { latitude: userCoords.lat, longitude: userCoords.lng, latitudeDelta: DELTA, longitudeDelta: DELTA },
-      500,
-    );
+    cameraRef.current?.easeTo({ center: [userCoords.lng, userCoords.lat], zoom: 15, duration: 600 });
   }, [userCoords]);
 
-  const frameStyle = fullScreen ? StyleSheet.absoluteFill : [styles.frame, { height }];
-
-  if (!mapsEnabled) {
-    return (
-      <View style={[frameStyle, styles.placeholder]}>
-        <Icon name="location" size={28} color={Colors.textMuted} />
-        <Text style={styles.placeholderText}>{t('tables.mapUnavailable')}</Text>
-      </View>
-    );
-  }
+  const placesGeoJson: GeoJSON.FeatureCollection = {
+    type: 'FeatureCollection',
+    features: places.map((place) => ({
+      type: 'Feature',
+      id: place.id,
+      geometry: { type: 'Point', coordinates: [place.lng, place.lat] },
+      properties: { id: place.id },
+    })),
+  };
 
   const start = userCoords ?? BANGKOK;
+  const frameStyle = fullScreen ? StyleSheet.absoluteFill : [styles.frame, { height }];
+
   return (
     <View style={[frameStyle, styles.mapBackground]}>
-      <MapView
-        ref={mapRef}
-        provider={PROVIDER_GOOGLE}
+      <Map
         style={StyleSheet.absoluteFill}
-        customMapStyle={themeName === 'light' ? lightMapStyle : darkMapStyle}
-        initialRegion={{ latitude: start.lat, longitude: start.lng, latitudeDelta: DELTA, longitudeDelta: DELTA }}
-        showsUserLocation={Boolean(userCoords)}
-        showsMyLocationButton={Boolean(userCoords)}
-        toolbarEnabled={false}
-        onPoiClick={(event) => {
-          const { placeId, name, coordinate } = event.nativeEvent;
-          // Google's label can wrap onto two lines ("Somtam\nDer").
-          onPlacePress?.({ placeId, name: name.replace(/\s+/g, ' ').trim(), lat: coordinate.latitude, lng: coordinate.longitude });
-        }}
-        mapPadding={ready ? mapPadding : undefined}
-        onMapReady={() => setReady(true)}>
+        mapStyle={MAP_STYLES[themeName]}
+        contentInset={mapPadding}
+        logo={false}
+        attribution
+        attributionPosition={{ bottom: (mapPadding?.bottom ?? 0) + 8, right: 8 }}
+        compass={false}
+        touchRotate={false}
+        touchPitch={false}
+        onRegionDidChange={(event) => {
+          const { bounds, zoom } = event.nativeEvent;
+          onBoundsChange?.({ west: bounds[0], south: bounds[1], east: bounds[2], north: bounds[3], zoom });
+        }}>
+        <Camera ref={cameraRef} initialViewState={{ center: [start.lng, start.lat], zoom: 13 }} />
+        {userCoords && <UserLocation />}
+
+        {places.length > 0 && (
+          <GeoJSONSource
+            id="places"
+            data={placesGeoJson}
+            onPress={(event) => {
+              const id = event.nativeEvent.features[0]?.properties?.id;
+              const place = places.find((p) => p.id === id);
+              if (place) onPlacePress?.(place);
+            }}>
+            <Layer
+              id="places-dots"
+              type="circle"
+              style={{
+                circleRadius: 6,
+                circleColor: Colors.orange,
+                circleOpacity: 0.9,
+                circleStrokeWidth: 2,
+                circleStrokeColor: Colors.bg,
+              }}
+            />
+          </GeoJSONSource>
+        )}
+
         {pins.map((pin) => (
-          // The key includes what the pin shows, so a changed pin remounts and re-renders its snapshot.
-          <PinMarker key={`${pin.key}-${pin.count ?? 0}-${pin.selected ? 1 : 0}`} pin={pin} onPress={onPinPress} />
+          <Marker key={pin.key} id={pin.key} lngLat={[pin.lng, pin.lat]} anchor="bottom" onPress={() => onPinPress(pin.key)}>
+            <PinView pin={pin} />
+          </Marker>
         ))}
-      </MapView>
+      </Map>
     </View>
   );
 }
 
-function PinMarker({ pin, onPress }: { pin: MapPin; onPress: (key: string) => void }) {
+function PinView({ pin }: { pin: MapPin }) {
   const styles = useStyles();
-  // Android draws custom markers as a snapshot; keep tracking briefly so the first render is captured, then stop
-  // (tracking forever costs performance).
-  const [tracks, setTracks] = useState(true);
-  useEffect(() => {
-    const timer = setTimeout(() => setTracks(false), 1200);
-    return () => clearTimeout(timer);
-  }, []);
-
   return (
-    <Marker
-      coordinate={{ latitude: pin.lat, longitude: pin.lng }}
-      anchor={{ x: 0.5, y: 1 }}
-      tracksViewChanges={tracks}
-      onPress={() => onPress(pin.key)}>
-      <View style={styles.pinWrap}>
-        <View style={[styles.pin, pin.tone === 'violet' && styles.pinViolet, pin.selected && styles.pinSelected]}>
-          <Text style={styles.emoji}>{pin.emoji}</Text>
-        </View>
-        <View style={[styles.tail, pin.tone === 'violet' && styles.pinViolet, pin.selected && styles.tailSelected]} />
-        {pin.count ? (
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{pin.count}</Text>
-          </View>
-        ) : null}
+    <View style={styles.pinWrap}>
+      <View style={[styles.pin, pin.tone === 'violet' && styles.pinViolet, pin.selected && styles.pinSelected]}>
+        <Text style={styles.emoji}>{pin.emoji}</Text>
       </View>
-    </Marker>
+      <View style={[styles.tail, pin.tone === 'violet' && styles.pinViolet, pin.selected && styles.tailSelected]} />
+      {pin.count ? (
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>{pin.count}</Text>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -161,8 +169,6 @@ const useStyles = makeStyles((Colors) => ({
     backgroundColor: Colors.surface,
   },
   mapBackground: { backgroundColor: Colors.surface },
-  placeholder: { alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, backgroundColor: Colors.surface },
-  placeholderText: { ...Type.small, color: Colors.textMuted },
   pinWrap: { alignItems: 'center', paddingTop: 6, paddingRight: 8 },
   pin: {
     width: PIN,

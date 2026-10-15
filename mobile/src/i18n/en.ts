@@ -62,7 +62,7 @@ const en = {
     showList: 'List',
     showMap: 'Map',
     createHere: 'Create table here',
-    openInMaps: 'Open in Google Maps',
+    openInMaps: 'Open in Maps',
     noDealHere: 'No TableMeet deal here yet, but you can still meet here!',
     checkingPlace: 'Checking this place…',
     notFood: 'Tables are only for places to eat or drink.',

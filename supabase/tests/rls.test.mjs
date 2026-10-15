@@ -245,36 +245,52 @@ for (let i = 0; i < 3; i++) await tryQuery("authenticated", guests[0], `select p
 r = await tryQuery("authenticated", guests[0], `select public.create_meetup($1, $2, 3)`, [venueId, inHours(5)]);
 check("a person can host at most 3 open tables", /too_many_open/.test(r.error ?? ""));
 
-// --- Tables at Google places
-const fn = `select public.create_meetup_at_place($1, $2, $3, $4, $5, 4) as id`;
-r = await tryQuery("authenticated", user, fn, ["ChIJgoogle1", "Somtam Der", 13.7290, 100.5340, inHours(2)]);
-check("table at any Google place", !r.error);
+// --- Places (OpenStreetMap) and tables at any place
+r = await tryQuery("anon", null, `select count(*)::int n from public.places`);
+check("Bangkok places seeded and readable by anyone", r.rows?.[0]?.n > 9000);
+r = await tryQuery("anon", null, `select id, name from public.places where osm_type = 'node' and osm_id = 268242835`);
+const placeId = r.rows?.[0]?.id;
+check("a known place is in the list", r.rows?.[0]?.name === "Manna");
+r = await tryQuery("authenticated", user, `insert into public.places (osm_type, osm_id, name, kind, lat, lng) values ('node', 1, 'Fake', 'restaurant', 13.7, 100.5)`);
+check("app users can't add places", !!r.error);
+r = await tryQuery("authenticated", admin, `insert into public.places (osm_type, osm_id, name, kind, lat, lng) values ('node', 2, 'Chiang Mai Cafe', 'cafe', 18.79, 98.98)`);
+check("places outside Bangkok can't be added", !!r.error);
+r = await tryQuery("authenticated", admin, `insert into public.places (osm_type, osm_id, name, kind, lat, lng) values ('node', 3, 'Founder Added Noodles', 'restaurant', 13.74, 100.53) returning id`);
+check("founder can add a missing place", !r.error);
+r = await tryQuery("authenticated", user, `select count(*)::int n from public.search_places('manna')`);
+check("place search finds places by name", r.rows?.[0]?.n >= 1);
+r = await tryQuery("authenticated", user, `select count(*)::int n from public.places_in_bounds(100.53, 13.74, 100.54, 13.75, 50)`);
+check("places in a map area are returned (capped)", r.rows?.[0]?.n > 0 && r.rows?.[0]?.n <= 50);
+
+const fn = `select public.create_meetup_at_place($1, $2, 4) as id`;
+r = await tryQuery("authenticated", user, fn, [placeId, inHours(2)]);
+check("table at any place", !r.error);
 const placeMeetupId = r.rows?.[0]?.id;
-r = await tryQuery("authenticated", user, `select venue_id, place_name from public.list_open_meetups() where id = $1`, [placeMeetupId]);
-check("Google-place table listed with its name", r.rows?.[0]?.venue_id === null && r.rows?.[0]?.place_name === "Somtam Der");
+r = await tryQuery("authenticated", user, `select venue_id, place_name, place_lat from public.list_open_meetups() where id = $1`, [placeMeetupId]);
+check("place table listed with its name and position", r.rows?.[0]?.venue_id === null && r.rows?.[0]?.place_name === "Manna" && r.rows?.[0]?.place_lat > 13);
 r = await tryQuery("authenticated", guests[1], `select public.join_meetup($1)`, [placeMeetupId]);
-check("people can join a Google-place table", !r.error);
-r = await tryQuery("authenticated", user, fn, ["ChIJgoogle2", "Far away", 48.85, 2.35, inHours(2)]);
-check("place outside Thailand rejected", /venue_unavailable/.test(r.error ?? ""));
-r = await tryQuery("authenticated", user, fn, ["ChIJchiangmai", "Chiang Mai cafe", 18.79, 98.98, inHours(2)]);
-check("place in Thailand but outside Bangkok rejected", /venue_unavailable/.test(r.error ?? ""));
-r = await tryQuery("authenticated", user, fn, ["", "No id", 13.7, 100.5, inHours(2)]);
-check("place without id rejected", /venue_unavailable/.test(r.error ?? ""));
-await tryQuery("authenticated", admin, `update public.venues set google_place_id = 'ChIJskybar' where id = $1`, [venueId]);
-r = await tryQuery("authenticated", user, fn, ["ChIJskybar", "Sky Bar (Google name)", 13.75, 100.49, inHours(4)]);
+check("people can join a place table", !r.error);
+r = await tryQuery("authenticated", user, fn, ["00000000-0000-0000-0000-000000000000", inHours(2)]);
+check("unknown place rejected", /venue_unavailable/.test(r.error ?? ""));
+r = await tryQuery("anon", null, `select id from public.places where osm_type = 'node' and osm_id = 311069785`);
+const zenId = r.rows?.[0]?.id;
+await tryQuery("authenticated", admin, `update public.venues set place_id = $2 where id = $1`, [venueId, zenId]);
+r = await tryQuery("authenticated", user, `select count(*)::int n from public.places_in_bounds(100.0, 13.0, 101.0, 14.5, 1000) where id = $1`, [zenId]);
+check("a place linked to a live venue isn't shown twice", r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", user, fn, [zenId, inHours(4)]);
 const linkedId = r.rows?.[0]?.id;
-r = await tryQuery("authenticated", user, `select venue_id, place_name from public.meetups where id = $1`, [linkedId]);
-check("Google place linked to a partner venue becomes a venue table", r.rows?.[0]?.venue_id === venueId && r.rows?.[0]?.place_name === null);
-r = await tryQuery("authenticated", unverified, fn, ["ChIJgoogle3", "Cafe", 13.7, 100.5, inHours(2)]);
-check("unverified user can't create at a Google place", /not_allowed/.test(r.error ?? ""));
-r = await tryQuery("authenticated", user, `insert into public.meetups (google_place_id, place_name, place_lat, place_lng, host_id, starts_at, ends_at, max_people) values ('x', 'x', 13.7, 100.5, $1, now(), now() + interval '1 hour', 3)`, [user]);
-check("direct insert of a Google-place table blocked", !!r.error);
+r = await tryQuery("authenticated", user, `select venue_id, place_id from public.meetups where id = $1`, [linkedId]);
+check("place linked to a partner venue becomes a venue table", r.rows?.[0]?.venue_id === venueId && r.rows?.[0]?.place_id === null);
+r = await tryQuery("authenticated", unverified, fn, [placeId, inHours(2)]);
+check("unverified user can't create at a place", /not_allowed/.test(r.error ?? ""));
+r = await tryQuery("authenticated", user, `insert into public.meetups (place_id, host_id, starts_at, ends_at, max_people) values ($2, $1, now(), now() + interval '1 hour', 3)`, [user, placeId]);
+check("direct insert of a place table blocked", !!r.error);
 
 await tryQuery("authenticated", admin, `update public.venues set is_active = false where id = $1`, [venueId]);
 r = await tryQuery("authenticated", user, `select public.create_meetup($1, $2, 3)`, [venueId, inHours(2)]);
 check("can't create a table at a hidden venue", /venue_unavailable/.test(r.error ?? ""));
 r = await tryQuery("authenticated", user, `select count(*)::int n from public.list_open_meetups()`);
-check("tables at hidden venues aren't listed; Google-place tables still are", r.rows?.[0]?.n === 1);
+check("tables at hidden venues aren't listed; place tables still are", r.rows?.[0]?.n === 1);
 r = await tryQuery("anon", null, `select count(*)::int n from public.meetups`);
 check("signed-out visitors can't read tables", !r.error && r.rows[0].n === 0);
 

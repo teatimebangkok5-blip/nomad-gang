@@ -36,10 +36,11 @@ const venueSchema = z.object({
   coordinates: coordinatesSchema,
   checkin_radius_m: z.coerce.number().int().min(10, "At least 10 m").max(500, "At most 500 m"),
   is_active: z.boolean(),
-  google_place_id: z
+  place_id: z
     .string()
     .trim()
-    .transform((value) => value || null),
+    .transform((value) => value || null)
+    .pipe(z.uuid().nullable()),
 });
 
 function parseVenue(formData: FormData) {
@@ -54,7 +55,7 @@ function parseVenue(formData: FormData) {
     coordinates: formData.get("coordinates") ?? "",
     checkin_radius_m: formData.get("checkin_radius_m") ?? "50",
     is_active: formData.get("is_active") === "on",
-    google_place_id: formData.get("google_place_id") ?? "",
+    place_id: formData.get("place_id") ?? "",
   });
 }
 
@@ -260,60 +261,27 @@ export async function deletePromotion(promotionId: string): Promise<FormState> {
 }
 
 // ---------------------------------------------------------------------------
-// Google place link
+// Place link (Bangkok food places from OpenStreetMap, stored in public.places)
 // ---------------------------------------------------------------------------
 
-export type GooglePlaceResult = { id: string; name: string; address: string; lat: number; lng: number };
+export type PlaceResult = {
+  id: string;
+  name: string;
+  name_en: string | null;
+  name_th: string | null;
+  kind: string;
+  lat: number;
+  lng: number;
+};
 
-// Search Google Places (New) from the server, biased to Bangkok. Needs GOOGLE_PLACES_API_KEY in web/.env.local.
-export async function searchGooglePlaces(query: string): Promise<{ results?: GooglePlaceResult[]; error?: string }> {
-  await requireAdmin();
-  const key = process.env.GOOGLE_PLACES_API_KEY;
-  if (!key) {
-    return { error: "Google search isn't set up yet (GOOGLE_PLACES_API_KEY is missing in web/.env.local)." };
+export async function searchPlaces(query: string): Promise<{ results?: PlaceResult[]; error?: string }> {
+  const supabase = await requireAdmin();
+  if (query.trim().length < 2) return { results: [] };
+  const { data, error } = await supabase.rpc("search_places", { p_query: query });
+  if (error) {
+    return { error: `Search failed: ${error.message}` };
   }
-  const text = query.trim();
-  if (text.length < 2) return { results: [] };
-
-  const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": key,
-      "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location",
-    },
-    body: JSON.stringify({
-      textQuery: text,
-      maxResultCount: 8,
-      locationBias: { circle: { center: { latitude: 13.7466, longitude: 100.5393 }, radius: 50000 } },
-    }),
-    cache: "no-store",
-  });
-  if (!response.ok) {
-    return { error: `Google search failed (${response.status}). Check the Places API key.` };
-  }
-  const data = (await response.json()) as {
-    places?: {
-      id: string;
-      displayName?: { text: string };
-      formattedAddress?: string;
-      location?: { latitude: number; longitude: number };
-    }[];
-  };
-  const results = (data.places ?? []).flatMap((place) =>
-    place.location
-      ? [
-          {
-            id: place.id,
-            name: place.displayName?.text ?? "",
-            address: place.formattedAddress ?? "",
-            lat: place.location.latitude,
-            lng: place.location.longitude,
-          },
-        ]
-      : [],
-  );
-  return { results };
+  return { results: data as PlaceResult[] };
 }
 
 // ---------------------------------------------------------------------------

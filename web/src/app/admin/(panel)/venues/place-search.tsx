@@ -2,20 +2,33 @@
 
 import { useState, useTransition } from "react";
 import { buttonClass, inputClass } from "@/components/form";
-import { searchGooglePlaces, type GooglePlaceResult } from "./actions";
+import { searchPlaces, type PlaceResult } from "./actions";
 
-// Search Google for the venue and pick it: links the venue to the Google place the app shows on its map,
-// and fills in the check-in point (and the English name/address if they're empty).
-export function GooglePlaceSearch({ onPick }: { onPick: (place: GooglePlaceResult) => void }) {
+const KIND_LABELS: Record<string, string> = {
+  restaurant: "Restaurant",
+  cafe: "Cafe",
+  bar: "Bar",
+  pub: "Pub",
+  fast_food: "Fast food",
+  food_court: "Food court",
+  ice_cream: "Ice cream",
+  bakery: "Bakery",
+  coffee: "Coffee shop",
+  tea: "Tea shop",
+};
+
+// Find the venue among Bangkok's food places (OpenStreetMap) and link it: the venue then replaces that place's dot
+// on the app's map, and its check-in point and names are filled in when empty.
+export function PlaceSearch({ onPick }: { onPick: (place: PlaceResult) => void }) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<GooglePlaceResult[] | null>(null);
+  const [results, setResults] = useState<PlaceResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [searching, startSearch] = useTransition();
 
   function search() {
     setError(null);
     startSearch(async () => {
-      const response = await searchGooglePlaces(query);
+      const response = await searchPlaces(query);
       setError(response.error ?? null);
       setResults(response.results ?? null);
     });
@@ -23,12 +36,12 @@ export function GooglePlaceSearch({ onPick }: { onPick: (place: GooglePlaceResul
 
   return (
     <div className="rounded-lg border border-ink-200 bg-ink-50 p-3">
-      <label htmlFor="google-search" className="mb-1 block text-sm font-medium text-ink-800">
-        Find on Google Maps
+      <label htmlFor="place-search" className="mb-1 block text-sm font-medium text-ink-800">
+        Find the place on the map
       </label>
       <div className="flex gap-2">
         <input
-          id="google-search"
+          id="place-search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
@@ -37,7 +50,7 @@ export function GooglePlaceSearch({ onPick }: { onPick: (place: GooglePlaceResul
               search();
             }
           }}
-          placeholder="e.g. Sky Bar Lebua"
+          placeholder="Name in English or Thai, e.g. Sky Bar"
           className={inputClass}
         />
         <button type="button" onClick={search} disabled={searching || query.trim().length < 2} className={buttonClass("secondary", "shrink-0")}>
@@ -45,7 +58,11 @@ export function GooglePlaceSearch({ onPick }: { onPick: (place: GooglePlaceResul
         </button>
       </div>
       {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
-      {results && results.length === 0 && <p className="mt-2 text-sm text-ink-600">No places found.</p>}
+      {results && results.length === 0 && (
+        <p className="mt-2 text-sm text-ink-600">
+          Not found. You can still fill in the venue below; its check-in point puts it on the map.
+        </p>
+      )}
       {results && results.length > 0 && (
         <ul className="mt-2 divide-y divide-ink-200 rounded-lg border border-ink-200 bg-white">
           {results.map((place) => (
@@ -58,14 +75,19 @@ export function GooglePlaceSearch({ onPick }: { onPick: (place: GooglePlaceResul
                 }}
                 className="block w-full px-3 py-2 text-left hover:bg-ink-50"
               >
-                <span className="block text-sm font-medium">{place.name}</span>
-                <span className="block text-xs text-ink-600">{place.address}</span>
+                <span className="block text-sm font-medium">
+                  {place.name_en ?? place.name}
+                  {place.name_th && place.name_th !== (place.name_en ?? place.name) && (
+                    <span className="text-ink-500"> · {place.name_th}</span>
+                  )}
+                </span>
+                <span className="block text-xs text-ink-600">{KIND_LABELS[place.kind] ?? place.kind}</span>
               </button>
             </li>
           ))}
         </ul>
       )}
-      {results && results.length > 0 && <p className="mt-1 text-right text-xs text-ink-500">Results from Google</p>}
+      <p className="mt-1 text-right text-xs text-ink-500">Places © OpenStreetMap contributors</p>
     </div>
   );
 }

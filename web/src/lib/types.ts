@@ -40,7 +40,7 @@ export type Venue = {
   lng: number;
   checkin_radius_m: number;
   photo_path: string | null;
-  google_place_id: string | null;
+  place_id: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

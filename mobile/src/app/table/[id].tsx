@@ -12,7 +12,15 @@ import { Radius, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { formatWhen } from '@/lib/bangkok-time';
-import { cancelMeetup, googleMapsUrl, joinMeetup, leaveMeetup, useMeetup, type MeetupErrorKey } from '@/lib/meetups';
+import {
+  cancelMeetup,
+  directionsUrl,
+  joinMeetup,
+  leaveMeetup,
+  meetupPlaceName,
+  useMeetup,
+  type MeetupErrorKey,
+} from '@/lib/meetups';
 import { venuePhotoUrl } from '@/lib/supabase';
 import { useVenues } from '@/lib/venues';
 import { makeStyles, useColors } from '@/lib/theme';
@@ -64,9 +72,9 @@ export default function TableScreen() {
   const meetup = state.meetup;
   const venue = meetup.venue_id ? venues.venues.find((v) => v.id === meetup.venue_id) : undefined;
   const mapsTarget = venue
-    ? { lat: venue.lat, lng: venue.lng, placeId: venue.google_place_id, name: venue.name_en }
+    ? { lat: venue.lat, lng: venue.lng, name: localized(venue, 'name', language) }
     : meetup.place_lat !== null && meetup.place_lng !== null
-      ? { lat: meetup.place_lat, lng: meetup.place_lng, placeId: meetup.google_place_id, name: meetup.place_name }
+      ? { lat: meetup.place_lat, lng: meetup.place_lng, name: meetupPlaceName(meetup, language) }
       : null;
   const userId = session?.user.id;
   const isHost = meetup.host_id === userId;
@@ -96,7 +104,7 @@ export default function TableScreen() {
         ) : null}
 
         <View style={styles.pad}>
-          <Text style={styles.venue}>{venue ? localized(venue, 'name', language) : (meetup.place_name ?? '—')}</Text>
+          <Text style={styles.venue}>{venue ? localized(venue, 'name', language) : meetupPlaceName(meetup, language)}</Text>
           {meetup.title ? <Text style={styles.title}>{meetup.title}</Text> : null}
 
           <View style={styles.facts}>
@@ -118,7 +126,7 @@ export default function TableScreen() {
               </View>
             ) : null}
             {mapsTarget && (
-              <Pressable accessibilityRole="link" onPress={() => Linking.openURL(googleMapsUrl(mapsTarget))} style={styles.fact}>
+              <Pressable accessibilityRole="link" onPress={() => Linking.openURL(directionsUrl(mapsTarget))} style={styles.fact}>
                 <Icon name="map" size={18} color={Colors.accent} />
                 <Text style={styles.mapsLink}>{t('tables.openInMaps')}</Text>
               </Pressable>

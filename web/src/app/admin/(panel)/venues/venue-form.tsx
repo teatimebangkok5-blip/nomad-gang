@@ -3,7 +3,7 @@
 import { useActionState, useRef, useState } from "react";
 import { Field, FormMessage, SubmitButton, inputClass } from "@/components/form";
 import { CATEGORY_LABELS, VENUE_CATEGORIES, type FormState, type Venue } from "@/lib/types";
-import { GooglePlaceSearch } from "./google-place-search";
+import { PlaceSearch } from "./place-search";
 
 type VenueFormAction = (prev: FormState, formData: FormData) => Promise<FormState>;
 
@@ -11,9 +11,9 @@ export function VenueForm({ action, venue }: { action: VenueFormAction; venue?: 
   const [state, formAction, pending] = useActionState(action, {});
   const errors = state.fieldErrors ?? {};
   const [coordinates, setCoordinates] = useState(venue ? `${venue.lat}, ${venue.lng}` : "");
-  const [googlePlaceId, setGooglePlaceId] = useState(venue?.google_place_id ?? "");
+  const [placeId, setPlaceId] = useState(venue?.place_id ?? "");
   const nameRef = useRef<HTMLInputElement>(null);
-  const addressRef = useRef<HTMLInputElement>(null);
+  const nameThRef = useRef<HTMLInputElement>(null);
   const mapsUrl = /^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(coordinates.trim())
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(coordinates.replace(/\s/g, ""))}`
     : null;
@@ -22,19 +22,19 @@ export function VenueForm({ action, venue }: { action: VenueFormAction; venue?: 
     <form action={formAction} className="space-y-6">
       <FormMessage state={state} />
 
-      <input type="hidden" name="google_place_id" value={googlePlaceId} />
-      <GooglePlaceSearch
+      <input type="hidden" name="place_id" value={placeId} />
+      <PlaceSearch
         onPick={(place) => {
-          setGooglePlaceId(place.id);
+          setPlaceId(place.id);
           setCoordinates(`${place.lat.toFixed(6)}, ${place.lng.toFixed(6)}`);
-          if (nameRef.current && !nameRef.current.value) nameRef.current.value = place.name;
-          if (addressRef.current && !addressRef.current.value) addressRef.current.value = place.address;
+          if (nameRef.current && !nameRef.current.value) nameRef.current.value = place.name_en ?? place.name;
+          if (nameThRef.current && !nameThRef.current.value) nameThRef.current.value = place.name_th ?? place.name;
         }}
       />
-      {googlePlaceId && (
+      {placeId && (
         <p className="-mt-3 text-xs text-ink-600">
-          Linked to a Google Maps place. Tables people create there in the app get this venue&apos;s promotions.{" "}
-          <button type="button" className="text-brand-700 underline" onClick={() => setGooglePlaceId("")}>
+          Linked to a place on the app&apos;s map. Tables people create there get this venue&apos;s promotions.{" "}
+          <button type="button" className="text-brand-700 underline" onClick={() => setPlaceId("")}>
             Unlink
           </button>
         </p>
@@ -45,7 +45,7 @@ export function VenueForm({ action, venue }: { action: VenueFormAction; venue?: 
           <input ref={nameRef} id="name_en" name="name_en" defaultValue={venue?.name_en} required className={inputClass} />
         </Field>
         <Field label="Name (Thai)" name="name_th" errors={errors.name_th}>
-          <input id="name_th" name="name_th" lang="th" defaultValue={venue?.name_th} required className={inputClass} />
+          <input ref={nameThRef} id="name_th" name="name_th" lang="th" defaultValue={venue?.name_th} required className={inputClass} />
         </Field>
       </div>
 
@@ -83,7 +83,7 @@ export function VenueForm({ action, venue }: { action: VenueFormAction; venue?: 
           />
         </Field>
         <Field label="Address (English)" name="address_en" errors={errors.address_en}>
-          <input ref={addressRef} id="address_en" name="address_en" defaultValue={venue?.address_en} className={inputClass} />
+          <input id="address_en" name="address_en" defaultValue={venue?.address_en} className={inputClass} />
         </Field>
         <Field label="Address (Thai)" name="address_th" errors={errors.address_th}>
           <input id="address_th" name="address_th" lang="th" defaultValue={venue?.address_th} className={inputClass} />

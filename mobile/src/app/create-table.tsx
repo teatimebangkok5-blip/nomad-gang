@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,14 +13,14 @@ import { CATEGORY_EMOJI, VenueMap } from '@/components/venue-map';
 import { Radius, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { bangkokDay, bangkokMinutes, formatClock, formatDayLabel, fromBangkok, type BangkokDay } from '@/lib/bangkok-time';
-import { checkPlace, type PlaceCheck } from '@/lib/google-places';
 import { distanceMeters, useCurrentLocation } from '@/lib/location';
-import { createMeetup, createMeetupAtPlace, type GooglePlace, type MeetupErrorKey } from '@/lib/meetups';
+import { createMeetup, createMeetupAtPlace, type MeetupErrorKey } from '@/lib/meetups';
+import { fetchPlace, placeName, usePlacesInView, type Place } from '@/lib/places';
 import { PROMOTION_EMOJI, useVenues } from '@/lib/venues';
 import { makeStyles, useColors } from '@/lib/theme';
 
-// Picked on the step-1 map: a partner venue, or a Google place being checked (Bangkok, food or drink).
-type Picked = { type: 'venue'; venueId: string } | { type: 'place'; place: GooglePlace; check: PlaceCheck | 'checking' };
+// Picked on the step-1 map: a partner venue, or any Bangkok food place (OpenStreetMap).
+type Picked = { type: 'venue'; venueId: string } | { type: 'place'; place: Place };
 
 const DAYS_AHEAD = 7; // today + 6 more days (the server allows up to 7 days ahead)
 const FIRST_SLOT = 6 * 60; // 06:00
@@ -38,8 +38,8 @@ function timeSlots(day: BangkokDay, now: Date): number[] {
   return slots;
 }
 
-// Create a table: 1) pick a partner place or any Google food place on the map, 2) day, time, size and a title.
-// Opened with ?venueId=… or ?placeId=…&name=…&lat=…&lng=… (from "Create table here"), step 1 is skipped.
+// Create a table: 1) pick a partner venue or any Bangkok food place on the map, 2) day, time, size and a title.
+// Opened with ?venueId=… or ?placeId=… (from "Create table here"), step 1 is skipped.
 export default function CreateTableScreen() {
   const styles = useStyles();
   const Colors = useColors();
@@ -49,14 +49,17 @@ export default function CreateTableScreen() {
   const location = useCurrentLocation();
   const coords = location.state.status === 'granted' ? location.state.coords : null;
 
-  const params = useLocalSearchParams<{ venueId?: string; placeId?: string; name?: string; lat?: string; lng?: string }>();
+  const params = useLocalSearchParams<{ venueId?: string; placeId?: string }>();
   const [picked, setPicked] = useState<Picked | null>(null);
   const [venueId, setVenueId] = useState<string | null>(params.venueId ?? null);
-  const [place, setPlace] = useState<GooglePlace | null>(() =>
-    params.placeId && params.name && params.lat && params.lng
-      ? { placeId: params.placeId, name: params.name, lat: Number(params.lat), lng: Number(params.lng) }
-      : null,
-  );
+  const [place, setPlace] = useState<Place | null>(null);
+  const { places: mapPlaces, onBoundsChange } = usePlacesInView();
+
+  // Opened from "Create table here" on a place: load it.
+  useEffect(() => {
+    if (!params.placeId) return;
+    fetchPlace(params.placeId).then((found) => found && setPlace(found));
+  }, [params.placeId]);
 
   const [now] = useState(() => new Date());
   const today = bangkokDay(now);
@@ -74,19 +77,11 @@ export default function CreateTableScreen() {
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
   const pickedVenue = picked?.type === 'venue' ? venues.venues.find((venue) => venue.id === picked.venueId) : undefined;
   const chosen = venueId ? venues.venues.find((venue) => venue.id === venueId) : undefined;
-  const chosenName = chosen ? localized(chosen, 'name', language) : place?.name;
+  const chosenName = chosen ? localized(chosen, 'name', language) : place ? placeName(place, language) : '';
 
-  async function handlePlacePress(tapped: GooglePlace) {
-    const linked = venues.venues.find((venue) => venue.google_place_id === tapped.placeId);
-    if (linked) {
-      setPicked({ type: 'venue', venueId: linked.id });
-      return;
-    }
-    setPicked({ type: 'place', place: tapped, check: 'checking' });
-    const check = await checkPlace(tapped);
-    setPicked((current) =>
-      current?.type === 'place' && current.place.placeId === tapped.placeId ? { ...current, check } : current,
-    );
+  function handlePlacePress(tapped: Place) {
+    const linked = venues.venues.find((venue) => venue.place_id === tapped.id);
+    setPicked(linked ? { type: 'venue', venueId: linked.id } : { type: 'place', place: tapped });
   }
 
   function choosePicked() {
@@ -106,7 +101,7 @@ export default function CreateTableScreen() {
     const common = { startsAt: fromBangkok(day, minutes), maxPeople, title: title.trim() };
     const result = chosen
       ? await createMeetup({ venueId: chosen.id, ...common })
-      : await createMeetupAtPlace({ place: place as GooglePlace, ...common });
+      : await createMeetupAtPlace({ placeId: (place as Place).id, ...common });
     setCreating(false);
     if (result.error) {
       setError(result.error);
@@ -116,7 +111,7 @@ export default function CreateTableScreen() {
   }
 
   // Step 1: choose the place.
-  if (!chosen && !place) {
+  if (!chosen && !place && !params.placeId) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <ScreenHeader />
@@ -137,31 +132,21 @@ export default function CreateTableScreen() {
                 selected: picked?.type === 'venue' && venue.id === picked.venueId,
               }))}
               onPinPress={(id) => setPicked({ type: 'venue', venueId: id })}
+              places={mapPlaces}
               onPlacePress={handlePlacePress}
+              onBoundsChange={onBoundsChange}
             />
             <Text style={styles.hint}>{t('tables.pickAnyPlace')}</Text>
             {picked && (
               <View style={styles.choose}>
                 <Text style={styles.chooseName} numberOfLines={2}>
-                  {pickedVenue ? localized(pickedVenue, 'name', language) : picked.type === 'place' ? picked.place.name : ''}
+                  {pickedVenue
+                    ? localized(pickedVenue, 'name', language)
+                    : picked.type === 'place'
+                      ? placeName(picked.place, language)
+                      : ''}
                 </Text>
-                {picked.type === 'place' && picked.check === 'checking' && (
-                  <Text style={styles.hint}>{t('tables.checkingPlace')}</Text>
-                )}
-                {picked.type === 'place' && picked.check === 'not_food' && (
-                  <Text style={styles.warning}>{t('tables.notFood')}</Text>
-                )}
-                {picked.type === 'place' && picked.check === 'outside_bangkok' && (
-                  <Text style={styles.warning}>{t('tables.outsideBangkok')}</Text>
-                )}
-                <Button
-                  title={t('tables.choosePlace')}
-                  disabled={
-                    picked.type === 'place' &&
-                    (picked.check === 'checking' || picked.check === 'not_food' || picked.check === 'outside_bangkok')
-                  }
-                  onPress={choosePicked}
-                />
+                <Button title={t('tables.choosePlace')} onPress={choosePicked} />
               </View>
             )}
             <View style={styles.list}>
@@ -337,7 +322,6 @@ const useStyles = makeStyles((Colors) => ({
   chipRow: { gap: Spacing.sm, paddingHorizontal: Spacing.lg },
   slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
   hint: { ...Type.small, color: Colors.textMuted, marginTop: Spacing.sm },
-  warning: { ...Type.body, color: Colors.danger },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: Spacing.lg },
   stepButton: {
     width: 48,

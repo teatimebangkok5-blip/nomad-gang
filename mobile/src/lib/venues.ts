@@ -41,7 +41,7 @@ export type Venue = {
   lat: number;
   lng: number;
   photo_path: string | null;
-  google_place_id: string | null;
+  place_id: string | null;
   // The active discount or offer (coupon), if any.
   deal: VenueDeal | null;
   // Every active promotion, events/parties that have not ended yet, soonest first.
@@ -52,7 +52,7 @@ type VenueRow = Omit<Venue, 'deal' | 'promotions'> & { deals: VenueDeal[] };
 
 // Row Level Security only returns live venues and their active promotions, so no filters are needed here.
 const VENUE_COLUMNS =
-  'id, name_en, name_th, category, address_en, address_th, lat, lng, photo_path, google_place_id, deals(id, kind, title_en, title_th, details_en, details_th, starts_at, ends_at)';
+  'id, name_en, name_th, category, address_en, address_th, lat, lng, photo_path, place_id, deals(id, kind, title_en, title_th, details_en, details_th, starts_at, ends_at)';
 
 type VenuesState =
   | { status: 'loading'; venues: Venue[] }

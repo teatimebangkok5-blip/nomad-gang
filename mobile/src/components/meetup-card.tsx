@@ -4,7 +4,7 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { Radius, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { bangkokDay, bangkokMinutes, formatClock, formatDayLabel } from '@/lib/bangkok-time';
-import type { OpenMeetup } from '@/lib/meetups';
+import { meetupPlaceName, type OpenMeetup } from '@/lib/meetups';
 import type { Venue } from '@/lib/venues';
 import { makeStyles, useColors } from '@/lib/theme';
 
@@ -42,7 +42,7 @@ export function MeetupCard({
 
       <View style={styles.body}>
         <Text style={styles.venue} numberOfLines={1}>
-          {venue ? localized(venue, 'name', language) : (meetup.place_name ?? '—')}
+          {venue ? localized(venue, 'name', language) : meetupPlaceName(meetup, language)}
         </Text>
         {meetup.title ? (
           <Text style={styles.title} numberOfLines={1}>

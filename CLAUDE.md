@@ -178,12 +178,7 @@ How the key rules map onto this:
     picks `name_th`/`name_en` columns. The language choice is saved on the phone; the default follows the phone language.
   - `src/components/`: `Button`, `Icon` (expo-symbols: Material names on Android, SF Symbols for iOS; add new icons
     to the map), `LanguageToggle`, `VenueCard`, `CategoryFilter`, `Logo` (white "Table", orange "M", pink "eet", as on the
-    icon). Theme in `src/constants/theme.ts` uses **semantic tokens** (`bg`, `surface`, `surfaceRaised`, `border`,
-    `text`, `textSecondary`, `textMuted`, `orange`, `coral`, `pink`, `violet`, `glow`, `onBrand`, `*Tint`). The app
-    is **dark-only** ("night out" look from the app icon: violet-black background, orange → coral → pink brand
-    gradient `BrandGradient` on the primary button via expo-linear-gradient, violet glow accents). Text on
-    orange/pink fills is always `onBrand` (dark); white on pink/orange is unreadable. Body text must be at least
-    4.5:1 contrast; don't put pink text on `pinkTint`. The admin panel shares the brand colors but stays light.
+    icon). **Two themes, Dark (default) and Light**, chosen in `src/app/settings.tsx` and saved on the phone (`src/lib/theme.tsx`: `ThemeProvider`, `useTheme`, `useColors`). Colors live in `src/constants/theme.ts` as `darkColors` / `lightColors` with the same **semantic tokens** (`bg`, `surface`, `surfaceRaised`, `border`, `overlay`, `text`, `textSecondary`, `textMuted`, `orange`/`pink` for fills, `accent` for orange text and icons, `glow` for warm text on `orangeTint`, `onBrand`, `*Tint`, `fade`). **Never import colors statically:** write `const useStyles = makeStyles((Colors) => ({ ... }))` at module level and call `const styles = useStyles()` (and `const Colors = useColors()` for inline colors) in each component. Text on orange/pink fills is always `onBrand`; orange text/icons on plain backgrounds use `accent` (darker in Light so it passes 4.5:1). `BrandGradient` (orange → coral → pink) is the same in both themes. The map uses `darkMapStyle` / `lightMapStyle`. `app.json` stays `userInterfaceStyle: "dark"` (native dialogs/keyboard); changing it needs a prebuild. The admin panel shares the brand colors but stays light.
   - Icons in `assets/images/` were generated from the founder's icon artwork: `icon.png` (full art),
     `android-icon-foreground.png` (art at 64% on transparent, for Android's adaptive mask) on a black background
     layer, and `splash-icon.png` (art with the outside corners transparent). Regenerate all three from the source

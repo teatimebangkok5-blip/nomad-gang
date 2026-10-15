@@ -121,6 +121,15 @@ const en = {
       generic: 'Something went wrong. Please try again.',
     },
   },
+  settings: {
+    title: 'Settings',
+    open: 'Settings',
+    appearance: 'Appearance',
+    dark: 'Dark',
+    light: 'Light',
+    language: 'Language',
+    account: 'Account',
+  },
   promo: {
     discount: 'Discount',
     offer: 'Offer',

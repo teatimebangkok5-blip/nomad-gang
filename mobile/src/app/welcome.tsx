@@ -1,19 +1,22 @@
 import { Image } from 'expo-image';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { Icon, type IconName } from '@/components/icon';
 import { LanguageToggle } from '@/components/language-toggle';
 import { Logo } from '@/components/logo';
-import { Colors, Radius, Spacing, Type } from '@/constants/theme';
+import { Radius, Spacing, Type } from '@/constants/theme';
 import { signInWithGoogle } from '@/lib/auth';
 import { supabaseConfigured } from '@/lib/supabase';
+import { makeStyles, useColors } from '@/lib/theme';
 
 // First screen: what TableMeet is, and sign in with Google.
 export default function WelcomeScreen() {
+  const styles = useStyles();
+  const Colors = useColors();
   const { t } = useTranslation();
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +60,7 @@ export default function WelcomeScreen() {
           {steps.map((step, index) => (
             <View key={step.icon} style={styles.step}>
               <View style={styles.stepIcon}>
-                <Icon name={step.icon} size={22} color={Colors.orange} />
+                <Icon name={step.icon} size={22} color={Colors.accent} />
               </View>
               <Text style={styles.stepNumber}>{index + 1}</Text>
               <Text style={styles.stepText}>{step.text}</Text>
@@ -82,7 +85,7 @@ export default function WelcomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((Colors) => ({
   safe: { flex: 1, backgroundColor: Colors.bg },
   scroll: { flexGrow: 1, paddingHorizontal: Spacing.xl, paddingBottom: Spacing.xl },
   topBar: {
@@ -138,4 +141,4 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
     textAlign: 'center',
   },
-});
+}));

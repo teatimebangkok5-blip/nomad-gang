@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
@@ -11,13 +11,14 @@ import { Icon } from '@/components/icon';
 import { ScreenHeader } from '@/components/screen-header';
 import { VenueCard } from '@/components/venue-card';
 import { CATEGORY_EMOJI, VenueMap } from '@/components/venue-map';
-import { Colors, Radius, Spacing, Type } from '@/constants/theme';
+import { Radius, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { bangkokDay, bangkokMinutes, formatClock, formatDayLabel, fromBangkok, type BangkokDay } from '@/lib/bangkok-time';
 import { checkPlace, type PlaceCheck } from '@/lib/google-places';
 import { distanceMeters, useCurrentLocation } from '@/lib/location';
 import { createMeetup, createMeetupAtPlace, type GooglePlace, type MeetupErrorKey } from '@/lib/meetups';
 import { PROMOTION_EMOJI, useVenues } from '@/lib/venues';
+import { makeStyles, useColors } from '@/lib/theme';
 
 // Picked on the step-1 map: a partner venue, or a Google place being checked (Bangkok, food or drink).
 type Picked = { type: 'venue'; venueId: string } | { type: 'place'; place: GooglePlace; check: PlaceCheck | 'checking' };
@@ -41,6 +42,8 @@ function timeSlots(day: BangkokDay, now: Date): number[] {
 // Create a table: 1) pick a partner place or any Google food place on the map, 2) day, time, size and a title.
 // Opened with ?venueId=… or ?placeId=…&name=…&lat=…&lng=… (from "Create table here"), step 1 is skipped.
 export default function CreateTableScreen() {
+  const styles = useStyles();
+  const Colors = useColors();
   const { t } = useTranslation();
   const language = currentLanguage();
   const venues = useVenues();
@@ -193,7 +196,7 @@ export default function CreateTableScreen() {
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <View style={styles.pad}>
             <View style={styles.placeRow}>
-              <Icon name={chosen ? chosen.category : 'store'} size={20} color={Colors.orange} />
+              <Icon name={chosen ? chosen.category : 'store'} size={20} color={Colors.accent} />
               <Text style={styles.placeName} numberOfLines={1}>
                 {chosenName}
               </Text>
@@ -297,6 +300,8 @@ function StepButton({
   disabled: boolean;
   onPress: () => void;
 }) {
+  const styles = useStyles();
+  const Colors = useColors();
   return (
     <Pressable
       accessibilityRole="button"
@@ -310,7 +315,7 @@ function StepButton({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((Colors) => ({
   safe: { flex: 1, backgroundColor: Colors.bg },
   flex: { flex: 1 },
   content: { paddingBottom: Spacing.xxl * 2 },
@@ -331,7 +336,7 @@ const styles = StyleSheet.create({
   list: { gap: Spacing.md, marginTop: Spacing.lg },
   placeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: Spacing.sm },
   placeName: { ...Type.title, color: Colors.text, flex: 1 },
-  link: { ...Type.label, color: Colors.orange },
+  link: { ...Type.label, color: Colors.accent },
   deal: { ...Type.body, color: Colors.glow, marginTop: Spacing.xs },
   heading: { ...Type.heading, color: Colors.text, marginTop: Spacing.xl },
   label: { ...Type.label, color: Colors.textSecondary, marginTop: Spacing.lg, marginBottom: Spacing.sm },
@@ -372,4 +377,4 @@ const styles = StyleSheet.create({
     marginTop: Spacing.lg,
   },
   submit: { marginTop: Spacing.xl },
-});
+}));

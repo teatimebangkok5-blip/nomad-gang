@@ -1,12 +1,15 @@
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { Icon } from '@/components/icon';
-import { Colors, Radius, Spacing, Type } from '@/constants/theme';
+import { Radius, Spacing, Type } from '@/constants/theme';
+import { makeStyles, useColors } from '@/lib/theme';
 
 // Back button + title for screens opened from home.
 export function ScreenHeader({ title }: { title?: string }) {
+  const styles = useStyles();
+  const Colors = useColors();
   const { t } = useTranslation();
 
   return (
@@ -28,7 +31,7 @@ export function ScreenHeader({ title }: { title?: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((Colors) => ({
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -40,4 +43,4 @@ const styles = StyleSheet.create({
   back: { width: 44, height: 44, borderRadius: Radius.pill, alignItems: 'center', justifyContent: 'center' },
   pressed: { backgroundColor: Colors.pressed },
   title: { ...Type.heading, color: Colors.text, flex: 1 },
-});
+}));

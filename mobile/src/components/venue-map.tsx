@@ -5,11 +5,12 @@ import { StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 
 import { Icon } from '@/components/icon';
-import { darkMapStyle } from '@/constants/map-style';
-import { Colors, Radius, Spacing, Type } from '@/constants/theme';
+import { darkMapStyle, lightMapStyle } from '@/constants/map-style';
+import { Radius, Spacing, Type } from '@/constants/theme';
 import type { Coords } from '@/lib/location';
 import type { GooglePlace } from '@/lib/meetups';
 import type { VenueCategory } from '@/lib/venues';
+import { makeStyles, useColors, useTheme } from '@/lib/theme';
 
 export type MapPin = {
   key: string;
@@ -59,6 +60,9 @@ export function VenueMap({
   // Space covered by floating UI, so Google's logo, the my-location button and centering stay visible.
   mapPadding?: { top: number; right: number; bottom: number; left: number };
 }) {
+  const styles = useStyles();
+  const Colors = useColors();
+  const { name: themeName } = useTheme();
   const { t } = useTranslation();
   const mapRef = useRef<MapView>(null);
   const centeredOnUser = useRef(false);
@@ -94,7 +98,7 @@ export function VenueMap({
         ref={mapRef}
         provider={PROVIDER_GOOGLE}
         style={StyleSheet.absoluteFill}
-        customMapStyle={darkMapStyle}
+        customMapStyle={themeName === 'light' ? lightMapStyle : darkMapStyle}
         initialRegion={{ latitude: start.lat, longitude: start.lng, latitudeDelta: DELTA, longitudeDelta: DELTA }}
         showsUserLocation={Boolean(userCoords)}
         showsMyLocationButton={Boolean(userCoords)}
@@ -116,6 +120,7 @@ export function VenueMap({
 }
 
 function PinMarker({ pin, onPress }: { pin: MapPin; onPress: (key: string) => void }) {
+  const styles = useStyles();
   // Android draws custom markers as a snapshot; keep tracking briefly so the first render is captured, then stop
   // (tracking forever costs performance).
   const [tracks, setTracks] = useState(true);
@@ -147,7 +152,7 @@ function PinMarker({ pin, onPress }: { pin: MapPin; onPress: (key: string) => vo
 
 const PIN = 40;
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((Colors) => ({
   frame: {
     borderRadius: Radius.lg,
     overflow: 'hidden',
@@ -195,4 +200,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   badgeText: { fontSize: 11, lineHeight: 13, fontWeight: '800', color: Colors.onBrand },
-});
+}));

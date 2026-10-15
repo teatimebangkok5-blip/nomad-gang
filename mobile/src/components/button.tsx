@@ -2,7 +2,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { BrandGradient, Colors, Radius, Spacing, Type } from '@/constants/theme';
+import { BrandGradient, Radius, Spacing, Type } from '@/constants/theme';
+import { makeStyles, useColors } from '@/lib/theme';
 
 type Variant = 'primary' | 'secondary' | 'text';
 
@@ -21,8 +22,10 @@ export function Button({
   disabled?: boolean;
   icon?: ReactNode;
 }) {
+  const styles = useStyles();
+  const Colors = useColors();
   const inactive = disabled || loading;
-  const textColor = variant === 'primary' ? Colors.onBrand : variant === 'secondary' ? Colors.text : Colors.orange;
+  const textColor = variant === 'primary' ? Colors.onBrand : variant === 'secondary' ? Colors.text : Colors.accent;
 
   return (
     <Pressable
@@ -58,7 +61,7 @@ export function Button({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((Colors) => ({
   base: {
     minHeight: 52,
     borderRadius: Radius.md,
@@ -75,4 +78,4 @@ const styles = StyleSheet.create({
   content: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   label: { ...Type.heading, fontWeight: '700' },
   labelDisabled: { color: Colors.textMuted },
-});
+}));

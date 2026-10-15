@@ -1,20 +1,23 @@
 import type { AuthError } from '@supabase/supabase-js';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { LanguageToggle } from '@/components/language-toggle';
-import { Colors, Radius, Spacing, Type } from '@/constants/theme';
+import { Radius, Spacing, Type } from '@/constants/theme';
 import { signOut } from '@/lib/auth';
 import { formatPhone, toE164 } from '@/lib/phone';
 import { supabase } from '@/lib/supabase';
+import { makeStyles, useColors } from '@/lib/theme';
 
 const RESEND_SECONDS = 60;
 
 // Second step after Google sign-in: add a phone number to the account and confirm it with an SMS code.
 export default function VerifyPhoneScreen() {
+  const styles = useStyles();
+  const Colors = useColors();
   const { t } = useTranslation();
   const [phoneInput, setPhoneInput] = useState('');
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -159,7 +162,7 @@ export default function VerifyPhoneScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((Colors) => ({
   safe: { flex: 1, backgroundColor: Colors.bg },
   flex: { flex: 1 },
   scroll: { flexGrow: 1, paddingHorizontal: Spacing.xl, paddingBottom: Spacing.xl },
@@ -196,4 +199,4 @@ const styles = StyleSheet.create({
   codeInput: { fontSize: 24, letterSpacing: 8, textAlign: 'center' },
   hint: { ...Type.small, color: Colors.textMuted, marginTop: -Spacing.xs },
   row: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap' },
-});
+}));

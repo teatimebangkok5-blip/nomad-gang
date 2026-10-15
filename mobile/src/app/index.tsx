@@ -27,9 +27,9 @@ import { Logo } from '@/components/logo';
 import { MeetupCard } from '@/components/meetup-card';
 import { VenueCard } from '@/components/venue-card';
 import { VenueMap, type MapPin } from '@/components/venue-map';
-import { Colors, Radius, Spacing, Type } from '@/constants/theme';
+import { Radius, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
-import { signOut, useAuth } from '@/lib/auth';
+import { useAuth } from '@/lib/auth';
 import { PromoFilter } from '@/components/promo-filter';
 import { CATEGORY_EMOJI } from '@/components/venue-map';
 import { formatWhen } from '@/lib/bangkok-time';
@@ -38,6 +38,7 @@ import { distanceMeters, useCurrentLocation } from '@/lib/location';
 import { googleMapsUrl, joinMeetup, useOpenMeetups, type GooglePlace, type OpenMeetup } from '@/lib/meetups';
 import { skipLogin } from '@/lib/preview';
 import { PROMOTION_EMOJI, useVenues, type PromotionKind, type Venue } from '@/lib/venues';
+import { makeStyles, useColors } from '@/lib/theme';
 
 // What the bottom card shows: a partner venue, or any Google place someone tapped (checked for food/Bangkok).
 type Selection =
@@ -47,6 +48,8 @@ type Selection =
 // Home: a full-screen map of open tables. Logo and category chips float on top; a swipeable row of table cards,
 // "Create table" and a "List" button float at the bottom. "List" slides up a panel with all tables and places.
 export default function HomeScreen() {
+  const styles = useStyles();
+  const Colors = useColors();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -163,13 +166,6 @@ export default function HomeScreen() {
     }
   }
 
-  function confirmSignOut() {
-    Alert.alert(t('home.signOutConfirm'), undefined, [
-      { text: t('common.cancel'), style: 'cancel' },
-      { text: t('home.signOut'), style: 'destructive', onPress: () => signOut() },
-    ]);
-  }
-
   async function handleJoin(id: string) {
     setJoiningId(id);
     const { error } = await joinMeetup(id);
@@ -204,7 +200,7 @@ export default function HomeScreen() {
       {/* Top: logo, language, chips. A fade keeps it readable over the map. */}
       <View style={styles.top} pointerEvents="box-none" onLayout={(e) => setTopHeight(e.nativeEvent.layout.height)}>
         <LinearGradient
-          colors={['rgba(10, 6, 18, 0.95)', 'rgba(10, 6, 18, 0.75)', 'rgba(10, 6, 18, 0)']}
+          colors={Colors.fade}
           locations={[0, 0.7, 1]}
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
@@ -213,16 +209,14 @@ export default function HomeScreen() {
           <Logo size={20} />
           <View style={styles.topActions}>
             <LanguageToggle />
-            {!skipLogin && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('home.signOut')}
-                hitSlop={8}
-                onPress={confirmSignOut}
-                style={({ pressed }) => [styles.roundButton, pressed && styles.roundButtonPressed]}>
-                <Icon name="logout" size={20} color={Colors.textSecondary} />
-              </Pressable>
-            )}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('settings.open')}
+              hitSlop={8}
+              onPress={() => router.push('/settings')}
+              style={({ pressed }) => [styles.roundButton, pressed && styles.roundButtonPressed]}>
+              <Icon name="settings" size={20} color={Colors.textSecondary} />
+            </Pressable>
           </View>
         </View>
 
@@ -253,7 +247,7 @@ export default function HomeScreen() {
             accessibilityRole="button"
             onPress={location.request}
             style={({ pressed }) => [styles.locationPill, pressed && styles.roundButtonPressed]}>
-            <Icon name="locationOff" size={16} color={Colors.orange} />
+            <Icon name="locationOff" size={16} color={Colors.accent} />
             <Text style={styles.locationPillText}>
               {location.state.canAskAgain ? t('home.locationOffTitle') : t('home.locationOpenSettings')}
             </Text>
@@ -276,7 +270,7 @@ export default function HomeScreen() {
             onClose={() => setSelection(null)}
           />
         ) : !session ? null : meetups.status === 'loading' ? (
-          <ActivityIndicator color={Colors.orange} style={styles.cardsSpinner} />
+          <ActivityIndicator color={Colors.accent} style={styles.cardsSpinner} />
         ) : visibleMeetups.length === 0 ? (
           <View style={[styles.emptyCard, { marginHorizontal: Spacing.lg }]}>
             <Text style={styles.emptyTitle}>
@@ -370,6 +364,8 @@ function PlaceCard({
   onCreate: () => void;
   onClose: () => void;
 }) {
+  const styles = useStyles();
+  const Colors = useColors();
   const { t } = useTranslation();
   const language = currentLanguage();
   const name = venue ? localized(venue, 'name', language) : selection.type === 'place' ? selection.place.name : '';
@@ -475,6 +471,8 @@ function ListPanel({
   onRetryVenues: () => void;
   onRefresh: () => Promise<void>;
 }) {
+  const styles = useStyles();
+  const Colors = useColors();
   const { t } = useTranslation();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -496,7 +494,7 @@ function ListPanel({
       }>
       <Text style={styles.sectionTitle}>{t('tables.openTables')}</Text>
       {meetupsStatus === 'loading' ? (
-        <ActivityIndicator color={Colors.orange} style={styles.cardsSpinner} />
+        <ActivityIndicator color={Colors.accent} style={styles.cardsSpinner} />
       ) : meetups.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>{meetupsStatus === 'error' ? t('tables.errorLoad') : t('tables.noTablesTitle')}</Text>
@@ -513,7 +511,7 @@ function ListPanel({
       <Text style={[styles.sectionTitle, styles.sectionSpacing]}>{t('tables.partnerPlaces')}</Text>
       {places.length === 0 ? (
         venuesStatus === 'loading' ? (
-          <ActivityIndicator color={Colors.orange} style={styles.cardsSpinner} />
+          <ActivityIndicator color={Colors.accent} style={styles.cardsSpinner} />
         ) : (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>{venuesStatus === 'error' ? t('home.errorTitle') : t('home.emptyTitle')}</Text>
@@ -536,7 +534,7 @@ function ListPanel({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((Colors) => ({
   root: { flex: 1, backgroundColor: Colors.bg },
   top: { position: 'absolute', top: 0, left: 0, right: 0, paddingBottom: Spacing.xl },
   topBar: {
@@ -575,7 +573,7 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     gap: Spacing.md,
     borderRadius: Radius.lg,
-    backgroundColor: 'rgba(22, 13, 36, 0.97)',
+    backgroundColor: Colors.overlay,
     borderWidth: 1,
     borderColor: Colors.border,
   },
@@ -678,7 +676,7 @@ const styles = StyleSheet.create({
   emptyCard: {
     padding: Spacing.lg,
     borderRadius: Radius.lg,
-    backgroundColor: 'rgba(22, 13, 36, 0.94)',
+    backgroundColor: Colors.overlay,
     borderWidth: 1,
     borderColor: Colors.border,
     gap: Spacing.xs,
@@ -686,4 +684,4 @@ const styles = StyleSheet.create({
   emptyTitle: { ...Type.heading, color: Colors.text },
   emptyBody: { ...Type.body, color: Colors.textSecondary },
   retry: { marginTop: Spacing.md },
-});
+}));

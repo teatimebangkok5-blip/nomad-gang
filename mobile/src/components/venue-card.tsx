@@ -1,12 +1,13 @@
 import { Image } from 'expo-image';
 import { useTranslation } from 'react-i18next';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { Icon } from '@/components/icon';
-import { Colors, Radius, Spacing, Type } from '@/constants/theme';
+import { Radius, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { venuePhotoUrl } from '@/lib/supabase';
 import type { Venue } from '@/lib/venues';
+import { makeStyles, useColors } from '@/lib/theme';
 
 export function VenueCard({
   venue,
@@ -20,6 +21,8 @@ export function VenueCard({
   onPress?: () => void;
   selected?: boolean;
 }) {
+  const styles = useStyles();
+  const Colors = useColors();
   const { t } = useTranslation();
   const language = currentLanguage();
   const name = localized(venue, 'name', language);
@@ -43,7 +46,7 @@ export function VenueCard({
           />
         ) : (
           <View style={[styles.photo, styles.photoPlaceholder]}>
-            <Icon name={venue.category} size={40} color={Colors.orange} />
+            <Icon name={venue.category} size={40} color={Colors.accent} />
           </View>
         )}
         <View style={styles.categoryChip}>
@@ -67,7 +70,7 @@ export function VenueCard({
 
         {venue.deal && (
           <View style={styles.deal}>
-            <Icon name="deal" size={18} color={Colors.orange} />
+            <Icon name="deal" size={18} color={Colors.accent} />
             <Text style={styles.dealText} numberOfLines={2}>
               {localized(venue.deal, 'title', language)}
             </Text>
@@ -89,7 +92,7 @@ function formatDistance(meters: number, t: ReturnType<typeof useTranslation>['t'
   return t('home.distanceKm', { km: (meters / 1000).toFixed(meters < 10000 ? 1 : 0) });
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((Colors) => ({
   card: {
     backgroundColor: Colors.surface,
     borderRadius: Radius.lg,
@@ -112,7 +115,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.sm + 2,
     paddingVertical: Spacing.xs,
     borderRadius: Radius.pill,
-    backgroundColor: 'rgba(10, 6, 18, 0.78)',
+    backgroundColor: Colors.overlay,
   },
   categoryText: { ...Type.label, color: Colors.text },
   body: { padding: Spacing.lg, gap: Spacing.xs },
@@ -142,4 +145,4 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.pink,
   },
   groupText: { fontSize: 12, lineHeight: 16, fontWeight: '700', color: Colors.onBrand },
-});
+}));

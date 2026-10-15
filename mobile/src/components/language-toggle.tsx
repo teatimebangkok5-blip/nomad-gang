@@ -1,11 +1,13 @@
 import { useTranslation } from 'react-i18next';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, Text } from 'react-native';
 
-import { Colors, Radius, Spacing, Type } from '@/constants/theme';
+import { Radius, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, setLanguage } from '@/i18n';
+import { makeStyles } from '@/lib/theme';
 
 // Shows the *other* language ("ไทย" while in English, "EN" while in Thai) and switches to it.
 export function LanguageToggle() {
+  const styles = useStyles();
   const { t } = useTranslation();
 
   return (
@@ -20,7 +22,7 @@ export function LanguageToggle() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((Colors) => ({
   toggle: {
     minWidth: 48,
     minHeight: 36,
@@ -34,4 +36,4 @@ const styles = StyleSheet.create({
   },
   pressed: { backgroundColor: Colors.surfaceRaised },
   label: { ...Type.label, color: Colors.text },
-});
+}));

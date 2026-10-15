@@ -123,6 +123,15 @@ const th: Translation = {
       generic: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง',
     },
   },
+  settings: {
+    title: 'ตั้งค่า',
+    open: 'ตั้งค่า',
+    appearance: 'การแสดงผล',
+    dark: 'มืด',
+    light: 'สว่าง',
+    language: 'ภาษา',
+    account: 'บัญชี',
+  },
   promo: {
     discount: 'ส่วนลด',
     offer: 'ข้อเสนอ',

@@ -1,11 +1,12 @@
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
-import { Colors, Radius, Spacing, Type } from '@/constants/theme';
+import { Radius, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { bangkokDay, bangkokMinutes, formatClock, formatDayLabel } from '@/lib/bangkok-time';
 import type { OpenMeetup } from '@/lib/meetups';
 import type { Venue } from '@/lib/venues';
+import { makeStyles, useColors } from '@/lib/theme';
 
 export function MeetupCard({
   meetup,
@@ -20,6 +21,8 @@ export function MeetupCard({
   onJoin: () => void;
   joining: boolean;
 }) {
+  const styles = useStyles();
+  const Colors = useColors();
   const { t } = useTranslation();
   const language = currentLanguage();
   const start = new Date(meetup.starts_at);
@@ -77,7 +80,7 @@ export function MeetupCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((Colors) => ({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -102,7 +105,7 @@ const styles = StyleSheet.create({
   venue: { ...Type.heading, color: Colors.text },
   title: { ...Type.small, color: Colors.textSecondary },
   people: { ...Type.small, color: Colors.textMuted },
-  deal: { ...Type.small, color: Colors.orange, fontWeight: '600' },
+  deal: { ...Type.small, color: Colors.accent, fontWeight: '600' },
   action: {
     minWidth: 72,
     minHeight: 40,
@@ -117,4 +120,4 @@ const styles = StyleSheet.create({
   joinedText: { ...Type.label, color: Colors.text },
   full: { backgroundColor: Colors.surfaceRaised },
   fullText: { ...Type.label, color: Colors.textMuted },
-});
+}));

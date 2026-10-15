@@ -28,6 +28,11 @@ const ICONS = {
   list: { android: 'list', ios: 'list.bullet' },
   map: { android: 'map', ios: 'map' },
   add: { android: 'add', ios: 'plus' },
+  settings: { android: 'settings', ios: 'gearshape.fill' },
+  darkMode: { android: 'dark_mode', ios: 'moon.fill' },
+  lightMode: { android: 'light_mode', ios: 'sun.max.fill' },
+  language: { android: 'language', ios: 'globe' },
+  check: { android: 'check', ios: 'checkmark' },
 } satisfies Record<string, { android: AndroidName; ios: IosName }>;
 
 export type IconName = keyof typeof ICONS;

@@ -1,8 +1,9 @@
 import { useTranslation } from 'react-i18next';
-import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { Pressable, ScrollView, Text } from 'react-native';
 
-import { Colors, Radius, Spacing, Type } from '@/constants/theme';
+import { Radius, Spacing, Type } from '@/constants/theme';
 import { PROMOTION_EMOJI, PROMOTION_KINDS, type PromotionKind } from '@/lib/venues';
+import { makeStyles } from '@/lib/theme';
 
 // Floating "what's on" buttons: Discount, Offer, Event, Party. Tap to filter, tap again to clear.
 export function PromoFilter({
@@ -12,6 +13,7 @@ export function PromoFilter({
   value: PromotionKind | null;
   onChange: (value: PromotionKind | null) => void;
 }) {
+  const styles = useStyles();
   const { t } = useTranslation();
 
   return (
@@ -34,7 +36,7 @@ export function PromoFilter({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((Colors) => ({
   row: { gap: Spacing.sm, paddingHorizontal: Spacing.lg },
   button: {
     flexDirection: 'row',
@@ -45,11 +47,11 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
     borderWidth: 1,
     borderColor: Colors.violet,
-    backgroundColor: 'rgba(22, 13, 36, 0.92)',
+    backgroundColor: Colors.overlay,
   },
   selected: { backgroundColor: Colors.pink, borderColor: Colors.pink },
   pressed: { backgroundColor: Colors.surfaceRaised },
   emoji: { fontSize: 16 },
   label: { ...Type.label, color: Colors.text },
   labelSelected: { color: Colors.onBrand, fontWeight: '800' },
-});
+}));

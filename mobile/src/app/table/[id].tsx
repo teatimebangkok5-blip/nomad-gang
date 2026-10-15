@@ -2,22 +2,25 @@ import { Image } from 'expo-image';
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { ScreenHeader } from '@/components/screen-header';
-import { Colors, Radius, Spacing, Type } from '@/constants/theme';
+import { Radius, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { formatWhen } from '@/lib/bangkok-time';
 import { cancelMeetup, googleMapsUrl, joinMeetup, leaveMeetup, useMeetup, type MeetupErrorKey } from '@/lib/meetups';
 import { venuePhotoUrl } from '@/lib/supabase';
 import { useVenues } from '@/lib/venues';
+import { makeStyles, useColors } from '@/lib/theme';
 
 // One table: where and when, who's coming, and join / leave / cancel.
 export default function TableScreen() {
+  const styles = useStyles();
+  const Colors = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t } = useTranslation();
   const language = currentLanguage();
@@ -40,7 +43,7 @@ export default function TableScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <ScreenHeader />
-        <ActivityIndicator color={Colors.orange} size="large" style={styles.spinner} />
+        <ActivityIndicator color={Colors.accent} size="large" style={styles.spinner} />
       </SafeAreaView>
     );
   }
@@ -98,11 +101,11 @@ export default function TableScreen() {
 
           <View style={styles.facts}>
             <View style={styles.fact}>
-              <Icon name="time" size={18} color={Colors.orange} />
+              <Icon name="time" size={18} color={Colors.accent} />
               <Text style={styles.factText}>{formatWhen(meetup.starts_at, t)}</Text>
             </View>
             <View style={styles.fact}>
-              <Icon name="group" size={18} color={Colors.orange} />
+              <Icon name="group" size={18} color={Colors.accent} />
               <Text style={styles.factText}>
                 {t('tables.peopleCount', { count: meetup.members.length, max: meetup.max_people })}
                 {!cancelled && !ended && seatsLeft > 0 ? ` · ${t('tables.seatsLeft', { count: seatsLeft })}` : ''}
@@ -110,13 +113,13 @@ export default function TableScreen() {
             </View>
             {venue?.address_en || venue?.address_th ? (
               <View style={styles.fact}>
-                <Icon name="location" size={18} color={Colors.orange} />
+                <Icon name="location" size={18} color={Colors.accent} />
                 <Text style={styles.factText}>{localized(venue, 'address', language)}</Text>
               </View>
             ) : null}
             {mapsTarget && (
               <Pressable accessibilityRole="link" onPress={() => Linking.openURL(googleMapsUrl(mapsTarget))} style={styles.fact}>
-                <Icon name="map" size={18} color={Colors.orange} />
+                <Icon name="map" size={18} color={Colors.accent} />
                 <Text style={styles.mapsLink}>{t('tables.openInMaps')}</Text>
               </Pressable>
             )}
@@ -124,7 +127,7 @@ export default function TableScreen() {
 
           {venue?.deal && (
             <View style={styles.deal}>
-              <Icon name="deal" size={18} color={Colors.orange} />
+              <Icon name="deal" size={18} color={Colors.accent} />
               <View style={styles.dealBody}>
                 <Text style={styles.dealTitle}>{localized(venue.deal, 'title', language)}</Text>
                 <Text style={styles.dealNote}>{t('tables.discountNote')}</Text>
@@ -190,7 +193,7 @@ export default function TableScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((Colors) => ({
   safe: { flex: 1, backgroundColor: Colors.bg },
   content: { paddingBottom: Spacing.xxl * 2 },
   spinner: { marginTop: Spacing.xxl * 2 },
@@ -203,7 +206,7 @@ const styles = StyleSheet.create({
   facts: { marginTop: Spacing.lg, gap: Spacing.sm },
   fact: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   factText: { ...Type.body, color: Colors.text, flex: 1 },
-  mapsLink: { ...Type.body, color: Colors.orange, fontWeight: '600' },
+  mapsLink: { ...Type.body, color: Colors.accent, fontWeight: '600' },
   deal: {
     flexDirection: 'row',
     gap: Spacing.md,
@@ -263,4 +266,4 @@ const styles = StyleSheet.create({
     marginTop: Spacing.lg,
   },
   actions: { marginTop: Spacing.xl },
-});
+}));

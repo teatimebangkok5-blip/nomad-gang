@@ -1,9 +1,10 @@
 import { useTranslation } from 'react-i18next';
-import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { Pressable, ScrollView, Text } from 'react-native';
 
 import { Icon } from '@/components/icon';
-import { Colors, Radius, Spacing, Type } from '@/constants/theme';
+import { Radius, Spacing, Type } from '@/constants/theme';
 import { VENUE_CATEGORIES, type VenueCategory } from '@/lib/venues';
+import { makeStyles, useColors } from '@/lib/theme';
 
 export type CategoryFilterValue = VenueCategory | 'all';
 
@@ -14,6 +15,8 @@ export function CategoryFilter({
   value: CategoryFilterValue;
   onChange: (value: CategoryFilterValue) => void;
 }) {
+  const styles = useStyles();
+  const Colors = useColors();
   const { t } = useTranslation();
   const options: CategoryFilterValue[] = ['all', ...VENUE_CATEGORIES];
 
@@ -37,7 +40,7 @@ export function CategoryFilter({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((Colors) => ({
   row: { gap: Spacing.sm, paddingHorizontal: Spacing.lg },
   chip: {
     flexDirection: 'row',
@@ -53,4 +56,4 @@ const styles = StyleSheet.create({
   chipSelected: { backgroundColor: Colors.orange, borderColor: Colors.orange },
   label: { ...Type.label, color: Colors.textSecondary },
   labelSelected: { color: Colors.onBrand },
-});
+}));

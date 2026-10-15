@@ -23,3 +23,11 @@ export const darkMapStyle: MapStyleElement[] = [
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0B1630' }] },
   { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4A5A80' }] },
 ];
+
+// Light theme: Google's standard look, with the same rule as the dark style (only businesses and parks).
+export const lightMapStyle: MapStyleElement[] = [
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'poi.business', stylers: [{ visibility: 'on' }] },
+  { featureType: 'poi.park', stylers: [{ visibility: 'on' }] },
+  { featureType: 'poi.park', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+];

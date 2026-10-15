@@ -20,7 +20,6 @@ import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
-import { CategoryFilter, type CategoryFilterValue } from '@/components/category-filter';
 import { Icon } from '@/components/icon';
 import { LanguageToggle } from '@/components/language-toggle';
 import { Logo } from '@/components/logo';
@@ -45,7 +44,7 @@ type Selection =
   | { type: 'venue'; venueId: string }
   | { type: 'place'; place: GooglePlace; check: PlaceCheck | 'checking' };
 
-// Home: a full-screen map of open tables. Logo and category chips float on top; a swipeable row of table cards,
+// Home: a full-screen map of open tables. Logo and the Discount/Offer/Event/Party buttons float on top; a swipeable row of table cards,
 // "Create table" and a "List" button float at the bottom. "List" slides up a panel with all tables and places.
 export default function HomeScreen() {
   const styles = useStyles();
@@ -57,7 +56,6 @@ export default function HomeScreen() {
   const venues = useVenues();
   const meetups = useOpenMeetups(Boolean(session));
   const location = useCurrentLocation();
-  const [category, setCategory] = useState<CategoryFilterValue>('all');
   const [promo, setPromo] = useState<PromotionKind | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [joiningId, setJoiningId] = useState<string | null>(null);
@@ -77,12 +75,11 @@ export default function HomeScreen() {
 
   const coords = location.state.status === 'granted' ? location.state.coords : null;
   const venueById = new Map(venues.venues.map((venue) => [venue.id, venue]));
-  const filtersOn = category !== 'all' || promo !== null;
+  const filtersOn = promo !== null;
   const venueMatches = (venue: Venue | undefined) =>
     Boolean(venue) &&
-    (category === 'all' || venue?.category === category) &&
     (promo === null || Boolean(venue?.promotions.some((p) => p.kind === promo)));
-  // Tables at Google places have no category or promotions, so they only show when no filter is on.
+  // Tables at Google places have no promotions, so they only show when no filter is on.
   const meetupMatches = (meetup: OpenMeetup) =>
     meetup.venue_id ? venueMatches(venueById.get(meetup.venue_id)) : !filtersOn;
 
@@ -230,13 +227,6 @@ export default function HomeScreen() {
             value={promo}
             onChange={(value) => {
               setPromo(value);
-              setSelection(null);
-            }}
-          />
-          <CategoryFilter
-            value={category}
-            onChange={(value) => {
-              setCategory(value);
               setSelection(null);
             }}
           />

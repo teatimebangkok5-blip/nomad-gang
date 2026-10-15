@@ -6,12 +6,12 @@ This file guides Claude Code when working in this repository.
 Product spec and tech stack below are agreed. Built so far:
 - **Done:** database for venues, deals, coupon codes, venue staff logins and the admin role (`supabase/`), the
   admin panel for managing them (`web/`), and the Android app's welcome/Google sign-in, phone verification, home
-  (**full-screen Google map** of open tables; logo, language and category chips float on top over a dark fade; a
+  (**full-screen Google map** of open tables; logo, language, settings and the Discount/Offer/Event/Party buttons float on top over a fade; a
   swipeable row of table cards, "Create table" and a "List" button float at the bottom; "List" slides up a panel
   with open tables + partner places; tapping a pin filters the cards to that venue), the Create table flow and the
   table screen (join / leave / cancel) (`mobile/`). `VenueMap` takes `fullScreen` + `mapPadding` (measured overlay
   heights) so Google's logo and centering stay clear of the floating UI.
-  Home also has floating **Discount / Offer / Event / Party** buttons above the place-type chips; tapping a Google
+  There is no place-type (cafe/restaurant/rooftop/bar) filter any more (removed 2026-10-16 at the founder's request); tapping a Google
   place or a pin opens a place card (promotions, tables there, "Create table here", Open in Google Maps).
   Admin: per-venue **Promotions** editor and **Find on Google Maps** (server action `searchGooglePlaces`, needs
   `GOOGLE_PLACES_API_KEY` in `web/.env.local`).
@@ -177,7 +177,7 @@ How the key rules map onto this:
   - `src/i18n/`: i18next with `en.ts` (source, typed keys) and `th.ts` (must match). `localized(row, 'name', lang)`
     picks `name_th`/`name_en` columns. The language choice is saved on the phone; the default follows the phone language.
   - `src/components/`: `Button`, `Icon` (expo-symbols: Material names on Android, SF Symbols for iOS; add new icons
-    to the map), `LanguageToggle`, `VenueCard`, `CategoryFilter`, `Logo` (white "Table", orange "M", pink "eet", as on the
+    to the map), `LanguageToggle`, `VenueCard`, `PromoFilter`, `Logo` (white "Table", orange "M", pink "eet", as on the
     icon). **Two themes, Dark (default) and Light**, chosen in `src/app/settings.tsx` and saved on the phone (`src/lib/theme.tsx`: `ThemeProvider`, `useTheme`, `useColors`). Colors live in `src/constants/theme.ts` as `darkColors` / `lightColors` with the same **semantic tokens** (`bg`, `surface`, `surfaceRaised`, `border`, `overlay`, `text`, `textSecondary`, `textMuted`, `orange`/`pink` for fills, `accent` for orange text and icons, `glow` for warm text on `orangeTint`, `onBrand`, `*Tint`, `fade`). **Never import colors statically:** write `const useStyles = makeStyles((Colors) => ({ ... }))` at module level and call `const styles = useStyles()` (and `const Colors = useColors()` for inline colors) in each component. Text on orange/pink fills is always `onBrand`; orange text/icons on plain backgrounds use `accent` (darker in Light so it passes 4.5:1). `BrandGradient` (orange → coral → pink) is the same in both themes. The map uses `darkMapStyle` / `lightMapStyle`. `app.json` stays `userInterfaceStyle: "dark"` (native dialogs/keyboard); changing it needs a prebuild. The admin panel shares the brand colors but stays light.
   - Icons in `assets/images/` were generated from the founder's icon artwork: `icon.png` (full art),
     `android-icon-foreground.png` (art at 64% on transparent, for Android's adaptive mask) on a black background

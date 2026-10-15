@@ -5,7 +5,6 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput,
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
-import { CategoryFilter, type CategoryFilterValue } from '@/components/category-filter';
 import { Chip } from '@/components/chip';
 import { Icon } from '@/components/icon';
 import { ScreenHeader } from '@/components/screen-header';
@@ -51,7 +50,6 @@ export default function CreateTableScreen() {
   const coords = location.state.status === 'granted' ? location.state.coords : null;
 
   const params = useLocalSearchParams<{ venueId?: string; placeId?: string; name?: string; lat?: string; lng?: string }>();
-  const [category, setCategory] = useState<CategoryFilterValue>('all');
   const [picked, setPicked] = useState<Picked | null>(null);
   const [venueId, setVenueId] = useState<string | null>(params.venueId ?? null);
   const [place, setPlace] = useState<GooglePlace | null>(() =>
@@ -72,7 +70,6 @@ export default function CreateTableScreen() {
   const [error, setError] = useState<MeetupErrorKey | null>(null);
 
   const places = venues.venues
-    .filter((venue) => category === 'all' || venue.category === category)
     .map((venue) => ({ venue, distance: coords ? distanceMeters(coords, venue) : null }))
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
   const pickedVenue = picked?.type === 'venue' ? venues.venues.find((venue) => venue.id === picked.venueId) : undefined;
@@ -128,10 +125,7 @@ export default function CreateTableScreen() {
             <Text style={styles.title}>{t('tables.chooseTitle')}</Text>
             <Text style={styles.subtitle}>{t('tables.chooseBody')}</Text>
           </View>
-          <View style={styles.filter}>
-            <CategoryFilter value={category} onChange={setCategory} />
-          </View>
-          <View style={styles.pad}>
+          <View style={[styles.pad, styles.mapSection]}>
             <VenueMap
               height={340}
               userCoords={coords}
@@ -322,7 +316,7 @@ const useStyles = makeStyles((Colors) => ({
   pad: { paddingHorizontal: Spacing.lg },
   title: { ...Type.title, color: Colors.text },
   subtitle: { ...Type.body, color: Colors.textSecondary, marginTop: Spacing.xs },
-  filter: { marginVertical: Spacing.lg },
+  mapSection: { marginTop: Spacing.lg },
   choose: {
     marginTop: Spacing.md,
     padding: Spacing.md,

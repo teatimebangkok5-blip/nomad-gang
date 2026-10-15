@@ -87,6 +87,12 @@ live from your PC.
    signing key). **API restrictions → Maps SDK for Android.** Save.
 3. Add it to `mobile/.env.local` as `GOOGLE_MAPS_API_KEY=...` (no `EXPO_PUBLIC_` prefix) and rebuild the app.
    Without a key the app shows "Map not set up yet" where the map goes.
+4. **Places API (New)** — the app uses it to check that a tapped place is food/drink. Enable **Places API (New)**
+   in the Library, then edit the same key → **API restrictions** → also tick **Places API (New)**. Until then every
+   place is allowed.
+5. **Admin "Find on Google Maps"** needs a second key for the server: **Create credentials → API key**, **API
+   restrictions → Places API (New)** only (no application restriction). Put it in `web/.env.local` as
+   `GOOGLE_PLACES_API_KEY=...` and restart the admin panel.
 
 ### 4. Guest testing before sign-in is ready
 

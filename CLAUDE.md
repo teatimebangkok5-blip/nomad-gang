@@ -11,8 +11,13 @@ Product spec and tech stack below are agreed. Built so far:
   with open tables + partner places; tapping a pin filters the cards to that venue), the Create table flow and the
   table screen (join / leave / cancel) (`mobile/`). `VenueMap` takes `fullScreen` + `mapPadding` (measured overlay
   heights) so Google's logo and centering stay clear of the floating UI.
+  Home also has floating **Discount / Offer / Event / Party** buttons above the place-type chips; tapping a Google
+  place or a pin opens a place card (promotions, tables there, "Create table here", Open in Google Maps).
+  Admin: per-venue **Promotions** editor and **Find on Google Maps** (server action `searchGooglePlaces`, needs
+  `GOOGLE_PLACES_API_KEY` in `web/.env.local`).
 - **Not started:** check-ins (50 m), QR codes and redemptions, staff QR page, redemption feed and push
-  notifications, Instagram on profiles, tables/users in the admin panel.
+  notifications, Instagram on profiles, tables/users in the admin panel. Hiding non-food businesses on the map
+  needs a Google Cloud **Map ID** with POI filtering (JSON map styles can't tell food from shops).
 - Running on the founder's Redmi as a local release APK, connected to the real Supabase project
   (`zxghiilryqzexzvacbrl`, migrations applied by Supabase's GitHub integration on push to `main`).
 - Google sign-in and phone verification are **not configured yet** (no Google OAuth clients, providers off in
@@ -54,8 +59,16 @@ meet up at a table. It is inspired by NomadTable but is **not a copy**. Don't co
 - The founder makes deals in person with venue owners, who give **exclusive coupon codes / discounts for TableMeet users**.
 - Each partner venue has its own discount, set by the owner (e.g. % off or a fixed deal). Treat the discount as per-venue
   data, not a single global value.
-- **Only partner venues are listed.** The founder adds and manages the venue list in the admin panel; there is no
-  third-party places data (no Google Places / Foursquare). Every venue in the app has a deal.
+- **Google's places are on the map** (changed 2026-10-16, founder's decision). The map shows Google's own businesses
+  and people can create a table at **any food or drink place in Bangkok** (restaurant, cafe, bar, noodle/food shop,
+  bakery, …). The app checks a tapped place's Google types (`src/lib/google-places.ts`, Places API (New) with the
+  Android-restricted key) and the Bangkok box; the server re-checks the Bangkok box (`create_meetup_at_place`).
+  Google's terms forbid copying its place database, so we **never import Google places**: we keep only place IDs,
+  plus a table's place name/position for that table.
+- **Partner venues** are the places the founder adds in the admin panel (linked to a Google place via
+  `google_place_id`, found with "Find on Google Maps"). They carry **promotions** of four kinds: **discount** and
+  **offer** use the coupon (3+ check-ins, max one active per venue); **event** and **party** are dated listings
+  (any number, no coupon). Tables at a Google place that's linked to a live partner venue become venue tables.
 - **Rule: at least 3 people must be checked in at the venue to unlock a coupon.** Joining the meetup in the app is not
   enough. Groups of 1–2 can still meet but get no discount. Enforce this on the server/backend, not only in the UI.
 

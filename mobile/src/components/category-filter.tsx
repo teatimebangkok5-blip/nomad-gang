@@ -28,7 +28,7 @@ export function CategoryFilter({
             accessibilityState={{ selected }}
             onPress={() => onChange(option)}
             style={[styles.chip, selected && styles.chipSelected]}>
-            {option !== 'all' && <Icon name={option} size={16} color={selected ? Colors.white : Colors.ink600} />}
+            {option !== 'all' && <Icon name={option} size={16} color={selected ? Colors.onBrand : Colors.textSecondary} />}
             <Text style={[styles.label, selected && styles.labelSelected]}>{t(`category.${option}`)}</Text>
           </Pressable>
         );
@@ -47,10 +47,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     borderRadius: Radius.pill,
     borderWidth: 1,
-    borderColor: Colors.ink300,
-    backgroundColor: Colors.white,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
   },
-  chipSelected: { backgroundColor: Colors.ink900, borderColor: Colors.ink900 },
-  label: { ...Type.label, color: Colors.ink700 },
-  labelSelected: { color: Colors.white },
+  chipSelected: { backgroundColor: Colors.orange, borderColor: Colors.orange },
+  label: { ...Type.label, color: Colors.textSecondary },
+  labelSelected: { color: Colors.onBrand },
 });

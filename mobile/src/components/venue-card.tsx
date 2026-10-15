@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useTranslation } from 'react-i18next';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from '@/components/icon';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
@@ -8,14 +8,30 @@ import { currentLanguage, localized } from '@/i18n';
 import { venuePhotoUrl } from '@/lib/supabase';
 import type { Venue } from '@/lib/venues';
 
-export function VenueCard({ venue, distance }: { venue: Venue; distance: number | null }) {
+export function VenueCard({
+  venue,
+  distance,
+  onPress,
+  selected = false,
+}: {
+  venue: Venue;
+  distance: number | null;
+  // Makes the card tappable (used to pick a place when creating a table).
+  onPress?: () => void;
+  selected?: boolean;
+}) {
   const { t } = useTranslation();
   const language = currentLanguage();
   const name = localized(venue, 'name', language);
   const address = localized(venue, 'address', language);
 
   return (
-    <View style={styles.card}>
+    <Pressable
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityState={onPress ? { selected } : undefined}
+      disabled={!onPress}
+      onPress={onPress}
+      style={({ pressed }) => [styles.card, selected && styles.cardSelected, pressed && styles.pressed]}>
       <View style={styles.photoWrap}>
         {venue.photo_path ? (
           <Image
@@ -27,11 +43,11 @@ export function VenueCard({ venue, distance }: { venue: Venue; distance: number 
           />
         ) : (
           <View style={[styles.photo, styles.photoPlaceholder]}>
-            <Icon name={venue.category} size={40} color={Colors.brand300} />
+            <Icon name={venue.category} size={40} color={Colors.orange} />
           </View>
         )}
         <View style={styles.categoryChip}>
-          <Icon name={venue.category} size={14} color={Colors.ink700} />
+          <Icon name={venue.category} size={14} color={Colors.text} />
           <Text style={styles.categoryText}>{t(`category.${venue.category}`)}</Text>
         </View>
       </View>
@@ -51,18 +67,18 @@ export function VenueCard({ venue, distance }: { venue: Venue; distance: number 
 
         {venue.deal && (
           <View style={styles.deal}>
-            <Icon name="deal" size={18} color={Colors.brand600} />
+            <Icon name="deal" size={18} color={Colors.orange} />
             <Text style={styles.dealText} numberOfLines={2}>
               {localized(venue.deal, 'title', language)}
             </Text>
             <View style={styles.groupBadge}>
-              <Icon name="group" size={14} color={Colors.brand700} />
+              <Icon name="group" size={14} color={Colors.onBrand} />
               <Text style={styles.groupText}>{t('home.groupRule')}</Text>
             </View>
           </View>
         )}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -75,15 +91,17 @@ function formatDistance(meters: number, t: ReturnType<typeof useTranslation>['t'
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.surface,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.ink200,
+    borderColor: Colors.border,
     overflow: 'hidden',
   },
+  cardSelected: { borderColor: Colors.pink, borderWidth: 2 },
+  pressed: { opacity: 0.8 },
   photoWrap: { position: 'relative' },
-  photo: { width: '100%', aspectRatio: 16 / 9, backgroundColor: Colors.ink100 },
-  photoPlaceholder: { alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.brand50 },
+  photo: { width: '100%', aspectRatio: 16 / 9, backgroundColor: Colors.surfaceRaised },
+  photoPlaceholder: { alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.orangeTint },
   categoryChip: {
     position: 'absolute',
     top: Spacing.md,
@@ -94,14 +112,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.sm + 2,
     paddingVertical: Spacing.xs,
     borderRadius: Radius.pill,
-    backgroundColor: 'rgba(255,255,255,0.94)',
+    backgroundColor: 'rgba(10, 6, 18, 0.78)',
   },
-  categoryText: { ...Type.label, color: Colors.ink700 },
+  categoryText: { ...Type.label, color: Colors.text },
   body: { padding: Spacing.lg, gap: Spacing.xs },
   titleRow: { flexDirection: 'row', alignItems: 'baseline', gap: Spacing.sm },
-  name: { ...Type.heading, color: Colors.ink900, flex: 1 },
-  distance: { ...Type.small, color: Colors.ink500 },
-  address: { ...Type.small, color: Colors.ink600 },
+  name: { ...Type.heading, color: Colors.text, flex: 1 },
+  distance: { ...Type.small, color: Colors.textMuted },
+  address: { ...Type.small, color: Colors.textSecondary },
   deal: {
     marginTop: Spacing.sm,
     flexDirection: 'row',
@@ -109,9 +127,11 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     padding: Spacing.md,
     borderRadius: Radius.md,
-    backgroundColor: Colors.brand50,
+    backgroundColor: Colors.orangeTint,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 154, 27, 0.35)',
   },
-  dealText: { ...Type.label, color: Colors.brand700, flex: 1 },
+  dealText: { ...Type.label, color: Colors.glow, flex: 1 },
   groupBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -119,7 +139,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.sm,
     paddingVertical: 2,
     borderRadius: Radius.pill,
-    backgroundColor: Colors.brand100,
+    backgroundColor: Colors.pink,
   },
-  groupText: { fontSize: 12, lineHeight: 16, fontWeight: '600', color: Colors.brand700 },
+  groupText: { fontSize: 12, lineHeight: 16, fontWeight: '700', color: Colors.onBrand },
 });

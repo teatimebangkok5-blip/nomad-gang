@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -6,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '@/components/button';
 import { Icon, type IconName } from '@/components/icon';
 import { LanguageToggle } from '@/components/language-toggle';
+import { Logo } from '@/components/logo';
 import { Colors, Radius, Spacing, Type } from '@/constants/theme';
 import { signInWithGoogle } from '@/lib/auth';
 import { supabaseConfigured } from '@/lib/supabase';
@@ -36,13 +38,17 @@ export default function WelcomeScreen() {
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.topBar}>
-          <Text style={styles.logo}>
-            Table<Text style={styles.logoAccent}>Meet</Text>
-          </Text>
+          <Logo />
           <LanguageToggle />
         </View>
 
         <View style={styles.hero}>
+          <Image
+            source={require('@/assets/images/icon.png')}
+            style={styles.heroIcon}
+            contentFit="cover"
+            accessibilityIgnoresInvertColors
+          />
           <Text style={styles.title}>{t('welcome.title')}</Text>
           <Text style={styles.subtitle}>{t('welcome.subtitle')}</Text>
         </View>
@@ -51,7 +57,7 @@ export default function WelcomeScreen() {
           {steps.map((step, index) => (
             <View key={step.icon} style={styles.step}>
               <View style={styles.stepIcon}>
-                <Icon name={step.icon} size={22} color={Colors.brand600} />
+                <Icon name={step.icon} size={22} color={Colors.orange} />
               </View>
               <Text style={styles.stepNumber}>{index + 1}</Text>
               <Text style={styles.stepText}>{step.text}</Text>
@@ -77,7 +83,7 @@ export default function WelcomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.brand50 },
+  safe: { flex: 1, backgroundColor: Colors.bg },
   scroll: { flexGrow: 1, paddingHorizontal: Spacing.xl, paddingBottom: Spacing.xl },
   topBar: {
     flexDirection: 'row',
@@ -85,11 +91,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingTop: Spacing.lg,
   },
-  logo: { fontSize: 22, fontWeight: '800', color: Colors.ink900, letterSpacing: -0.3 },
-  logoAccent: { color: Colors.brand600 },
-  hero: { marginTop: Spacing.xxl * 1.5, gap: Spacing.md },
-  title: { ...Type.display, color: Colors.ink900 },
-  subtitle: { ...Type.body, fontSize: 16, lineHeight: 24, color: Colors.ink600 },
+  hero: { marginTop: Spacing.xxl, gap: Spacing.md },
+  heroIcon: { width: 96, height: 96, borderRadius: 24, marginBottom: Spacing.sm },
+  title: { ...Type.display, color: Colors.text },
+  subtitle: { ...Type.body, fontSize: 16, lineHeight: 24, color: Colors.textSecondary },
   steps: { marginTop: Spacing.xxl, gap: Spacing.md },
   step: {
     flexDirection: 'row',
@@ -97,18 +102,20 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     padding: Spacing.lg,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   stepIcon: {
     width: 44,
     height: 44,
     borderRadius: Radius.md,
-    backgroundColor: Colors.brand100,
+    backgroundColor: Colors.orangeTint,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepNumber: { ...Type.label, color: Colors.ink400 },
-  stepText: { ...Type.body, color: Colors.ink900, flex: 1 },
+  stepNumber: { ...Type.label, color: Colors.textMuted },
+  stepText: { ...Type.body, color: Colors.text, flex: 1 },
   footer: {
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.md,
@@ -122,11 +129,11 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     borderRadius: Radius.sm,
   },
-  note: { ...Type.small, color: Colors.ink500, textAlign: 'center' },
+  note: { ...Type.small, color: Colors.textMuted, textAlign: 'center' },
   previewNotice: {
     ...Type.small,
-    color: Colors.ink700,
-    backgroundColor: Colors.ink100,
+    color: Colors.textSecondary,
+    backgroundColor: Colors.surfaceRaised,
     padding: Spacing.md,
     borderRadius: Radius.sm,
     textAlign: 'center',

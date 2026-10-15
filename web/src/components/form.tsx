@@ -54,7 +54,7 @@ export function FormMessage({ state }: { state: FormState }) {
 }
 
 const buttonVariants = {
-  primary: "bg-brand-600 text-white hover:bg-brand-700 disabled:bg-brand-300",
+  primary: "bg-brand-500 text-ink-900 hover:bg-brand-600 disabled:bg-brand-100 disabled:text-ink-500",
   secondary: "border border-ink-300 bg-white text-ink-800 hover:bg-ink-50 disabled:text-ink-400",
   danger: "border border-red-300 bg-white text-red-700 hover:bg-red-50 disabled:text-red-300",
 };

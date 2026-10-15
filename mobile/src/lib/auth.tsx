@@ -7,6 +7,7 @@ import {
 import type { Session } from '@supabase/supabase-js';
 import { createContext, use, useEffect, useState, type ReactNode } from 'react';
 
+import { skipLogin } from '@/lib/preview';
 import { supabase } from '@/lib/supabase';
 
 GoogleSignin.configure({
@@ -23,13 +24,28 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+// The saved session, or, in the temporary preview build (skipLogin), a guest account so tables can be created and
+// joined before Google sign-in is set up. The guest session is saved on the phone like any other.
+async function restoreSession(): Promise<Session | null> {
+  const { data } = await supabase.auth.getSession();
+  if (data.session || !skipLogin) return data.session;
+
+  const { data: guest, error } = await supabase.auth.signInAnonymously();
+  if (error) {
+    // Usually "Anonymous sign-ins are disabled" in Supabase → Authentication settings.
+    console.warn('Guest sign-in failed', error.message);
+    return null;
+  }
+  return guest.session;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
+    restoreSession().then((restored) => {
+      setSession(restored);
       setReady(true);
     });
     // Fires on sign in, sign out, token refresh and when the phone number is verified.

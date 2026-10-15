@@ -7,19 +7,21 @@ import { useEffect } from 'react';
 
 import { Colors } from '@/constants/theme';
 import { AuthProvider, useAuth } from '@/lib/auth';
+import { skipLogin } from '@/lib/preview';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <StatusBar style="dark" />
+      <StatusBar style="light" />
       <RootNavigator />
     </AuthProvider>
   );
 }
 
 // Signed out -> welcome. Signed in without a verified phone -> verify-phone. Otherwise -> home.
+// With the temporary skipLogin switch, always -> home.
 function RootNavigator() {
   const { ready, session, phoneVerified } = useAuth();
 
@@ -30,15 +32,17 @@ function RootNavigator() {
   if (!ready) return null;
 
   return (
-    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.ink50 } }}>
-      <Stack.Protected guard={!session}>
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.bg } }}>
+      <Stack.Protected guard={!skipLogin && !session}>
         <Stack.Screen name="welcome" />
       </Stack.Protected>
-      <Stack.Protected guard={!!session && !phoneVerified}>
+      <Stack.Protected guard={!skipLogin && !!session && !phoneVerified}>
         <Stack.Screen name="verify-phone" />
       </Stack.Protected>
-      <Stack.Protected guard={!!session && phoneVerified}>
+      <Stack.Protected guard={skipLogin || (!!session && phoneVerified)}>
         <Stack.Screen name="index" />
+        <Stack.Screen name="create-table" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="table/[id]" />
       </Stack.Protected>
     </Stack>
   );

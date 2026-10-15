@@ -104,7 +104,9 @@ export default function VerifyPhoneScreen() {
                 value={phoneInput}
                 onChangeText={setPhoneInput}
                 placeholder={t('phone.phonePlaceholder')}
-                placeholderTextColor={Colors.ink400}
+                placeholderTextColor={Colors.textMuted}
+                selectionColor={Colors.orange}
+                keyboardAppearance="dark"
                 keyboardType="phone-pad"
                 autoComplete="tel"
                 textContentType="telephoneNumber"
@@ -126,6 +128,8 @@ export default function VerifyPhoneScreen() {
                 autoComplete="sms-otp"
                 textContentType="oneTimeCode"
                 maxLength={6}
+                selectionColor={Colors.orange}
+                keyboardAppearance="dark"
                 autoFocus
                 style={[styles.input, styles.codeInput]}
               />
@@ -156,7 +160,7 @@ export default function VerifyPhoneScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.ink50 },
+  safe: { flex: 1, backgroundColor: Colors.bg },
   flex: { flex: 1 },
   scroll: { flexGrow: 1, paddingHorizontal: Spacing.xl, paddingBottom: Spacing.xl },
   topBar: {
@@ -167,8 +171,8 @@ const styles = StyleSheet.create({
     marginHorizontal: -Spacing.md,
     paddingRight: Spacing.md,
   },
-  title: { ...Type.title, color: Colors.ink900, marginTop: Spacing.xxl },
-  subtitle: { ...Type.body, color: Colors.ink600, marginTop: Spacing.sm },
+  title: { ...Type.title, color: Colors.text, marginTop: Spacing.xxl },
+  subtitle: { ...Type.body, color: Colors.textSecondary, marginTop: Spacing.sm },
   error: {
     ...Type.small,
     color: Colors.danger,
@@ -178,18 +182,18 @@ const styles = StyleSheet.create({
     marginTop: Spacing.lg,
   },
   form: { marginTop: Spacing.xl, gap: Spacing.md },
-  label: { ...Type.label, color: Colors.ink700, marginBottom: -Spacing.xs },
+  label: { ...Type.label, color: Colors.textSecondary, marginBottom: -Spacing.xs },
   input: {
     minHeight: 52,
     borderWidth: 1,
-    borderColor: Colors.ink300,
+    borderColor: Colors.borderStrong,
     borderRadius: Radius.md,
-    backgroundColor: Colors.white,
+    backgroundColor: Colors.surface,
     paddingHorizontal: Spacing.lg,
     fontSize: 18,
-    color: Colors.ink900,
+    color: Colors.text,
   },
   codeInput: { fontSize: 24, letterSpacing: 8, textAlign: 'center' },
-  hint: { ...Type.small, color: Colors.ink500, marginTop: -Spacing.xs },
+  hint: { ...Type.small, color: Colors.textMuted, marginTop: -Spacing.xs },
   row: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap' },
 });

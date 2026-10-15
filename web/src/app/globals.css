@@ -4,27 +4,30 @@
   --font-sans: var(--font-geist-sans), var(--font-noto-thai), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
-  /* Brand: warm terracotta, like a lit table at dinner. */
-  --color-brand-50: #fdf4ef;
-  --color-brand-100: #fbe4d6;
-  --color-brand-200: #f6c4a8;
-  --color-brand-300: #ef9c72;
-  --color-brand-500: #e0612f;
-  --color-brand-600: #c94d1f;
-  --color-brand-700: #a73c1a;
-  --color-brand-800: #85321b;
+  /* Brand colors from the app icon (same as mobile/src/constants/theme.ts): orange -> pink, violet-black.
+     The admin panel stays light for daytime work; text on orange is dark. */
+  --color-brand-50: #fff5ea;
+  --color-brand-100: #ffe6c8;
+  --color-brand-200: #ffcb8c;
+  --color-brand-300: #ffb257;
+  --color-brand-500: #ff9a1b;
+  --color-brand-600: #f07d00;
+  --color-brand-700: #a84e00;
+  --color-brand-800: #7a3900;
 
-  /* Neutrals */
-  --color-ink-50: #fafaf9;
-  --color-ink-100: #f4f3f1;
-  --color-ink-200: #e7e5e2;
-  --color-ink-300: #d6d3cf;
-  --color-ink-400: #a8a29c;
-  --color-ink-500: #78726c;
-  --color-ink-600: #57524d;
-  --color-ink-700: #44403c;
-  --color-ink-800: #292524;
-  --color-ink-900: #1c1917;
+  --color-pink-500: #ff1f78;
+
+  /* Violet-tinted neutrals ending in the icon's night-sky black */
+  --color-ink-50: #f8f6fb;
+  --color-ink-100: #f0ecf6;
+  --color-ink-200: #e2dcec;
+  --color-ink-300: #cbc2da;
+  --color-ink-400: #9a8fb0;
+  --color-ink-500: #6f6488;
+  --color-ink-600: #574d6e;
+  --color-ink-700: #423a57;
+  --color-ink-800: #2a2340;
+  --color-ink-900: #0a0612;
 }
 
 body {

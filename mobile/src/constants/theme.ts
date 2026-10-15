@@ -1,28 +1,41 @@
-// Same palette as the admin panel (web/src/app/globals.css): warm terracotta brand on stone neutrals.
+// Dark "night out" theme taken from the app icon: a violet-black night sky, the orange → coral → pink of the
+// location pin and the "Meet" lettering, and a violet glow. The admin panel uses the same brand colors
+// (web/src/app/globals.css).
+// Text on orange/pink fills is dark (`onBrand`); white on pink or orange is too low-contrast to read.
 export const Colors = {
-  brand50: '#FDF4EF',
-  brand100: '#FBE4D6',
-  brand200: '#F6C4A8',
-  brand300: '#EF9C72',
-  brand500: '#E0612F',
-  brand600: '#C94D1F',
-  brand700: '#A73C1A',
+  // Surfaces
+  bg: '#0A0612',
+  surface: '#160D24',
+  surfaceRaised: '#211633',
+  border: '#2F2247',
+  borderStrong: '#4A3870',
 
-  ink50: '#FAFAF9',
-  ink100: '#F4F3F1',
-  ink200: '#E7E5E2',
-  ink300: '#D6D3CF',
-  ink400: '#A8A29C',
-  ink500: '#78726C',
-  ink600: '#57524D',
-  ink700: '#44403C',
-  ink900: '#1C1917',
+  // Text
+  text: '#FFFFFF',
+  textSecondary: '#CBC0DE',
+  textMuted: '#968AAE',
+
+  // Brand
+  orange: '#FF9A1B',
+  coral: '#FE593B',
+  pink: '#FF1F78',
+  violet: '#7B4DFF',
+  glow: '#F6C98F',
+  onBrand: '#0A0612',
+
+  // Soft tints on the dark background
+  orangeTint: 'rgba(255, 154, 27, 0.14)',
+  pinkTint: 'rgba(255, 31, 120, 0.16)',
+  violetTint: 'rgba(123, 77, 255, 0.18)',
+  pressed: 'rgba(255, 255, 255, 0.08)',
 
   white: '#FFFFFF',
-  danger: '#B42318',
-  dangerBg: '#FEF3F2',
-  success: '#067647',
+  danger: '#FF6B7A',
+  dangerBg: 'rgba(255, 77, 94, 0.14)',
 } as const;
+
+// The pin / "Meet" gradient, left to right. Used for the main button.
+export const BrandGradient = [Colors.orange, Colors.coral, Colors.pink] as const;
 
 export const Spacing = {
   xs: 4,

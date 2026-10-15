@@ -11,7 +11,8 @@ export default function PanelLayout({ children }: { children: ReactNode }) {
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3">
           <div className="flex items-center gap-6">
             <Link href="/admin/venues" className="text-base font-semibold text-ink-900">
-              Table<span className="text-brand-600">Meet</span>
+              Table<span className="text-brand-600">M</span>
+              <span className="text-pink-500">eet</span>
               <span className="ml-2 text-xs font-medium text-ink-500">Admin</span>
             </Link>
             <nav className="flex gap-4 text-sm">

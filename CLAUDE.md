@@ -9,8 +9,12 @@ Product spec and tech stack below are agreed. Built so far:
   home screen of nearby venues (`mobile/`).
 - **Not started:** venue detail screen, meetups, check-ins, QR codes and redemptions, staff QR page, redemption feed
   and push notifications, app user profiles (Instagram handle), app user management in the admin panel.
-- **Never run on a real device or a real Supabase project yet.** Everything is checked by typecheck, lint, builds
-  and the PGlite database tests only.
+- Running on the founder's Redmi as a local release APK, connected to the real Supabase project
+  (`zxghiilryqzexzvacbrl`, migrations applied by Supabase's GitHub integration on push to `main`).
+- Google sign-in and phone verification are **not configured yet** (no Google OAuth clients, providers off in
+  Supabase). Until they are, `mobile/.env.local` has the **temporary** `EXPO_PUBLIC_SKIP_LOGIN=true`
+  (`src/lib/preview.ts`): the app opens straight to home as an anonymous visitor and shows a "Preview mode" notice.
+  **Set it to false or remove it before any build for real users or Google Play.**
 
 Setup steps (Supabase, Google, SMS, Android development build) are in `README.md`.
 
@@ -141,8 +145,17 @@ How the key rules map onto this:
   - `src/i18n/`: i18next with `en.ts` (source, typed keys) and `th.ts` (must match). `localized(row, 'name', lang)`
     picks `name_th`/`name_en` columns. The language choice is saved on the phone; the default follows the phone language.
   - `src/components/`: `Button`, `Icon` (expo-symbols: Material names on Android, SF Symbols for iOS; add new icons
-    to the map), `LanguageToggle`, `VenueCard`, `CategoryFilter`. Colors etc. in `src/constants/theme.ts` match the
-    admin panel.
+    to the map), `LanguageToggle`, `VenueCard`, `CategoryFilter`, `Logo` (white "Table", orange "M", pink "eet", as on the
+    icon). Theme in `src/constants/theme.ts` uses **semantic tokens** (`bg`, `surface`, `surfaceRaised`, `border`,
+    `text`, `textSecondary`, `textMuted`, `orange`, `coral`, `pink`, `violet`, `glow`, `onBrand`, `*Tint`). The app
+    is **dark-only** ("night out" look from the app icon: violet-black background, orange → coral → pink brand
+    gradient `BrandGradient` on the primary button via expo-linear-gradient, violet glow accents). Text on
+    orange/pink fills is always `onBrand` (dark); white on pink/orange is unreadable. Body text must be at least
+    4.5:1 contrast; don't put pink text on `pinkTint`. The admin panel shares the brand colors but stays light.
+  - Icons in `assets/images/` were generated from the founder's icon artwork: `icon.png` (full art),
+    `android-icon-foreground.png` (art at 64% on transparent, for Android's adaptive mask) on a black background
+    layer, and `splash-icon.png` (art with the outside corners transparent). Regenerate all three from the source
+    art if the icon changes, then `npx expo prebuild --clean`.
   - `src/lib/supabase.ts`: client with expo-sqlite `localStorage` session storage. Env vars are `EXPO_PUBLIC_*`
     (see `mobile/.env.example`) and are baked into the app, so never put secrets there.
   - The Google Sign-In config plugin is deliberately **not** in `app.json`: without Firebase it only configures iOS
@@ -191,8 +204,13 @@ cd mobile && npx expo start                                          # dev serve
 cd mobile && npx expo install <package>                              # always use this, not npm install, for app deps
 ```
 Node is at `C:\Program Files\nodejs`. If `node` isn't found in Bash, run `export PATH="$PATH:/c/Program Files/nodejs"`
-first. Android Studio is installed: `ANDROID_HOME` = `%LOCALAPPDATA%\Android\Sdk`, `JAVA_HOME` = Android Studio's
-`jbr`, and the emulator `Medium_Phone_API_37.0` exists. `cd mobile && npx expo run:android` builds the development
+first. Android Studio is installed: `ANDROID_HOME` = `%LOCALAPPDATA%\Android\Sdk`, and the emulator
+`Medium_Phone_API_37.0` exists. `JAVA_HOME` = `C:\Program Files\Zulu\zulu-17` (JDK 17). Don't use Android Studio's
+bundled JBR (Java 25) for Gradle: its "restricted method" warning makes the native CMake/prefab steps
+(`react-native-worklets`, `react-native-screens`) fail. A local release APK:
+`cd mobile/android && gradlew.bat assembleRelease -PreactNativeArchitectures=arm64-v8a` (signed with the debug key,
+output in `app/build/outputs/apk/release/`). The founder's test phone is a Redmi (Android 15, arm64), connected over
+USB debugging; "Install via USB" must be on in its Developer options. `cd mobile && npx expo run:android` builds the development
 build locally and installs it on the running emulator (or a USB-connected phone). EAS cloud builds also work.
 
 ## Working in this repo

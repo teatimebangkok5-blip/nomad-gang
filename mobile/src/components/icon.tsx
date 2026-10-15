@@ -20,6 +20,11 @@ const ICONS = {
   logout: { android: 'logout', ios: 'rectangle.portrait.and.arrow.right' },
   error: { android: 'error', ios: 'exclamationmark.triangle.fill' },
   store: { android: 'storefront', ios: 'storefront.fill' },
+  back: { android: 'arrow_back', ios: 'chevron.left' },
+  plus: { android: 'add', ios: 'plus' },
+  minus: { android: 'remove', ios: 'minus' },
+  time: { android: 'schedule', ios: 'clock' },
+  person: { android: 'person', ios: 'person.fill' },
 } satisfies Record<string, { android: AndroidName; ios: IosName }>;
 
 export type IconName = keyof typeof ICONS;

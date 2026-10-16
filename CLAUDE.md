@@ -87,6 +87,24 @@ Product spec and tech stack below are agreed. Built so far:
   search bar, round header buttons, place cards, settings groups, member / traveller rows and profile boxes. New
   boxes should follow the same pattern (container with borderRadius + `overflow: 'hidden'` + Raised, `<GlossyFill />`
   as first child).
+- **Day planner / itinerary** (added 2026-10-16, `*_day_planner.sql`, `*_seed_place_details.sql`, `*_seed_transit.sql`):
+  "Plan my day" pill under the home search bar → `src/app/plan-day.tsx`: start (my location, 9 well-known areas or a
+  search result), day (14 days), from/until (≤ 12 h), interests (temples, sights, markets, malls, museums, parks,
+  family & fun), lunch/dinner and an evening bar, free-only, and getting around: any 1–3 of Walk / Taxi / BTS-MRT
+  (`day_plans.travel_modes`; `travel()` picks per trip: < 900 m or ≤ 20 min walks if walking is picked, else the train
+  unless much slower than a taxi). The plan is **rule-based, no
+  AI or paid services**: `buildPlan()` / `retime()` in `src/lib/planner.ts` (pure functions) pick from
+  `plan_candidates` (hangout places of those kinds near the start, best-known first by `places.prominence`) plus
+  partner hangout venues, meals from partner food venues within 800 m else `plan_food_near`. Train legs use
+  `transit_stations` / `transit_lines` (BTS Sukhumvit/Silom/Gold, MRT Blue/Purple/Yellow/Pink, ARL, SRT Dark Red;
+  184 stations; station names English; Silom's order is hand-written because OSM's route lists 3 stops), one change
+  max, else taxi. Places got Wikidata descriptions, a Wikimedia Commons photo + credit (credit must stay visible),
+  OSM opening hours and a prominence score (2,094 places). Results: map with numbered route + timeline
+  (`PlanView`, `PlanTimeline`, `MakeHangoutBox` in `src/components/`); remove stops, Shuffle, Share as text, Save
+  (`day_plans`, owner only) and **Make it a day hangout** (`create_plan_hangout(plan, people)`: a hangout at the first
+  stop for the plan's hours, stops listed in the description; once per plan). Saved plans: "My plans" on the
+  planner → `src/app/plan/[id].tsx` (share, make hangout / open it, delete). A day hangout links to its plan from
+  `table/[id].tsx`; a plan that became a hangout is readable by everyone signed in. Data: `src/lib/plans.ts`.
 - **Login without SMS for now** (founder's decision 2026-10-16): `app_settings.require_phone_verification` (default
   false) and `EXPO_PUBLIC_REQUIRE_PHONE` (default false) let Google accounts in without the phone check; turn both on
   once SMS is set up. With `EXPO_PUBLIC_SKIP_LOGIN=false`, a leftover anonymous guest session is signed out on start.

@@ -291,6 +291,15 @@ export default function HomeScreen() {
           <MapSearchBar value={search.query} onChangeText={search.setQuery} placeholder={t('search.foodPlaceholder')} />
         </View>
 
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/plan-day')}
+          style={({ pressed }) => [styles.planPill, pressed && styles.roundButtonPressed]}>
+          <GlossyFill />
+          <Icon name="route" size={16} color={Colors.violet} />
+          <Text style={styles.locationPillText}>{t('plan.open')}</Text>
+        </Pressable>
+
         {skipLogin && (
           // Developer-only notice (English on purpose): reminds that this build skips sign-in.
           <Text style={styles.previewNotice}>Preview mode: sign-in is turned off</Text>
@@ -699,6 +708,22 @@ const useStyles = makeStyles((Colors) => ({
     borderColor: Colors.violet,
   },
   locationPillText: { ...Type.label, color: Colors.text },
+  planPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    alignSelf: 'flex-start',
+    marginLeft: Spacing.lg,
+    marginTop: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    minHeight: 36,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    overflow: 'hidden',
+    ...RaisedSmall,
+  },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, gap: Spacing.md },
   cards: { gap: Spacing.md, paddingHorizontal: Spacing.lg },
   cardsSpinner: { marginVertical: Spacing.lg },

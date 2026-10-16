@@ -55,6 +55,8 @@ function RootNavigator() {
           <Stack.Screen name="dm/[userId]" />
           <Stack.Screen name="table-chat/[id]" />
           <Stack.Screen name="profile/[userId]" />
+          <Stack.Screen name="plan-day" />
+          <Stack.Screen name="plan/[id]" />
         </Stack.Protected>
       </Stack>
     </>

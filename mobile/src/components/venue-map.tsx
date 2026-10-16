@@ -95,6 +95,8 @@ export function VenueMap({
   fullScreen = false,
   mapPadding,
   focus,
+  route,
+  initialZoom = 13,
 }: {
   pins: MapPin[];
   onPinPress: (key: string) => void;
@@ -114,6 +116,10 @@ export function VenueMap({
   mapPadding?: { top: number; right: number; bottom: number; left: number };
   // Move the camera here (e.g. a search result). Bump `seq` to move again to the same spot.
   focus?: MapFocus | null;
+  // A line through these points, in order (a day plan's route).
+  route?: { lat: number; lng: number }[];
+  // Starting zoom.
+  initialZoom?: number;
 }) {
   const styles = useStyles();
   const Colors = useColors();
@@ -178,7 +184,8 @@ export function VenueMap({
       })),
   };
 
-  const start = userCoords ?? BANGKOK;
+  // A route opens on its first point; otherwise the user, else central Bangkok.
+  const start = route?.[0] ?? userCoords ?? BANGKOK;
   const frameStyle = fullScreen ? StyleSheet.absoluteFill : [styles.frame, { height }];
 
   return (
@@ -211,9 +218,25 @@ export function VenueMap({
               }
             : undefined
         }>
-        <Camera ref={cameraRef} initialViewState={{ center: [start.lng, start.lat], zoom: 13 }} />
+        <Camera ref={cameraRef} initialViewState={{ center: [start.lng, start.lat], zoom: initialZoom }} />
         {userCoords && <UserLocation />}
         <Images images={MAP_IMAGES} />
+
+        {route && route.length > 1 && (
+          <GeoJSONSource
+            id="route"
+            data={{
+              type: 'Feature',
+              properties: {},
+              geometry: { type: 'LineString', coordinates: route.map((point) => [point.lng, point.lat]) },
+            }}>
+            <Layer
+              id="route-line"
+              type="line"
+              style={{ lineColor: Colors.violet, lineWidth: 4, lineOpacity: 0.85, lineCap: 'round', lineJoin: 'round', lineDasharray: [1.5, 1] }}
+            />
+          </GeoJSONSource>
+        )}
 
         {places.length > 0 && (
           <GeoJSONSource

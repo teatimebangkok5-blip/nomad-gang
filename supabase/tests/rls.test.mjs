@@ -701,5 +701,72 @@ check("can't delete someone else's photo", !r.error && r.rows.length === 0);
 r = await tryQuery("authenticated", user, `delete from storage.objects where bucket_id = 'profile-photos' and name = $1 returning id`, [`${user}/avatar-1.jpg`]);
 check("people delete their own photos", r.rows?.length === 1);
 
+// --- Day planner
+r = await tryQuery("anon", null, `select count(*)::int n from public.transit_stations`);
+check("anyone can read rail stations", !r.error);
+r = await tryQuery("anon", null, `select name_en, cardinality(station_ids) n from public.transit_lines order by name_en`);
+check("rail lines seeded with their stations in order",
+  r.rows?.length === 9 && r.rows.find((l) => l.name_en === "Silom Line")?.n === 14 && r.rows.find((l) => l.name_en === "Sukhumvit Line")?.n === 47);
+r = await tryQuery("authenticated", user, `insert into public.transit_stations (osm_type, osm_id, name, lat, lng) values ('node', 1, 'Fake', 13.7, 100.5)`);
+check("app users can't add stations", !!r.error);
+r = await tryQuery("authenticated", user, `insert into public.transit_lines (osm_id, network, name_en, station_ids) values (1, 'BTS', 'Fake', '{}')`);
+check("app users can't add lines", !!r.error);
+r = await tryQuery("authenticated", user, `select id, kind from public.plan_candidates(13.7314, 100.5414, 3000, array['park'])`);
+check("planner finds hangout places of the chosen kinds", r.rows?.some((row) => row.id === lumphiniId) && r.rows.every((row) => row.kind === "park"));
+r = await tryQuery("authenticated", user, `select id, kind from public.plan_candidates(13.7314, 100.5414, 3000, array['temple'])`);
+check("planner leaves out other kinds", r.rows?.length > 0 && !r.rows.some((row) => row.id === lumphiniId) && r.rows.every((row) => row.kind === "temple"));
+r = await tryQuery("authenticated", user, `select kind, distance_m from public.plan_food_near(13.74, 100.53, array['restaurant'], 5)`);
+check("planner finds food places nearby", r.rows?.length === 5 && r.rows.every((row) => row.kind === "restaurant" && row.distance_m <= 1500));
+
+const tomorrow = new Date(Date.now() + 7 * 3600e3 + 24 * 3600e3).toISOString().slice(0, 10); // Bangkok tomorrow
+const stops = JSON.stringify([
+  { key: `place:${lumphiniId}`, type: "sight", place_id: lumphiniId, venue_id: null, name: "Lumphini Park", lat: 13.7314, lng: 100.5414, arrive: 540, leave: 600 },
+  { key: "place:x", type: "meal", place_id: null, venue_id: null, name: "Noodles", lat: 13.74, lng: 100.53, arrive: 615, leave: 675 },
+]);
+const savePlanAs = (who, owner, extra = "") =>
+  tryQuery("authenticated", who,
+    `insert into public.day_plans (owner_id, title, day, start_minutes, end_minutes, travel_modes, stops${extra ? ", meetup_id" : ""})
+     values ($1, 'My day in Silom', $2, 540, 1080, '{walk,transit}', $3::jsonb${extra ? `, '${extra}'` : ""}) returning id`,
+    [owner, tomorrow, stops]);
+r = await savePlanAs(g1, g1);
+check("people save their own day plan", !r.error);
+const planId = r.rows?.[0]?.id;
+r = await savePlanAs(g1, user);
+check("can't save a plan as someone else", !!r.error);
+r = await tryQuery("authenticated", g1, `update public.day_plans set travel_modes = '{}' where id = $1`, [planId]);
+check("a plan needs at least one way of getting around", !!r.error);
+r = await tryQuery("authenticated", g1, `update public.day_plans set travel_modes = '{walk,boat}' where id = $1`, [planId]);
+check("only walk, taxi and transit", !!r.error);
+r = await tryQuery("authenticated", g1, `update public.day_plans set travel_modes = '{walk,taxi,transit}' where id = $1 returning id`, [planId]);
+check("all three ways can be picked", r.rows?.length === 1);
+r = await savePlanAs(g1, g1, hangoutId);
+check("can't attach a plan to a hangout directly", !!r.error);
+r = await tryQuery("authenticated", g2, `select count(*)::int n from public.day_plans where id = $1`, [planId]);
+check("others can't read a private plan", r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", g1, `update public.day_plans set meetup_id = $2 where id = $1`, [planId, hangoutId]);
+check("meetup_id can't be changed directly", !!r.error);
+r = await tryQuery("authenticated", g1, `update public.day_plans set title = 'Renamed' where id = $1 returning id`, [planId]);
+check("owner renames the plan", r.rows?.length === 1);
+r = await tryQuery("authenticated", g2, `select public.create_plan_hangout($1, 8)`, [planId]);
+check("can't turn someone else's plan into a hangout", /not_found/.test(r.error ?? ""));
+r = await tryQuery("anon", null, `select public.create_plan_hangout($1, 8)`, [planId]);
+check("signed-out visitors can't make plan hangouts", !!r.error);
+r = await tryQuery("authenticated", g1, `select public.create_plan_hangout($1, 8) as id`, [planId]);
+check("owner turns the plan into a day hangout", !r.error && !!r.rows?.[0]?.id);
+const planHangoutId = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", g2,
+  `select kind, title, place_id, description, (ends_at - starts_at) = interval '9 hours' as nine_hours from public.list_open_meetups() where id = $1`, [planHangoutId]);
+check("day hangout at the first stop, for the plan's hours, stops listed",
+  r.rows?.[0]?.kind === "hangout" && r.rows[0].title === "Renamed" && r.rows[0].place_id === lumphiniId &&
+  r.rows[0].nine_hours === true && r.rows[0].description === "09:00 Lumphini Park\n10:15 Noodles");
+r = await tryQuery("authenticated", g2, `select meetup_id from public.day_plans where id = $1`, [planId]);
+check("a plan that became a hangout is readable by others", r.rows?.[0]?.meetup_id === planHangoutId);
+r = await tryQuery("authenticated", g1, `select public.create_plan_hangout($1, 8)`, [planId]);
+check("a plan becomes a hangout only once", /already_hangout/.test(r.error ?? ""));
+r = await tryQuery("authenticated", g2, `delete from public.day_plans where id = $1 returning id`, [planId]);
+check("others can't delete the plan", !r.error && r.rows.length === 0);
+r = await tryQuery("authenticated", g1, `delete from public.day_plans where id = $1 returning id`, [planId]);
+check("owner deletes the plan", r.rows?.length === 1);
+
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

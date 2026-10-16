@@ -24,6 +24,7 @@ import {
   type MeetupErrorKey,
 } from '@/lib/meetups';
 import { profilePhotoUrl } from '@/lib/photos';
+import { usePlanForMeetup } from '@/lib/plans';
 import { useMyFeedback } from '@/lib/profiles';
 import { venuePhotoUrl } from '@/lib/supabase';
 import { PROMOTION_EMOJI, useVenues } from '@/lib/venues';
@@ -53,6 +54,8 @@ export default function TableScreen() {
       loaded.members.some((m) => m.user_id === session?.user.id),
   );
   const feedback = useMyFeedback(id, canRate);
+  // A day hangout made from a day plan links to the plan.
+  const dayPlan = usePlanForMeetup(id);
 
   async function run(action: (meetupId: string) => Promise<{ error: MeetupErrorKey | null }>) {
     setError(null);
@@ -169,6 +172,17 @@ export default function TableScreen() {
               <Pressable accessibilityRole="link" onPress={() => Linking.openURL(directionsUrl(mapsTarget))} style={styles.fact}>
                 <Icon name="map" size={18} color={Colors.accent} />
                 <Text style={styles.mapsLink}>{t('tables.openInMaps')}</Text>
+              </Pressable>
+            )}
+            {dayPlan && (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => router.push({ pathname: '/plan/[id]', params: { id: dayPlan.id } })}
+                style={styles.fact}>
+                <Icon name="route" size={18} color={Colors.accent} />
+                <Text style={styles.mapsLink}>
+                  {t('plan.dayPlan')} · {t('plan.stops', { count: dayPlan.stops.length })}
+                </Text>
               </Pressable>
             )}
             {(tickets || website) && (

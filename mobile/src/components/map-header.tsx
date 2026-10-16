@@ -5,8 +5,9 @@ import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GlossyFill } from '@/components/glossy';
 import { Icon } from '@/components/icon';
-import { Radius, Spacing, Type } from '@/constants/theme';
+import { Radius, RaisedSmall, Spacing, Type } from '@/constants/theme';
 import { makeStyles, useColors } from '@/lib/theme';
 
 // Floating top of a full-screen map screen (Create table, Create hangout): back button, title, an optional hint and
@@ -38,6 +39,7 @@ export function MapHeader({
           hitSlop={8}
           onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
           style={({ pressed }) => [styles.back, pressed && styles.pressed]}>
+          <GlossyFill />
           <Icon name="back" size={22} color={Colors.text} />
         </Pressable>
         <View style={styles.titles} pointerEvents="none">
@@ -66,6 +68,8 @@ const useStyles = makeStyles((Colors) => ({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.surface,
+    overflow: 'hidden',
+    ...RaisedSmall,
   },
   pressed: { opacity: 0.7 },
   titles: { flex: 1, paddingRight: Spacing.sm },

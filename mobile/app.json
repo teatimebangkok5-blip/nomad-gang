@@ -41,7 +41,15 @@
           "locationWhenInUsePermission": "TableMeet uses your location to show partner places near you and to check you in when you arrive."
         }
       ],
-      "@maplibre/maplibre-react-native"
+      "@maplibre/maplibre-react-native",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "TableMeet uses your photos so you can choose a profile picture and your best photos.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

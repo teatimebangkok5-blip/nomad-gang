@@ -2,7 +2,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { BrandGradient, Radius, Spacing, Type } from '@/constants/theme';
+import { Shine } from '@/components/glossy';
+import { BrandGradient, Radius, RaisedSmall, Spacing, Type } from '@/constants/theme';
 import { makeStyles, useColors } from '@/lib/theme';
 
 // violet: the Hangout action, next to the orange "Create table".
@@ -47,6 +48,7 @@ export function Button({
       android_ripple={variant === 'text' ? undefined : { color: 'rgba(255,255,255,0.12)' }}
       style={({ pressed }) => [
         styles.base,
+        variant !== 'text' && styles.raised,
         compact && styles.compact,
         styles[variant],
         inactive && (variant === 'primary' || variant === 'violet') && styles.primaryDisabled,
@@ -61,6 +63,7 @@ export function Button({
           style={StyleSheet.absoluteFill}
         />
       )}
+      {variant !== 'text' && <Shine onColor={(variant === 'primary' || variant === 'violet') && !inactive} />}
       {loading ? (
         <ActivityIndicator color={variant === 'primary' || variant === 'violet' ? Colors.textSecondary : textColor} />
       ) : (
@@ -89,6 +92,7 @@ const useStyles = makeStyles((Colors) => ({
     overflow: 'hidden',
   },
   compact: { paddingHorizontal: Spacing.md },
+  raised: { ...RaisedSmall },
   primary: { backgroundColor: Colors.orange },
   violet: { backgroundColor: Colors.violet },
   primaryDisabled: { backgroundColor: Colors.surfaceRaised },

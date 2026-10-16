@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { Pressable, Text, View } from 'react-native';
 
 import { Icon } from '@/components/icon';
-import { Radius, Spacing, Type } from '@/constants/theme';
+import { GlossyFill } from '@/components/glossy';
+import { Radius, Raised, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { venuePhotoUrl } from '@/lib/supabase';
 import type { Venue } from '@/lib/venues';
@@ -35,6 +36,7 @@ export function VenueCard({
       disabled={!onPress}
       onPress={onPress}
       style={({ pressed }) => [styles.card, selected && styles.cardSelected, pressed && styles.pressed]}>
+      <GlossyFill />
       <View style={styles.photoWrap}>
         {venue.photo_path ? (
           <Image
@@ -101,6 +103,7 @@ const useStyles = makeStyles((Colors) => ({
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: 'hidden',
+    ...Raised,
   },
   cardSelected: { borderColor: Colors.pink, borderWidth: 2 },
   pressed: { opacity: 0.8 },

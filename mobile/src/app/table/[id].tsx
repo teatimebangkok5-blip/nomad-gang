@@ -5,10 +5,11 @@ import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { GlossyFill } from '@/components/glossy';
 import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { ScreenHeader } from '@/components/screen-header';
-import { Radius, Spacing, Type } from '@/constants/theme';
+import { Radius, RaisedSmall, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { formatWhen, formatWhenRange } from '@/lib/bangkok-time';
@@ -22,6 +23,7 @@ import {
   useMeetup,
   type MeetupErrorKey,
 } from '@/lib/meetups';
+import { profilePhotoUrl } from '@/lib/photos';
 import { useMyFeedback } from '@/lib/profiles';
 import { venuePhotoUrl } from '@/lib/supabase';
 import { PROMOTION_EMOJI, useVenues } from '@/lib/venues';
@@ -225,6 +227,7 @@ export default function TableScreen() {
               const rateable = canRate && member.user_id !== userId;
               return (
                 <View key={member.user_id} style={styles.member}>
+                  <GlossyFill />
                   {/* Tap a person to open their profile. */}
                   <Pressable
                     accessibilityRole="button"
@@ -232,7 +235,11 @@ export default function TableScreen() {
                     onPress={() => router.push({ pathname: '/profile/[userId]', params: { userId: member.user_id } })}
                     style={({ pressed }) => [styles.memberMain, pressed && styles.memberPressed]}>
                     <View style={styles.avatar}>
-                      <Text style={styles.avatarText}>{member.display_name.slice(0, 1).toUpperCase() || '?'}</Text>
+                      {member.avatar_path ? (
+                        <Image source={profilePhotoUrl(member.avatar_path)} style={styles.avatarImage} contentFit="cover" />
+                      ) : (
+                        <Text style={styles.avatarText}>{member.display_name.slice(0, 1).toUpperCase() || '?'}</Text>
+                      )}
                     </View>
                     <Text style={styles.memberName} numberOfLines={1}>
                       {member.display_name}
@@ -372,6 +379,8 @@ const useStyles = makeStyles((Colors) => ({
     padding: Spacing.sm,
     borderRadius: Radius.md,
     backgroundColor: Colors.surface,
+    overflow: 'hidden',
+    ...RaisedSmall,
   },
   memberMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   memberPressed: { opacity: 0.7 },
@@ -399,6 +408,7 @@ const useStyles = makeStyles((Colors) => ({
     justifyContent: 'center',
   },
   avatarText: { ...Type.label, color: Colors.text },
+  avatarImage: { width: 36, height: 36, borderRadius: 18 },
   memberName: { ...Type.body, color: Colors.text, flex: 1 },
   hostTag: {
     ...Type.small,

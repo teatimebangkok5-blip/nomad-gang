@@ -24,6 +24,8 @@ const ICONS = {
   ticket: { android: 'confirmation_number', ios: 'ticket.fill' },
   website: { android: 'open_in_new', ios: 'arrow.up.right.square' },
   search: { android: 'search', ios: 'magnifyingglass' },
+  camera: { android: 'photo_camera', ios: 'camera.fill' },
+  photo: { android: 'add_photo_alternate', ios: 'photo.badge.plus' },
   road: { android: 'add_road', ios: 'road.lanes' },
   deal: { android: 'sell', ios: 'tag.fill' },
   location: { android: 'location_on', ios: 'location.fill' },

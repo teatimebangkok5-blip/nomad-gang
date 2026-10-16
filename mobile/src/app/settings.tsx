@@ -2,9 +2,10 @@ import { useTranslation } from 'react-i18next';
 import { Alert, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { GlossyFill } from '@/components/glossy';
 import { Icon, type IconName } from '@/components/icon';
 import { ScreenHeader } from '@/components/screen-header';
-import { Radius, Spacing, Type } from '@/constants/theme';
+import { Radius, Raised, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, setLanguage, type Language } from '@/i18n';
 import { signOut, useAuth } from '@/lib/auth';
 import { skipLogin } from '@/lib/preview';
@@ -44,6 +45,7 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.sectionTitle}>{t('settings.appearance')}</Text>
         <View style={styles.group}>
+          <GlossyFill />
           {themes.map((option) => (
             <OptionRow
               key={option.value}
@@ -57,6 +59,7 @@ export default function SettingsScreen() {
 
         <Text style={styles.sectionTitle}>{t('settings.language')}</Text>
         <View style={styles.group}>
+          <GlossyFill />
           {languages.map((option) => (
             <OptionRow
               key={option.value}
@@ -70,6 +73,7 @@ export default function SettingsScreen() {
 
         <Text style={styles.sectionTitle}>{t('settings.privacy')}</Text>
         <View style={styles.group}>
+          <GlossyFill />
           <View style={styles.row}>
             <Icon name="travellers" size={22} color={visibility.on ? Colors.accent : Colors.textSecondary} />
             <View style={styles.switchText}>
@@ -93,6 +97,7 @@ export default function SettingsScreen() {
           <>
             <Text style={styles.sectionTitle}>{t('settings.account')}</Text>
             <View style={styles.group}>
+              <GlossyFill />
               <OptionRow icon="logout" label={t('home.signOut')} danger onPress={confirmSignOut} />
             </View>
           </>
@@ -148,6 +153,7 @@ const useStyles = makeStyles((Colors) => ({
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: 'hidden',
+    ...Raised,
   },
   row: {
     flexDirection: 'row',

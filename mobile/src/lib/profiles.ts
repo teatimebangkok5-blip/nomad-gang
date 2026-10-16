@@ -11,6 +11,8 @@ export type Profile = {
   id: string;
   display_name: string;
   instagram: string | null;
+  avatar_path: string | null;
+  photo_paths: string[];
   followers: number;
   following: number;
   tables: number;
@@ -33,6 +35,8 @@ const KNOWN_ERRORS = [
   'meetup_not_ended',
   'feedback_closed',
   'invalid_vote',
+  'invalid_photo',
+  'too_many_photos',
 ] as const;
 export type ProfileErrorKey = (typeof KNOWN_ERRORS)[number] | 'generic';
 
@@ -42,24 +46,27 @@ function errorKey(error: PostgrestError | null): ProfileErrorKey | null {
   return KNOWN_ERRORS.find((key) => error.message.includes(key)) ?? 'generic';
 }
 
-// The signed-in person's display name (for the profile button on home). Reloads when the screen comes back into
-// focus, so a name changed on the profile page shows straight away.
+// The signed-in person's name and picture (for the profile button on home). Reloads when the screen comes back
+// into focus, so changes made on the profile page show straight away.
 export function useMyName(myId: string | undefined) {
-  const [name, setName] = useState<string | null>(null);
+  const [me, setMe] = useState<{ name: string; avatarPath: string | null } | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       if (!myId) return;
       supabase
         .from('profiles')
-        .select('display_name')
+        .select('display_name, avatar_path')
         .eq('id', myId)
         .maybeSingle()
-        .then(({ data }) => setName((data as { display_name: string } | null)?.display_name ?? null));
+        .then(({ data }) => {
+          const row = data as { display_name: string; avatar_path: string | null } | null;
+          setMe(row ? { name: row.display_name, avatarPath: row.avatar_path } : null);
+        });
     }, [myId]),
   );
 
-  return name;
+  return me;
 }
 
 export function instagramUrl(handle: string): string {

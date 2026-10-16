@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -17,6 +18,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GlossyFill } from '@/components/glossy';
 import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { LanguageToggle } from '@/components/language-toggle';
@@ -26,7 +28,7 @@ import { MapSearchBar, MapSearchResults } from '@/components/map-search';
 import { SlideUpPanel } from '@/components/slide-up-panel';
 import { VenueMap, type MapFocus, type MapPin } from '@/components/venue-map';
 import { AREA_ZOOM, PLACE_ZOOM, useMapSearch, type SearchResult } from '@/lib/map-search';
-import { Radius, Spacing, Type } from '@/constants/theme';
+import { Radius, Raised, RaisedSmall, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { useThreads } from '@/lib/chat';
@@ -44,6 +46,7 @@ import {
 import { placeName, usePlacesInView, type Place } from '@/lib/places';
 import { skipLogin } from '@/lib/preview';
 import { isHangoutVenue, PROMOTION_EMOJI, useVenues, type Venue } from '@/lib/venues';
+import { profilePhotoUrl } from '@/lib/photos';
 import { useMyName } from '@/lib/profiles';
 import { makeStyles, useColors } from '@/lib/theme';
 
@@ -85,7 +88,7 @@ export default function HomeScreen() {
   const diningVenueIds = new Set(diningVenues.map((venue) => venue.id));
   // Partner venues live on the Create table map, so home search finds places and areas only.
   const search = useMapSearch('food', []);
-  const myName = useMyName(session?.user.id);
+  const me = useMyName(session?.user.id);
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const visibleMeetups = meetups.meetups;
 
@@ -249,8 +252,11 @@ export default function HomeScreen() {
               disabled={!session}
               onPress={() => session && router.push({ pathname: '/profile/[userId]', params: { userId: session.user.id } })}
               style={({ pressed }) => [styles.profileButton, pressed && styles.roundButtonPressed]}>
-              {myName ? (
-                <Text style={styles.profileInitial}>{myName.slice(0, 1).toUpperCase()}</Text>
+              <GlossyFill />
+              {me?.avatarPath ? (
+                <Image source={profilePhotoUrl(me.avatarPath)} style={StyleSheet.absoluteFill} contentFit="cover" />
+              ) : me ? (
+                <Text style={styles.profileInitial}>{me.name.slice(0, 1).toUpperCase()}</Text>
               ) : (
                 <Icon name="person" size={20} color={Colors.text} />
               )}
@@ -265,6 +271,7 @@ export default function HomeScreen() {
               hitSlop={8}
               onPress={() => router.push('/travellers')}
               style={({ pressed }) => [styles.roundButton, pressed && styles.roundButtonPressed]}>
+              <GlossyFill />
               <Icon name="travellers" size={20} color={Colors.accent} />
               {incomingRequests > 0 && <View style={styles.dot} />}
             </Pressable>
@@ -274,6 +281,7 @@ export default function HomeScreen() {
               hitSlop={8}
               onPress={() => router.push('/settings')}
               style={({ pressed }) => [styles.roundButton, pressed && styles.roundButtonPressed]}>
+              <GlossyFill />
               <Icon name="settings" size={20} color={Colors.textSecondary} />
             </Pressable>
           </View>
@@ -325,6 +333,7 @@ export default function HomeScreen() {
           <ActivityIndicator color={Colors.accent} style={styles.cardsSpinner} />
         ) : visibleMeetups.length === 0 ? (
           <View style={[styles.emptyCard, { marginHorizontal: Spacing.lg }]}>
+            <GlossyFill />
             <Text style={styles.emptyTitle}>
               {meetups.status === 'error' ? t('tables.errorLoad') : t('tables.noTablesTitle')}
             </Text>
@@ -367,6 +376,7 @@ export default function HomeScreen() {
             accessibilityLabel={t('tables.showList')}
             onPress={() => setListOpen(true)}
             style={({ pressed }) => [styles.listButton, pressed && styles.roundButtonPressed]}>
+            <GlossyFill />
             <Icon name="list" size={22} color={Colors.text} />
           </Pressable>
         </View>
@@ -435,6 +445,7 @@ function PlaceCard({
 
   return (
     <View style={styles.placeCard}>
+      <GlossyFill />
       <View style={styles.placeHeader}>
         <Text style={styles.placeName} numberOfLines={2}>
           {name}
@@ -509,6 +520,7 @@ function PlaceCard({
             accessibilityLabel={t('tables.openInMaps')}
             onPress={() => Linking.openURL(directionsUrl(mapsTarget))}
             style={({ pressed }) => [styles.listButton, pressed && styles.roundButtonPressed]}>
+            <GlossyFill />
             <Icon name="map" size={20} color={Colors.text} />
           </Pressable>
         )}
@@ -554,6 +566,7 @@ function ListPanel({
         <ActivityIndicator color={Colors.accent} style={styles.cardsSpinner} />
       ) : meetups.length === 0 ? (
         <View style={styles.emptyCard}>
+          <GlossyFill />
           <Text style={styles.emptyTitle}>{meetupsStatus === 'error' ? t('tables.errorLoad') : t('tables.noTablesTitle')}</Text>
           {meetupsStatus !== 'error' && <Text style={styles.emptyBody}>{t('tables.noTablesBody')}</Text>}
         </View>
@@ -583,12 +596,14 @@ const useStyles = makeStyles((Colors) => ({
   profileButton: {
     width: 40,
     height: 40,
+    overflow: 'hidden',
     borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.violetTint,
     borderWidth: 2,
     borderColor: Colors.violet,
+    ...RaisedSmall,
   },
   profileInitial: { ...Type.heading, fontWeight: '800', color: Colors.text },
   roundButton: {
@@ -598,6 +613,8 @@ const useStyles = makeStyles((Colors) => ({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.surface,
+    overflow: 'hidden',
+    ...RaisedSmall,
   },
   roundButtonPressed: { opacity: 0.7 },
   // New message requests waiting on the Travellers button.
@@ -636,6 +653,8 @@ const useStyles = makeStyles((Colors) => ({
     backgroundColor: Colors.overlay,
     borderWidth: 1,
     borderColor: Colors.border,
+    overflow: 'hidden',
+    ...Raised,
   },
   placeHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
   placeName: { ...Type.heading, color: Colors.text, flex: 1 },
@@ -697,6 +716,8 @@ const useStyles = makeStyles((Colors) => ({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.borderStrong,
+    overflow: 'hidden',
+    ...RaisedSmall,
   },
   sheetContent: { padding: Spacing.lg, paddingBottom: Spacing.xxl * 2 },
   sectionTitle: { ...Type.heading, color: Colors.text, marginBottom: Spacing.md },
@@ -709,6 +730,8 @@ const useStyles = makeStyles((Colors) => ({
     borderWidth: 1,
     borderColor: Colors.border,
     gap: Spacing.xs,
+    overflow: 'hidden',
+    ...Raised,
   },
   emptyTitle: { ...Type.heading, color: Colors.text },
   emptyBody: { ...Type.body, color: Colors.textSecondary },

@@ -73,6 +73,20 @@ Product spec and tech stack below are agreed. Built so far:
   members give each other 👍 or 👎 on the table screen (`member_feedback`, `give_feedback(meetup, user, 1|-1|0)`);
   who gave what is private, `get_profile` returns totals. Any signed-in user can open a profile except across a
   block. Data: `src/lib/profiles.ts`.
+- **Profile photos** (added 2026-10-16, `*_profile_photos.sql`): a profile picture (`profiles.avatar_path`, shown on
+  the profile, the home profile button and table member lists) and up to 3 "best photos" (`profiles.photo_paths`)
+  under the Instagram link; saved via `update_my_photos` (paths must be in the caller's own folder). Files: public
+  `profile-photos` bucket, `<user id>/…` with random names; storage policies let people list / add / replace / delete
+  only their own folder. App: `src/lib/photos.ts` (expo-image-picker with cropping → expo-image-manipulator resize
+  512 / 1080 px, JPEG 0.8 → upload). The image-picker plugin in `app.json` blocks the camera and microphone
+  permissions (library only); `npx expo prebuild --platform android` was run for it (debug key SHA-1 unchanged).
+- **Glossy 3D style** (2026-10-16): `src/components/glossy.tsx` — `GlossyFill` (surface gradient + shine),
+  `Shine` (`onColor` for orange / violet / pink fills), `GlossyView` / `GlossyPressable`, and our own
+  `InstagramBadge` (Instagram's real logo may not be altered). Tokens `surfaceGradient`, `shine` in both themes and
+  `Raised` / `RaisedSmall` shadows in `src/constants/theme.ts`. Used on buttons, chips, filter buttons, cards, the
+  search bar, round header buttons, place cards, settings groups, member / traveller rows and profile boxes. New
+  boxes should follow the same pattern (container with borderRadius + `overflow: 'hidden'` + Raised, `<GlossyFill />`
+  as first child).
 - **Login without SMS for now** (founder's decision 2026-10-16): `app_settings.require_phone_verification` (default
   false) and `EXPO_PUBLIC_REQUIRE_PHONE` (default false) let Google accounts in without the phone check; turn both on
   once SMS is set up. With `EXPO_PUBLIC_SKIP_LOGIN=false`, a leftover anonymous guest session is signed out on start.

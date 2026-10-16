@@ -3,9 +3,10 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, BackHandler, Keyboard, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
+import { GlossyFill } from '@/components/glossy';
 import { Icon } from '@/components/icon';
 import { CATEGORY_EMOJI } from '@/components/venue-map';
-import { Radius, Spacing, Type } from '@/constants/theme';
+import { Radius, Raised, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { areaName, type SearchResult } from '@/lib/map-search';
 import { PLACE_ICON_IMAGES } from '@/lib/place-icons';
@@ -29,6 +30,7 @@ export function MapSearchBar({
 
   return (
     <View style={styles.bar}>
+      <GlossyFill />
       <Icon name="search" size={20} color={Colors.textMuted} />
       <TextInput
         value={value}
@@ -176,6 +178,8 @@ const useStyles = makeStyles((Colors) => ({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.borderStrong,
+    overflow: 'hidden',
+    ...Raised,
   },
   input: { flex: 1, fontSize: 16, color: Colors.text, paddingVertical: Spacing.sm },
   clear: {
@@ -198,6 +202,7 @@ const useStyles = makeStyles((Colors) => ({
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: 'hidden',
+    ...Raised,
   },
   list: { paddingVertical: Spacing.xs },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingHorizontal: Spacing.md, minHeight: 56 },

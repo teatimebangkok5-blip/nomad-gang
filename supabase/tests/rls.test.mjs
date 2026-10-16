@@ -35,6 +35,7 @@ await db.exec(`
   create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
   create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text);
   alter table storage.objects enable row level security;
+  grant select, insert, update, delete on storage.objects to anon, authenticated, service_role;
   create publication supabase_realtime;
 `);
 
@@ -677,6 +678,28 @@ check("a vote can be taken back", r.rows?.[0]?.thumbs_up === 0);
 await db.exec(`update public.meetups set starts_at = now() - interval '20 days', ends_at = now() - interval '19 days' where id = '${fbId}'`);
 r = await vote(user, g1, 1);
 check("feedback closes 14 days after the end", /feedback_closed/.test(r.error ?? ""));
+
+// --- Profile picture and best photos
+const photo = (who, name) =>
+  tryQuery("authenticated", who, `insert into storage.objects (bucket_id, name) values ('profile-photos', $1) returning id`, [name]);
+r = await photo(user, `${user}/avatar-1.jpg`);
+check("people upload photos to their own folder", !r.error);
+r = await photo(user, `${g1}/sneaky.jpg`);
+check("can't upload into someone else's folder", !!r.error);
+r = await tryQuery("authenticated", user, `select public.update_my_photos($1, $2)`, [`${user}/avatar-1.jpg`, [`${user}/a.jpg`, `${user}/b.jpg`, `${user}/c.jpg`]]);
+check("save profile picture and 3 best photos", !r.error);
+r = await tryQuery("authenticated", g1, `select avatar_path, photo_paths from public.get_profile($1)`, [user]);
+check("others see the picture and photos on the profile", r.rows?.[0]?.avatar_path === `${user}/avatar-1.jpg` && r.rows[0].photo_paths?.length === 3);
+r = await tryQuery("authenticated", user, `select public.update_my_photos(null, $1)`, [[`${user}/a.jpg`, `${user}/b.jpg`, `${user}/c.jpg`, `${user}/d.jpg`]]);
+check("at most 3 best photos", /too_many_photos/.test(r.error ?? ""));
+r = await tryQuery("authenticated", user, `select public.update_my_photos($1, '{}')`, [`${g1}/x.jpg`]);
+check("can't use someone else's photo", /invalid_photo/.test(r.error ?? ""));
+r = await tryQuery("authenticated", user, `update public.profiles set photo_paths = $2 where id = $1`, [user, [`${user}/1.jpg`, `${user}/2.jpg`, `${user}/3.jpg`, `${user}/4.jpg`]]);
+check("more than 3 photos blocked even on direct update", !!r.error);
+r = await tryQuery("authenticated", g1, `delete from storage.objects where bucket_id = 'profile-photos' and name = $1 returning id`, [`${user}/avatar-1.jpg`]);
+check("can't delete someone else's photo", !r.error && r.rows.length === 0);
+r = await tryQuery("authenticated", user, `delete from storage.objects where bucket_id = 'profile-photos' and name = $1 returning id`, [`${user}/avatar-1.jpg`]);
+check("people delete their own photos", r.rows?.length === 1);
 
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

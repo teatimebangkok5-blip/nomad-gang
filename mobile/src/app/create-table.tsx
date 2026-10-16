@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GlossyFill } from '@/components/glossy';
 import { Button } from '@/components/button';
 import { Chip } from '@/components/chip';
 import { Icon } from '@/components/icon';
@@ -14,7 +15,7 @@ import { ScreenHeader } from '@/components/screen-header';
 import { SlideUpPanel } from '@/components/slide-up-panel';
 import { VenueCard } from '@/components/venue-card';
 import { CATEGORY_EMOJI, VenueMap, type MapFocus } from '@/components/venue-map';
-import { Radius, Spacing, Type } from '@/constants/theme';
+import { Radius, Raised, RaisedSmall, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { bangkokDay, formatClock, formatDayLabel, fromBangkok, timeSlots, type BangkokDay } from '@/lib/bangkok-time';
 import { distanceMeters, useCurrentLocation } from '@/lib/location';
@@ -171,6 +172,7 @@ export default function CreateTableScreen() {
           onLayout={(e) => setBottomHeight(e.nativeEvent.layout.height)}>
           {picked && (
             <View style={styles.choose}>
+              <GlossyFill />
               <View style={styles.chooseHeader}>
                 <Text style={styles.chooseName} numberOfLines={2}>
                   {pickedVenue
@@ -203,6 +205,7 @@ export default function CreateTableScreen() {
               accessibilityRole="button"
               onPress={() => setListOpen(true)}
               style={({ pressed }) => [styles.listButton, pressed && styles.stepPressed]}>
+              <GlossyFill />
               <Icon name="list" size={20} color={Colors.text} />
               <Text style={styles.listButtonText}>{t('tables.partnerPlaces')}</Text>
             </Pressable>
@@ -377,6 +380,8 @@ const useStyles = makeStyles((Colors) => ({
     backgroundColor: Colors.overlay,
     borderWidth: 1,
     borderColor: Colors.pink,
+    overflow: 'hidden',
+    ...Raised,
   },
   chooseHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
   chooseName: { ...Type.heading, color: Colors.text, flex: 1 },
@@ -401,6 +406,8 @@ const useStyles = makeStyles((Colors) => ({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.borderStrong,
+    overflow: 'hidden',
+    ...RaisedSmall,
   },
   listButtonText: { ...Type.label, color: Colors.text },
   sheetContent: { padding: Spacing.lg, paddingBottom: Spacing.xxl * 2 },

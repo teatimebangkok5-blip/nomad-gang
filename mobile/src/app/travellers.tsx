@@ -4,11 +4,12 @@ import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { GlossyFill } from '@/components/glossy';
 import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { ScreenHeader } from '@/components/screen-header';
 import { VenueMap } from '@/components/venue-map';
-import { Radius, Spacing, Type } from '@/constants/theme';
+import { Radius, Raised, Spacing, Type } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
 import { formatDayLabel, bangkokDay, bangkokMinutes, formatClock } from '@/lib/bangkok-time';
 import { useThreads, type ThreadSummary } from '@/lib/chat';
@@ -161,6 +162,7 @@ function NearbyTab({ myId }: { myId: string | undefined }) {
         const followed = following.ids.has(item.user_id);
         return (
           <View style={styles.person}>
+            <GlossyFill />
             {/* Name and avatar open the person's profile. */}
             <Pressable
               accessibilityRole="button"
@@ -337,6 +339,8 @@ const useStyles = makeStyles((Colors) => ({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
+    overflow: 'hidden',
+    ...Raised,
   },
   pressed: { opacity: 0.7 },
   personMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.md },

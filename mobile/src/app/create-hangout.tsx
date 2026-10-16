@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GlossyFill } from '@/components/glossy';
 import { Button } from '@/components/button';
 import { Chip } from '@/components/chip';
 import { Icon } from '@/components/icon';
@@ -28,7 +29,7 @@ import { ScreenHeader } from '@/components/screen-header';
 import { SlideUpPanel } from '@/components/slide-up-panel';
 import { VenueCard } from '@/components/venue-card';
 import { CATEGORY_EMOJI, VenueMap, type MapFocus, type MapPin } from '@/components/venue-map';
-import { Radius, Spacing, Type } from '@/constants/theme';
+import { Radius, Raised, RaisedSmall, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import {
@@ -320,6 +321,7 @@ export default function CreateHangoutScreen() {
           <ActivityIndicator color={Colors.accent} style={styles.spinner} />
         ) : hangouts.length === 0 ? (
           <View style={[styles.emptyCard, styles.inset]}>
+            <GlossyFill />
             <Text style={styles.emptyTitle}>
               {meetups.status === 'error' ? t('tables.errorLoad') : t('hangouts.noHangoutsTitle')}
             </Text>
@@ -344,6 +346,7 @@ export default function CreateHangoutScreen() {
               accessibilityRole="button"
               onPress={() => setListOpen(true)}
               style={({ pressed }) => [styles.listButton, pressed && styles.pressed]}>
+              <GlossyFill />
               <Icon name="list" size={20} color={Colors.text} />
               <Text style={styles.listButtonText}>{t('tables.showList')}</Text>
             </Pressable>
@@ -365,6 +368,7 @@ export default function CreateHangoutScreen() {
           <Text style={styles.sectionTitle}>{t('hangouts.openHangouts')}</Text>
           {hangouts.length === 0 ? (
             <View style={styles.emptyCard}>
+              <GlossyFill />
               <Text style={styles.emptyTitle}>{t('hangouts.noHangoutsTitle')}</Text>
               <Text style={styles.emptyBody}>{t('hangouts.noHangoutsBody')}</Text>
             </View>
@@ -379,6 +383,7 @@ export default function CreateHangoutScreen() {
           <Text style={[styles.sectionTitle, styles.sectionSpacing]}>{t('hangouts.hangoutPlaces')}</Text>
           {partnerList.length === 0 ? (
             <View style={styles.emptyCard}>
+              <GlossyFill />
               <Text style={styles.emptyTitle}>{t('hangouts.noPlacesTitle')}</Text>
               <Text style={styles.emptyBody}>{t('hangouts.noPlacesBody')}</Text>
             </View>
@@ -452,6 +457,7 @@ function SelectionCard({
 
   return (
     <View style={[styles.placeCard, styles.inset]}>
+      <GlossyFill />
       <View style={styles.placeHeader}>
         <Text style={styles.placeName} numberOfLines={2}>
           {name}
@@ -534,6 +540,7 @@ function SelectionCard({
             accessibilityLabel={t('tables.openInMaps')}
             onPress={() => Linking.openURL(directionsUrl({ ...target, name }))}
             style={({ pressed }) => [styles.listButton, pressed && styles.pressed]}>
+            <GlossyFill />
             <Icon name="map" size={20} color={Colors.text} />
           </Pressable>
         )}
@@ -841,6 +848,8 @@ const useStyles = makeStyles((Colors) => ({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.borderStrong,
+    overflow: 'hidden',
+    ...RaisedSmall,
   },
   listButtonText: { ...Type.label, color: Colors.text },
   emptyCard: {
@@ -850,6 +859,8 @@ const useStyles = makeStyles((Colors) => ({
     borderWidth: 1,
     borderColor: Colors.border,
     gap: Spacing.xs,
+    overflow: 'hidden',
+    ...Raised,
   },
   emptyTitle: { ...Type.heading, color: Colors.text },
   emptyBody: { ...Type.body, color: Colors.textSecondary },
@@ -860,6 +871,8 @@ const useStyles = makeStyles((Colors) => ({
     backgroundColor: Colors.overlay,
     borderWidth: 1,
     borderColor: Colors.violet,
+    overflow: 'hidden',
+    ...Raised,
   },
   placeHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
   placeName: { ...Type.heading, color: Colors.text, flex: 1 },

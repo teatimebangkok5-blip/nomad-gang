@@ -35,6 +35,9 @@ export type ThemeColors = {
   dangerBg: string;
   // Top-of-map fade: opaque → transparent.
   fade: readonly [string, string, string];
+  // Glossy 3D style: surfaces go light (top) → base (bottom), with a shine over the top half.
+  surfaceGradient: readonly [string, string];
+  shine: readonly [string, string];
 };
 
 export const darkColors: ThemeColors = {
@@ -62,6 +65,8 @@ export const darkColors: ThemeColors = {
   danger: '#FF6B7A',
   dangerBg: 'rgba(255, 77, 94, 0.14)',
   fade: ['rgba(10, 6, 18, 0.95)', 'rgba(10, 6, 18, 0.75)', 'rgba(10, 6, 18, 0)'],
+  surfaceGradient: ['#2A1D40', '#160D24'],
+  shine: ['rgba(255, 255, 255, 0.16)', 'rgba(255, 255, 255, 0)'],
 };
 
 export const lightColors: ThemeColors = {
@@ -89,10 +94,29 @@ export const lightColors: ThemeColors = {
   danger: '#C4223A',
   dangerBg: 'rgba(196, 34, 58, 0.10)',
   fade: ['rgba(251, 248, 254, 0.96)', 'rgba(251, 248, 254, 0.8)', 'rgba(251, 248, 254, 0)'],
+  surfaceGradient: ['#FFFFFF', '#EFE8F8'],
+  shine: ['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0)'],
 };
 
 // The pin / "Meet" gradient, left to right. Used for the main button in both themes.
 export const BrandGradient = ['#FF9A1B', '#FE593B', '#FF1F78'] as const;
+
+// Raised (3D) shadows: elevation on Android, shadow* on iOS.
+export const Raised = {
+  elevation: 6,
+  shadowColor: '#000',
+  shadowOpacity: 0.25,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 4 },
+} as const;
+
+export const RaisedSmall = {
+  elevation: 3,
+  shadowColor: '#000',
+  shadowOpacity: 0.18,
+  shadowRadius: 4,
+  shadowOffset: { width: 0, height: 2 },
+} as const;
 
 export const Spacing = {
   xs: 4,

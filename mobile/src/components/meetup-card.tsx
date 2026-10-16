@@ -1,7 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
-import { Radius, Spacing, Type } from '@/constants/theme';
+import { GlossyFill } from '@/components/glossy';
+import { Radius, Raised, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { bangkokDay, bangkokMinutes, formatClock, formatDayLabel } from '@/lib/bangkok-time';
 import { meetupPlaceName, type OpenMeetup } from '@/lib/meetups';
@@ -35,6 +36,7 @@ export function MeetupCard({
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [styles.card, hangout && styles.cardHangout, pressed && styles.pressed]}>
+      <GlossyFill />
       <View style={[styles.when, hangout && styles.whenHangout]}>
         <Text style={[styles.day, hangout && styles.dayHangout]} numberOfLines={1}>
           {formatDayLabel(bangkokDay(start), t)}
@@ -107,6 +109,8 @@ const useStyles = makeStyles((Colors) => ({
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
+    overflow: 'hidden',
+    ...Raised,
   },
   cardHangout: { borderColor: Colors.violet },
   pressed: { opacity: 0.75 },

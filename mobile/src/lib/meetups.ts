@@ -34,7 +34,7 @@ export type OpenMeetup = MeetupPlace & {
   joined: boolean;
 };
 
-export type MeetupMember = { user_id: string; joined_at: string; display_name: string };
+export type MeetupMember = { user_id: string; joined_at: string; display_name: string; avatar_path: string | null };
 
 export type MeetupDetail = MeetupPlace & {
   id: string;
@@ -261,7 +261,11 @@ type MeetupRow = Omit<
   spot_name: string | null;
   spot_lat: number | null;
   spot_lng: number | null;
-  meetup_members: { user_id: string; joined_at: string; profiles: { display_name: string } | null }[];
+  meetup_members: {
+    user_id: string;
+    joined_at: string;
+    profiles: { display_name: string; avatar_path: string | null } | null;
+  }[];
 };
 
 async function fetchMeetup(id: string): Promise<MeetupDetail | null | 'error'> {
@@ -270,7 +274,7 @@ async function fetchMeetup(id: string): Promise<MeetupDetail | null | 'error'> {
     .select(
       'id, kind, venue_id, place_id, place:places(name, name_en, name_th, lat, lng, website), spot_name, spot_lat, spot_lng, ' +
         'host_id, title, description, starts_at, ends_at, max_people, status, ' +
-        'meetup_members(user_id, joined_at, profiles(display_name))',
+        'meetup_members(user_id, joined_at, profiles(display_name, avatar_path))',
     )
     .eq('id', id)
     .maybeSingle();
@@ -281,7 +285,12 @@ async function fetchMeetup(id: string): Promise<MeetupDetail | null | 'error'> {
   if (!data) return null;
   const { meetup_members, place, spot_name, spot_lat, spot_lng, ...meetup } = data as unknown as MeetupRow;
   const members = meetup_members
-    .map((m) => ({ user_id: m.user_id, joined_at: m.joined_at, display_name: m.profiles?.display_name ?? '' }))
+    .map((m) => ({
+      user_id: m.user_id,
+      joined_at: m.joined_at,
+      display_name: m.profiles?.display_name ?? '',
+      avatar_path: m.profiles?.avatar_path ?? null,
+    }))
     .sort((a, b) => a.joined_at.localeCompare(b.joined_at));
   return {
     ...meetup,

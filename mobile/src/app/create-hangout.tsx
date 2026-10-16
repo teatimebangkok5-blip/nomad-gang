@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -106,7 +106,9 @@ export default function CreateHangoutScreen() {
   // Tickets / Free entry also filter the map's places by entry (Event / Party only filter partner venues).
   const entry = promo === 'ticket' || promo === 'free_entry' ? entryFilter(promo, language) : null;
   const { places: mapPlaces, onBoundsChange } = usePlacesInView('hangout', entry);
-  const [selection, setSelection] = useState<Selection | null>(null);
+  // Opened for a venue (e.g. from a notification about its deal): its card shows first and the map moves there.
+  const params = useLocalSearchParams<{ venueId?: string }>();
+  const [selection, setSelection] = useState<Selection | null>(params.venueId ? { type: 'venue', venueId: params.venueId } : null);
   const [chosen, setChosen] = useState<Chosen | null>(null);
   const [listOpen, setListOpen] = useState(false);
   const [joiningId, setJoiningId] = useState<string | null>(null);
@@ -124,6 +126,8 @@ export default function CreateHangoutScreen() {
   // Search finds every hangout venue and place, whatever filter button is on.
   const search = useMapSearch('hangout', venues.venues.filter(isHangoutVenue));
   const [focus, setFocus] = useState<MapFocus | null>(null);
+  const paramVenue = params.venueId ? venueById.get(params.venueId) : undefined;
+  const paramFocus: MapFocus | null = paramVenue ? { lat: paramVenue.lat, lng: paramVenue.lng, zoom: PLACE_ZOOM, seq: 0 } : null;
   const shownVenueIds = new Set(hangoutVenues.map((venue) => venue.id));
   // With a filter on, only hangouts at venues that have that promotion.
   const hangouts = meetups.meetups.filter(
@@ -287,7 +291,7 @@ export default function CreateHangoutScreen() {
         onMapPress={(at) => setSelection({ type: 'spot', ...at })}
         onBoundsChange={onBoundsChange}
         mapPadding={{ top: topHeight, right: 0, bottom: bottomHeight, left: 0 }}
-        focus={focus}
+        focus={focus ?? paramFocus}
       />
 
       <MapHeader title={t('hangouts.mapTitle')} hint={t('hangouts.mapHint')} onHeight={setTopHeight}>

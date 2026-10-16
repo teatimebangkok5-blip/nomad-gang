@@ -54,6 +54,7 @@ const ICONS = {
   travellers: { android: 'person_pin_circle', ios: 'person.2.wave.2.fill' },
   route: { android: 'route', ios: 'point.topleft.down.to.point.bottomright.curvepath' },
   delete: { android: 'delete', ios: 'trash' },
+  notifications: { android: 'notifications', ios: 'bell.fill' },
 } satisfies Record<string, { android: AndroidName; ios: IosName }>;
 
 export type IconName = keyof typeof ICONS;

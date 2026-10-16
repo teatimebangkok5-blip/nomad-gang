@@ -768,5 +768,44 @@ check("others can't delete the plan", !r.error && r.rows.length === 0);
 r = await tryQuery("authenticated", g1, `delete from public.day_plans where id = $1 returning id`, [planId]);
 check("owner deletes the plan", r.rows?.length === 1);
 
+// --- Notifications
+const notes = async (who) => (await tryQuery("authenticated", who, `select * from public.my_notifications(100)`)).rows ?? [];
+r = await hangout(g2, { lat: 13.75, lng: 100.5, spotName: "Notification test", size: 6, title: "Night market walk" });
+const noteHangoutId = r.rows?.[0]?.id;
+let list = await notes(user);
+check("new hangouts by others show up", list.some((n) => n.kind === "new_hangout" && n.meetup_id === noteHangoutId && n.actor_id === g2 && n.title === "Night market walk"));
+check("new tables show up", list.some((n) => n.kind === "new_table"));
+check("they start unread", list.find((n) => n.meetup_id === noteHangoutId)?.unread === true);
+list = await notes(g2);
+check("my own hangouts aren't notified to me", !list.some((n) => n.kind === "new_hangout" && n.meetup_id === noteHangoutId));
+await tryQuery("authenticated", user, `select public.join_meetup($1)`, [noteHangoutId]);
+list = await notes(g2);
+check("host hears who joined", list.some((n) => n.kind === "joined" && n.meetup_id === noteHangoutId && n.actor_id === user));
+await tryQuery("authenticated", g2, `insert into public.meetup_messages (meetup_id, sender_id, body) values ($1, $2, 'Bring cash!')`, [noteHangoutId, g2]);
+list = await notes(user);
+check("members get the latest chat message", list.some((n) => n.kind === "chat_message" && n.meetup_id === noteHangoutId && n.body === "Bring cash!"));
+list = await notes(g1);
+check("non-members don't get chat messages", !list.some((n) => n.kind === "chat_message" && n.meetup_id === noteHangoutId));
+await tryQuery("authenticated", g2, `select public.follow_user($1)`, [user]);
+// Messages need the sender to be visible nearby (Travellers rules).
+for (const who of [user, g2]) await tryQuery("authenticated", who, `select public.set_discoverable(true)`);
+await loc(g2, BKK[0] + 0.001, BKK[1]);
+await loc(user, ...BKK);
+r = await dm(g2, user, "Hi, are you going to the walk?");
+list = await notes(user);
+check("message requests show up", list.some((n) => n.kind === "dm_request" && n.actor_id === g2 && n.body === "Hi, are you going to the walk?"));
+check("new followers show up", list.some((n) => n.kind === "follow" && n.actor_id === g2));
+list = await notes(g2);
+check("my own messages aren't notified to me", !list.some((n) => (n.kind === "dm_request" || n.kind === "direct_message") && n.actor_id === g2));
+check("new promotions show up with their venue", list.some((n) => n.kind === "promotion" && n.venue_id && n.promo_kind));
+check("nothing from blocked people", !list.some((n) => n.actor_id === g0));
+r = await tryQuery("authenticated", user, `select public.mark_notifications_seen()`);
+list = await notes(user);
+check("opening notifications marks them seen", list.length > 0 && list.every((n) => n.unread === false));
+r = await tryQuery("authenticated", user, `select * from public.notification_state`);
+check("seen state isn't readable directly", !!r.error);
+r = await tryQuery("anon", null, `select * from public.my_notifications()`);
+check("signed-out visitors get no notifications", !!r.error || r.rows.length === 0);
+
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

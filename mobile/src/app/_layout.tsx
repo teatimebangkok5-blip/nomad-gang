@@ -57,6 +57,7 @@ function RootNavigator() {
           <Stack.Screen name="profile/[userId]" />
           <Stack.Screen name="plan-day" />
           <Stack.Screen name="plan/[id]" />
+          <Stack.Screen name="notifications" />
         </Stack.Protected>
       </Stack>
     </>

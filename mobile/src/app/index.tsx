@@ -24,6 +24,7 @@ import { Icon } from '@/components/icon';
 import { LanguageToggle } from '@/components/language-toggle';
 import { Logo } from '@/components/logo';
 import { MeetupCard } from '@/components/meetup-card';
+import { stopName } from '@/components/plan-timeline';
 import { MapSearchBar, MapSearchResults } from '@/components/map-search';
 import { SlideUpPanel } from '@/components/slide-up-panel';
 import { VenueMap, type MapFocus, type MapPin } from '@/components/venue-map';
@@ -47,6 +48,8 @@ import { placeName, usePlacesInView, type Place } from '@/lib/places';
 import { skipLogin } from '@/lib/preview';
 import { isHangoutVenue, PROMOTION_EMOJI, useVenues, type Venue } from '@/lib/venues';
 import { profilePhotoUrl } from '@/lib/photos';
+import { usePlansForMeetups, type DayPlan } from '@/lib/plans';
+import { useNotifications } from '@/lib/notifications';
 import { useMyName } from '@/lib/profiles';
 import { makeStyles, useColors } from '@/lib/theme';
 
@@ -89,6 +92,7 @@ export default function HomeScreen() {
   // Partner venues live on the Create table map, so home search finds places and areas only.
   const search = useMapSearch('food', []);
   const me = useMyName(session?.user.id);
+  const notifications = useNotifications(Boolean(session));
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const visibleMeetups = meetups.meetups;
 
@@ -113,6 +117,14 @@ export default function HomeScreen() {
       : meetups.meetups.filter((meetup) =>
           s.type === 'venue' ? meetup.venue_id === s.venueId : !meetup.venue_id && meetup.place_id === s.place.id,
         );
+  // Hangouts made from a day plan: tapping their pin draws the plan's route.
+  const dayPlans = usePlansForMeetups(visibleMeetups.filter((meetup) => meetup.kind === 'hangout').map((meetup) => meetup.id));
+  const selectedPlan =
+    selection?.type === 'hangouts'
+      ? (meetupsAtSelection(selection)
+          .map((meetup) => dayPlans.get(meetup.id))
+          .find((plan) => plan) ?? null)
+      : null;
   const selectedVenueId = selection?.type === 'venue' ? selection.venueId : null;
   const selectedPlaceId = selection?.type === 'place' ? selection.place.id : null;
   const selectedHangoutsKey = selection?.type === 'hangouts' ? selection.key : null;
@@ -142,7 +154,8 @@ export default function HomeScreen() {
   function handlePinPress(key: string) {
     if (key.startsWith('h:')) {
       const group = hangoutGroups.get(key.slice(2)) ?? [];
-      if (group.length === 1) openTable(group[0]);
+      // A single hangout opens straight away, unless it's a day plan: then the card and its route show first.
+      if (group.length === 1 && !dayPlans.has(group[0].id)) openTable(group[0]);
       else if (group.length > 1) setSelection({ type: 'hangouts', key: key.slice(2) });
       return;
     }
@@ -232,6 +245,8 @@ export default function HomeScreen() {
         onBoundsChange={onBoundsChange}
         mapPadding={{ top: topHeight, right: 0, bottom: bottomHeight, left: 0 }}
         focus={focus}
+        route={selectedPlan?.stops}
+        routeStops={selectedPlan?.stops.map((stop, index) => ({ lat: stop.lat, lng: stop.lng, label: String(index + 1) }))}
       />
 
       {/* Top: logo, language, chips. A fade keeps it readable over the map. */}
@@ -274,6 +289,24 @@ export default function HomeScreen() {
               <GlossyFill />
               <Icon name="travellers" size={20} color={Colors.accent} />
               {incomingRequests > 0 && <View style={styles.dot} />}
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                notifications.unreadCount > 0
+                  ? t('notifications.openUnread', { count: notifications.unreadCount })
+                  : t('notifications.open')
+              }
+              hitSlop={8}
+              onPress={() => router.push('/notifications')}
+              style={({ pressed }) => [styles.roundButton, pressed && styles.roundButtonPressed]}>
+              <GlossyFill />
+              <Icon name="notifications" size={20} color={Colors.accent} />
+              {notifications.unreadCount > 0 && (
+                <View style={styles.countBadge}>
+                  <Text style={styles.countBadgeText}>{notifications.unreadCount > 9 ? '9+' : notifications.unreadCount}</Text>
+                </View>
+              )}
             </Pressable>
             <Pressable
               accessibilityRole="button"
@@ -334,6 +367,7 @@ export default function HomeScreen() {
                   : undefined
             }
             tables={meetupsAtSelection(selection)}
+            dayPlan={selectedPlan}
             renderMeetup={renderMeetup}
             onCreate={() => createAt(selection)}
             onClose={() => setSelection(null)}
@@ -419,6 +453,7 @@ function PlaceCard({
   selection,
   venue,
   tables,
+  dayPlan,
   renderMeetup,
   onCreate,
   onClose,
@@ -426,6 +461,7 @@ function PlaceCard({
   selection: Selection;
   venue: Venue | undefined;
   tables: OpenMeetup[];
+  dayPlan: DayPlan | null;
   renderMeetup: (meetup: OpenMeetup) => React.ReactNode;
   onCreate: () => void;
   onClose: () => void;
@@ -494,6 +530,23 @@ function PlaceCard({
         </View>
       ) : hangouts ? null : (
         <Text style={styles.placeNote}>{t('tables.noDealHere')}</Text>
+      )}
+
+      {dayPlan && (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push({ pathname: '/plan/[id]', params: { id: dayPlan.id } })}
+          style={({ pressed }) => [styles.planRow, pressed && styles.roundButtonPressed]}>
+          <Icon name="route" size={20} color={Colors.violet} />
+          <View style={styles.promoBody}>
+            <Text style={styles.promoTitle}>
+              {t('plan.dayPlan')} · {t('plan.stops', { count: dayPlan.stops.length })}
+            </Text>
+            <Text style={styles.promoMeta} numberOfLines={2}>
+              {dayPlan.stops.map((stop, index) => `${index + 1} ${stopName(stop, language)}`).join('  →  ')}
+            </Text>
+          </View>
+        </Pressable>
       )}
 
       {tables.length > 0 && (
@@ -627,6 +680,21 @@ const useStyles = makeStyles((Colors) => ({
   },
   roundButtonPressed: { opacity: 0.7 },
   // New message requests waiting on the Travellers button.
+  countBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 4,
+    borderRadius: 10,
+    backgroundColor: Colors.pink,
+    borderWidth: 2,
+    borderColor: Colors.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  countBadgeText: { fontSize: 11, lineHeight: 13, fontWeight: '800', color: Colors.white },
   dot: {
     position: 'absolute',
     top: 6,
@@ -708,6 +776,16 @@ const useStyles = makeStyles((Colors) => ({
     borderColor: Colors.violet,
   },
   locationPillText: { ...Type.label, color: Colors.text },
+  planRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    padding: Spacing.sm,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.violetTint,
+    borderWidth: 1,
+    borderColor: Colors.violet,
+  },
   planPill: {
     flexDirection: 'row',
     alignItems: 'center',

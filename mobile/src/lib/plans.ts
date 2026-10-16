@@ -16,6 +16,7 @@ import {
   type TransitNetwork,
   type TravelMode,
 } from '@/lib/planner';
+import type { PlaceEntry } from '@/lib/places';
 import { supabase } from '@/lib/supabase';
 import { isHangoutVenue, type Venue } from '@/lib/venues';
 
@@ -30,7 +31,8 @@ export async function loadCandidates(
   start: Coords,
   modes: TravelMode[],
   interests: Interest[],
-  freeOnly: boolean,
+  // Entry kinds to keep (e.g. only free places); null = any place.
+  entries: PlaceEntry[] | null,
   venues: Venue[],
 ): Promise<Candidate[] | null> {
   const radius = Math.max(...modes.map((mode) => RADIUS_M[mode]));
@@ -40,7 +42,7 @@ export async function loadCandidates(
     p_lng: start.lng,
     p_radius_m: radius,
     p_kinds: kinds,
-    p_entry: freeOnly ? ['free'] : null,
+    p_entry: entries,
   });
   if (error) {
     console.warn('Loading plan places failed', error.message);
@@ -49,7 +51,7 @@ export async function loadCandidates(
   const places = (data as CandidateRow[]).map((row) => ({ ...row, source: 'place' as const }));
   const partner = venues
     .filter((venue) => isHangoutVenue(venue) && metersBetween(start, venue) <= radius)
-    .filter((venue) => !freeOnly || venue.entry === 'free')
+    .filter((venue) => !entries || (venue.entry !== null && entries.includes(venue.entry)))
     .map(
       (venue): Candidate => ({
         id: venue.id,
@@ -224,6 +226,21 @@ export function usePlan(id: string) {
       .then(({ data }) => setPlan((data as DayPlan | null) ?? 'missing'));
   }, [id]);
   return plan;
+}
+
+// The day plans behind these hangouts (those made from a plan), by hangout id.
+export function usePlansForMeetups(meetupIds: string[]) {
+  const [plans, setPlans] = useState<Map<string, DayPlan>>(() => new Map());
+  const key = [...meetupIds].sort().join(',');
+  useEffect(() => {
+    if (!key) return;
+    supabase
+      .from('day_plans')
+      .select(PLAN_COLUMNS)
+      .in('meetup_id', key.split(','))
+      .then(({ data }) => setPlans(new Map(((data ?? []) as DayPlan[]).map((plan) => [plan.meetup_id as string, plan]))));
+  }, [key]);
+  return plans;
 }
 
 // The day plan behind a day hangout, if it came from one.

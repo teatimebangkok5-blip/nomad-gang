@@ -8,6 +8,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { GlossyFill } from '@/components/glossy';
 import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
+import { PlanTimeline } from '@/components/plan-timeline';
+import { PlanMap } from '@/components/plan-view';
 import { ScreenHeader } from '@/components/screen-header';
 import { Radius, RaisedSmall, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
@@ -193,6 +195,12 @@ export default function TableScreen() {
             )}
           </View>
 
+          {dayPlan && (
+            <View style={styles.planMap}>
+              <PlanMap start={null} stops={dayPlan.stops} height={220} />
+            </View>
+          )}
+
           {isHangout
             ? venue?.promotions.map((promotion) => (
                 <View key={promotion.id} style={styles.deal}>
@@ -340,6 +348,13 @@ export default function TableScreen() {
               )}
             </View>
           )}
+
+          {dayPlan && (
+            <>
+              <Text style={styles.heading}>{t('plan.dayPlan')}</Text>
+              <PlanTimeline stops={dayPlan.stops} />
+            </>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -442,4 +457,5 @@ const useStyles = makeStyles((Colors) => ({
     marginTop: Spacing.lg,
   },
   actions: { marginTop: Spacing.xl },
+  planMap: { marginTop: Spacing.lg },
 }));

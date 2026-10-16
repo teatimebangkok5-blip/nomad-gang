@@ -15,10 +15,10 @@ import { ScreenHeader } from '@/components/screen-header';
 import { Radius, Raised, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { useAuth } from '@/lib/auth';
-import { bangkokDay, bangkokMinutes, formatClock, formatDayLabel, type BangkokDay } from '@/lib/bangkok-time';
+import { bangkokDay, bangkokMinutes, formatClock, formatDayLabel, parseClock, type BangkokDay } from '@/lib/bangkok-time';
 import { useCurrentLocation } from '@/lib/location';
 import { areaName, useMapSearch, type SearchResult } from '@/lib/map-search';
-import { placeName } from '@/lib/places';
+import { entryFilter, placeName } from '@/lib/places';
 import {
   buildPlan,
   INTERESTS,
@@ -63,6 +63,8 @@ type Start = { type: 'location' } | { type: 'area'; key: AreaKey } | { type: 'pi
 const DAYS_AHEAD = 14;
 const MAX_HOURS = 12; // a day hangout lasts at most 12 hours
 const MODES: TravelMode[] = ['walk', 'taxi', 'transit'];
+type EntryChoice = 'free' | 'ticket';
+const ENTRY_CHOICES: EntryChoice[] = ['free', 'ticket'];
 
 type Result = {
   input: PlanInput;
@@ -90,23 +92,17 @@ export default function PlanDayScreen() {
   const today = bangkokDay(now);
   const [start, setStart] = useState<Start | null>(coords ? { type: 'location' } : { type: 'area', key: 'oldTown' });
   const [day, setDay] = useState<BangkokDay>(today);
-  const [from, setFrom] = useState(9 * 60);
-  const [until, setUntil] = useState(18 * 60);
+  const [fromText, setFromText] = useState('09:00');
+  const [untilText, setUntilText] = useState('18:00');
   const [interests, setInterests] = useState<Interest[]>(['temples', 'sights', 'markets']);
   const [meals, setMeals] = useState(true);
   const [nightlife, setNightlife] = useState(false);
-  const [freeOnly, setFreeOnly] = useState(false);
+  const [entry, setEntry] = useState<EntryChoice[]>(['free', 'ticket']);
   const [modes, setModes] = useState<TravelMode[]>(['walk', 'transit']);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
 
-  const fromOptions = Array.from({ length: 9 }, (_, i) => (6 + i) * 60).filter(
-    (m) => day !== today || m >= bangkokMinutes(now) - 30,
-  );
-  const untilOptions = Array.from({ length: 12 }, (_, i) => from + (i + 2) * 60).filter(
-    (m) => m <= Math.min(from + MAX_HOURS * 60, 23 * 60),
-  );
 
   function startCoords(): { at: Coords; label: string | null } | null {
     if (!start) return null;
@@ -118,12 +114,25 @@ export default function PlanDayScreen() {
   async function generate(avoid?: Set<string>) {
     const s = startCoords();
     if (!s) return setProblem(t('plan.needStart'));
+    const from = parseClock(fromText);
+    const until = parseClock(untilText);
+    if (from === null || from >= 24 * 60 || until === null) return setProblem(t('plan.badTime'));
+    if (until - from < 60) return setProblem(t('plan.tooShort'));
+    if (until - from > MAX_HOURS * 60) return setProblem(t('plan.tooLong'));
+    if (day === today && from < bangkokMinutes(new Date()) - 30) return setProblem(t('plan.timePassed'));
     if (interests.length === 0) return setProblem(t('plan.needInterest'));
     setProblem(null);
     setBusy(true);
     const input: PlanInput = { start: s.at, startMinutes: from, endMinutes: until, modes, interests, meals, nightlife };
     const [candidates, network] = await Promise.all([
-      loadCandidates(s.at, modes, interests, freeOnly, venues.venues),
+      loadCandidates(
+        s.at,
+        modes,
+        interests,
+        // Both picked = any place (also ones whose entry isn't confirmed).
+        entry.length === 2 ? null : entryFilter(entry[0] === 'free' ? 'free_entry' : 'ticket', language),
+        venues.venues,
+      ),
       modes.includes('transit') ? loadTransitNetwork() : Promise.resolve(null),
     ]);
     if (!candidates) {
@@ -219,34 +228,16 @@ export default function PlanDayScreen() {
               key={option}
               label={formatDayLabel(option, t, now)}
               selected={option === day}
-              onPress={() => {
-                setDay(option);
-                if (option === today && from < bangkokMinutes(now) - 30) setFrom(Math.min(14 * 60, Math.ceil(bangkokMinutes(now) / 60) * 60));
-              }}
+              onPress={() => setDay(option)}
             />
           ))}
         </ScrollView>
 
-        <Text style={styles.label}>{t('plan.from')}</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-          {fromOptions.map((m) => (
-            <Chip
-              key={m}
-              label={formatClock(m)}
-              selected={m === from}
-              onPress={() => {
-                setFrom(m);
-                if (until <= m + 60 || until > m + MAX_HOURS * 60) setUntil(Math.min(m + 9 * 60, 23 * 60));
-              }}
-            />
-          ))}
-        </ScrollView>
-        <Text style={styles.label}>{t('plan.until')}</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-          {untilOptions.map((m) => (
-            <Chip key={m} label={formatClock(m)} selected={m === until} onPress={() => setUntil(m)} />
-          ))}
-        </ScrollView>
+        <View style={styles.timeRow}>
+          <TimeField label={t('plan.from')} value={fromText} onChange={setFromText} />
+          <TimeField label={t('plan.until')} value={untilText} onChange={setUntilText} />
+        </View>
+        <Text style={styles.hint}>{t('plan.timeHint')}</Text>
 
         <Text style={styles.label}>{t('plan.interests')}</Text>
         <View style={styles.wrapRow}>
@@ -270,9 +261,22 @@ export default function PlanDayScreen() {
         </View>
 
         <Text style={styles.label}>{t('plan.budget')}</Text>
+        <Text style={styles.hint}>{t('plan.budgetHint')}</Text>
         <View style={styles.wrapRow}>
-          <Chip label={t('plan.budgetAny')} selected={!freeOnly} onPress={() => setFreeOnly(false)} />
-          <Chip label={t('plan.budgetFree')} selected={freeOnly} onPress={() => setFreeOnly(true)} />
+          {ENTRY_CHOICES.map((option) => {
+            const on = entry.includes(option);
+            return (
+              <Chip
+                key={option}
+                label={option === 'free' ? `✓ ${t('plan.budgetFree')}` : `🎟️ ${t('plan.budgetTickets')}`}
+                selected={on}
+                // At least one stays picked.
+                onPress={() =>
+                  setEntry((prev) => (on ? (prev.length > 1 ? prev.filter((e) => e !== option) : prev) : [...prev, option]))
+                }
+              />
+            );
+          })}
         </View>
 
         <Text style={styles.label}>{t('plan.travel')}</Text>
@@ -340,6 +344,34 @@ export default function PlanDayScreen() {
         )}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+// A time typed as HH:MM ("9", "930", "9.30" and "21:00" work too); tidied to HH:MM when the field is left.
+function TimeField({ label, value, onChange }: { label: string; value: string; onChange: (next: string) => void }) {
+  const styles = useStyles();
+  const Colors = useColors();
+  return (
+    <View style={styles.timeField}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        accessibilityLabel={label}
+        value={value}
+        onChangeText={onChange}
+        onBlur={() => {
+          const minutes = parseClock(value);
+          if (minutes !== null) onChange(formatClock(minutes, true));
+        }}
+        placeholder="09:00"
+        placeholderTextColor={Colors.textMuted}
+        keyboardType="numbers-and-punctuation"
+        maxLength={5}
+        selectTextOnFocus
+        selectionColor={Colors.orange}
+        keyboardAppearance="dark"
+        style={[styles.input, styles.timeInput]}
+      />
+    </View>
   );
 }
 
@@ -493,6 +525,9 @@ const useStyles = makeStyles((Colors) => ({
   intro: { ...Type.body, color: Colors.textSecondary },
   label: { ...Type.label, color: Colors.textSecondary, marginTop: Spacing.lg, marginBottom: Spacing.sm },
   muted: { ...Type.small, color: Colors.textMuted, marginTop: Spacing.xs },
+  timeRow: { flexDirection: 'row', gap: Spacing.md },
+  timeField: { flex: 1 },
+  timeInput: { fontSize: 20, fontWeight: '700', textAlign: 'center', letterSpacing: 1 },
   hint: { ...Type.small, color: Colors.textMuted, marginTop: -Spacing.xs, marginBottom: Spacing.sm },
   row: { gap: Spacing.sm, paddingRight: Spacing.lg },
   wrapRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },

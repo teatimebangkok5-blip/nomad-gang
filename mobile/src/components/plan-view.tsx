@@ -22,25 +22,32 @@ export function PlanView({
   onRemove?: (key: string) => void;
 }) {
   const styles = useStyles();
-  const route = [...(start ? [start] : []), ...stops.map((stop) => ({ lat: stop.lat, lng: stop.lng }))];
   return (
     <View style={styles.wrap}>
-      <VenueMap
-        height={260}
-        userCoords={null}
-        initialZoom={13}
-        route={route}
-        pins={stops.map((stop, index) => ({
-          key: stop.key,
-          lat: stop.lat,
-          lng: stop.lng,
-          emoji: String(index + 1),
-          tone: 'violet' as const,
-        }))}
-        onPinPress={() => {}}
-      />
+      <PlanMap start={start} stops={stops} />
       <PlanTimeline stops={stops} onRemove={onRemove} />
     </View>
+  );
+}
+
+// The plan's route on a map: a line from the start point through the numbered stops, zoomed to fit.
+export function PlanMap({ start, stops, height = 260 }: { start: Coords | null; stops: PlanStop[]; height?: number }) {
+  const route = [...(start ? [start] : []), ...stops.map((stop) => ({ lat: stop.lat, lng: stop.lng }))];
+  return (
+    <VenueMap
+      height={height}
+      userCoords={null}
+      initialZoom={13}
+      route={route}
+      pins={stops.map((stop, index) => ({
+        key: stop.key,
+        lat: stop.lat,
+        lng: stop.lng,
+        emoji: String(index + 1),
+        tone: 'violet' as const,
+      }))}
+      onPinPress={() => {}}
+    />
   );
 }
 

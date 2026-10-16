@@ -89,8 +89,9 @@ Product spec and tech stack below are agreed. Built so far:
   as first child).
 - **Day planner / itinerary** (added 2026-10-16, `*_day_planner.sql`, `*_seed_place_details.sql`, `*_seed_transit.sql`):
   "Plan my day" pill under the home search bar → `src/app/plan-day.tsx`: start (my location, 9 well-known areas or a
-  search result), day (14 days), from/until (≤ 12 h), interests (temples, sights, markets, malls, museums, parks,
-  family & fun), lunch/dinner and an evening bar, free-only, and getting around: any 1–3 of Walk / Taxi / BTS-MRT
+  search result), day (14 days), from/until typed as HH:MM (`parseClock()` in `bangkok-time.ts`; 1–12 h), interests (temples, sights, markets, malls, museums, parks,
+  family & fun), lunch/dinner and an evening bar, Entry: Free entry and/or Tickets (both = any place, also
+  unconfirmed; one = `entryFilter()` groups), and getting around: any 1–3 of Walk / Taxi / BTS-MRT
   (`day_plans.travel_modes`; `travel()` picks per trip: < 900 m or ≤ 20 min walks if walking is picked, else the train
   unless much slower than a taxi). The plan is **rule-based, no
   AI or paid services**: `buildPlan()` / `retime()` in `src/lib/planner.ts` (pure functions) pick from
@@ -104,7 +105,19 @@ Product spec and tech stack below are agreed. Built so far:
   (`day_plans`, owner only) and **Make it a day hangout** (`create_plan_hangout(plan, people)`: a hangout at the first
   stop for the plan's hours, stops listed in the description; once per plan). Saved plans: "My plans" on the
   planner → `src/app/plan/[id].tsx` (share, make hangout / open it, delete). A day hangout links to its plan from
-  `table/[id].tsx`; a plan that became a hangout is readable by everyone signed in. Data: `src/lib/plans.ts`.
+  `table/[id].tsx` (route map under the details, timeline at the bottom); on home, tapping a day hangout's 🙌 pin
+  opens its card with the plan and draws the route (`VenueMap` props `route` + `routeStops`; the map fits a route
+  whenever it changes). A plan that became a hangout is readable by everyone signed in. Data: `src/lib/plans.ts`
+  (`usePlansForMeetups` for home).
+- **Notifications** (added 2026-10-16, `*_notifications.sql`): bell next to Travellers on home (pink count badge) →
+  `src/app/notifications.tsx`. In-app only (no phone push yet). RPC `my_notifications(limit)` builds the list on the
+  server from existing data, so nothing is written per event and blocks always apply: new tables / hangouts by
+  others (open, 7 days), people joining mine (14 d), latest chat message per table/hangout I'm in and latest DM per
+  conversation from the other person (14 d; `dm_request` while pending), new followers (30 d), new promotions at
+  active venues that haven't ended (30 d). Unread = newer than `notification_state.seen_at` (no API access), set by
+  `mark_notifications_seen()` when the page opens. App: `useNotifications()` in `src/lib/notifications.ts` (focus,
+  foreground, every 2 min, and Realtime inserts on meetups / members / messages / deals). Tapping opens the table,
+  chat, DM, profile, or for a deal `create-table` / `create-hangout` with `venueId` (create-hangout now takes it).
 - **Login without SMS for now** (founder's decision 2026-10-16): `app_settings.require_phone_verification` (default
   false) and `EXPO_PUBLIC_REQUIRE_PHONE` (default false) let Google accounts in without the phone check; turn both on
   once SMS is set up. With `EXPO_PUBLIC_SKIP_LOGIN=false`, a leftover anonymous guest session is signed out on start.

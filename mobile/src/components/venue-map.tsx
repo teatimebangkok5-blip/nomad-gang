@@ -96,6 +96,7 @@ export function VenueMap({
   mapPadding,
   focus,
   route,
+  routeStops,
   initialZoom = 13,
 }: {
   pins: MapPin[];
@@ -116,8 +117,10 @@ export function VenueMap({
   mapPadding?: { top: number; right: number; bottom: number; left: number };
   // Move the camera here (e.g. a search result). Bump `seq` to move again to the same spot.
   focus?: MapFocus | null;
-  // A line through these points, in order (a day plan's route).
+  // A line through these points, in order (a day plan's route). The map zooms to fit it when it appears or changes.
   route?: { lat: number; lng: number }[];
+  // Small numbered circles on the route (its stops), drawn by the map so they don't cover pins.
+  routeStops?: { lat: number; lng: number; label: string }[];
   // Starting zoom.
   initialZoom?: number;
 }) {
@@ -150,11 +153,27 @@ export function VenueMap({
     cameraRef.current?.easeTo({ center: [userCoords.lng, userCoords.lat], zoom: 15, duration: 600 });
   }, [userCoords]);
 
+  // Fit the route in view when it changes (the first one is framed by the initial camera).
+  const routeBounds = boundsOf(route);
+  const routeKey = routeBounds?.join(',') ?? '';
+  const fittedRoute = useRef(routeKey);
   useEffect(() => {
-    if (!focus) return;
+    if (routeKey === fittedRoute.current) return;
+    fittedRoute.current = routeKey;
+    const bounds = routeKey ? (routeKey.split(',').map(Number) as [number, number, number, number]) : null;
+    if (!bounds) return;
+    centeredOnUser.current = true;
+    cameraRef.current?.fitBounds(bounds, { padding: routePadding(mapPadding), duration: 700 });
+  }, [routeKey, mapPadding]);
+
+  // Compared by value, so a focus rebuilt on every render (e.g. from a screen's params) moves the camera only once.
+  const focusKey = focus ? [focus.lng, focus.lat, focus.zoom, focus.seq].join(',') : '';
+  useEffect(() => {
+    if (!focusKey) return;
+    const [lng, lat, zoom] = focusKey.split(',').map(Number);
     centeredOnUser.current = true; // don't jump back to the user afterwards
-    cameraRef.current?.easeTo({ center: [focus.lng, focus.lat], zoom: focus.zoom, duration: 700 });
-  }, [focus]);
+    cameraRef.current?.easeTo({ center: [lng, lat], zoom, duration: 700 });
+  }, [focusKey]);
 
   const placesGeoJson: GeoJSON.FeatureCollection = {
     type: 'FeatureCollection',
@@ -218,7 +237,14 @@ export function VenueMap({
               }
             : undefined
         }>
-        <Camera ref={cameraRef} initialViewState={{ center: [start.lng, start.lat], zoom: initialZoom }} />
+        <Camera
+          ref={cameraRef}
+          initialViewState={
+            routeBounds
+              ? { bounds: routeBounds, padding: routePadding(mapPadding) }
+              : { center: [start.lng, start.lat], zoom: initialZoom }
+          }
+        />
         {userCoords && <UserLocation />}
         <Images images={MAP_IMAGES} />
 
@@ -234,6 +260,38 @@ export function VenueMap({
               id="route-line"
               type="line"
               style={{ lineColor: Colors.violet, lineWidth: 4, lineOpacity: 0.85, lineCap: 'round', lineJoin: 'round', lineDasharray: [1.5, 1] }}
+            />
+          </GeoJSONSource>
+        )}
+
+        {routeStops && routeStops.length > 0 && (
+          <GeoJSONSource
+            id="route-stops"
+            data={{
+              type: 'FeatureCollection',
+              features: routeStops.map((stop, index) => ({
+                type: 'Feature',
+                id: index,
+                geometry: { type: 'Point', coordinates: [stop.lng, stop.lat] },
+                properties: { label: stop.label },
+              })),
+            }}>
+            <Layer
+              id="route-stops-circle"
+              type="circle"
+              style={{ circleRadius: 11, circleColor: Colors.violet, circleStrokeColor: Colors.white, circleStrokeWidth: 2 }}
+            />
+            <Layer
+              id="route-stops-label"
+              type="symbol"
+              style={{
+                textField: ['get', 'label'],
+                textFont: LABEL_FONT,
+                textSize: 12,
+                textColor: Colors.white,
+                textAllowOverlap: true,
+                textIgnorePlacement: true,
+              }}
             />
           </GeoJSONSource>
         )}
@@ -305,6 +363,20 @@ export function VenueMap({
       </Map>
     </View>
   );
+}
+
+// [west, south, east, north] around the route, or null without one.
+function boundsOf(route: { lat: number; lng: number }[] | undefined): [number, number, number, number] | null {
+  if (!route || route.length < 2) return null;
+  const lats = route.map((point) => point.lat);
+  const lngs = route.map((point) => point.lng);
+  return [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)];
+}
+
+// Room around a fitted route: the floating UI plus a margin for the pins.
+function routePadding(mapPadding: { top: number; right: number; bottom: number; left: number } | undefined) {
+  const p = mapPadding ?? { top: 0, right: 0, bottom: 0, left: 0 };
+  return { top: p.top + 60, right: p.right + 40, bottom: p.bottom + 30, left: p.left + 40 };
 }
 
 // 3D pin: glossy gradient ball (light top -> deep bottom) with a white rim, a shine, the tail, and a soft shadow on

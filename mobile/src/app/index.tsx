@@ -290,24 +290,27 @@ export default function HomeScreen() {
               <Icon name="travellers" size={20} color={Colors.accent} />
               {incomingRequests > 0 && <View style={styles.dot} />}
             </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={
-                notifications.unreadCount > 0
-                  ? t('notifications.openUnread', { count: notifications.unreadCount })
-                  : t('notifications.open')
-              }
-              hitSlop={8}
-              onPress={() => router.push('/notifications')}
-              style={({ pressed }) => [styles.roundButton, pressed && styles.roundButtonPressed]}>
-              <GlossyFill />
-              <Icon name="notifications" size={20} color={Colors.accent} />
+            {/* The badge sits outside the button, which clips its contents to the circle. */}
+            <View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={
+                  notifications.unreadCount > 0
+                    ? t('notifications.openUnread', { count: notifications.unreadCount })
+                    : t('notifications.open')
+                }
+                hitSlop={8}
+                onPress={() => router.push('/notifications')}
+                style={({ pressed }) => [styles.roundButton, pressed && styles.roundButtonPressed]}>
+                <GlossyFill />
+                <Icon name="notifications" size={20} color={Colors.accent} />
+              </Pressable>
               {notifications.unreadCount > 0 && (
-                <View style={styles.countBadge}>
+                <View style={styles.countBadge} pointerEvents="none">
                   <Text style={styles.countBadgeText}>{notifications.unreadCount > 9 ? '9+' : notifications.unreadCount}</Text>
                 </View>
               )}
-            </Pressable>
+            </View>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('settings.open')}
@@ -679,9 +682,10 @@ const useStyles = makeStyles((Colors) => ({
     ...RaisedSmall,
   },
   roundButtonPressed: { opacity: 0.7 },
-  // New message requests waiting on the Travellers button.
   countBadge: {
     position: 'absolute',
+    // Above the raised button's shadow layer on Android.
+    elevation: 10,
     top: -4,
     right: -4,
     minWidth: 20,
@@ -695,6 +699,7 @@ const useStyles = makeStyles((Colors) => ({
     justifyContent: 'center',
   },
   countBadgeText: { fontSize: 11, lineHeight: 13, fontWeight: '800', color: Colors.white },
+  // New message requests waiting on the Travellers button.
   dot: {
     position: 'absolute',
     top: 6,

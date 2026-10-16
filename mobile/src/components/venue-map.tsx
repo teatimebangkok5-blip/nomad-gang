@@ -7,6 +7,7 @@ import {
   Marker,
   UserLocation,
   type CameraRef,
+  type MapRef,
 } from '@maplibre/maplibre-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef } from 'react';
@@ -122,6 +123,16 @@ export function VenueMap({
   const language = currentLanguage();
   const labelColor = (hex: string) => (themeName === 'dark' ? lighten(hex, 0.3) : hex);
   const cameraRef = useRef<CameraRef>(null);
+  const mapRef = useRef<MapRef>(null);
+
+  // The visible area right after the map loads (the map may not move by itself, e.g. without the phone's
+  // location), so the places in view show straight away.
+  async function reportInitialBounds() {
+    const map = mapRef.current;
+    if (!map || !onBoundsChange) return;
+    const [bounds, zoom] = await Promise.all([map.getBounds(), map.getZoom()]);
+    onBoundsChange({ west: bounds[0], south: bounds[1], east: bounds[2], north: bounds[3], zoom });
+  }
   const centeredOnUser = useRef(false);
   // A tap on a pin can also reach the map; ignore map taps right after a pin tap.
   const lastPinPress = useRef(0);
@@ -173,6 +184,10 @@ export function VenueMap({
   return (
     <View style={[frameStyle, styles.mapBackground]}>
       <Map
+        ref={mapRef}
+        onDidFinishLoadingMap={() => {
+          reportInitialBounds().catch(() => {});
+        }}
         style={StyleSheet.absoluteFill}
         mapStyle={MAP_STYLES[themeName]}
         contentInset={mapPadding}

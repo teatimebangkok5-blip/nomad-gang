@@ -12,6 +12,7 @@ import {
   OPTIONALLY_DATED_KINDS,
   PROMOTION_KINDS,
   VENUE_CATEGORIES,
+  VENUE_ENTRIES,
   type FormState,
 } from "@/lib/types";
 
@@ -59,6 +60,10 @@ const venueSchema = z.object({
     .transform((value) => value || null)
     .pipe(z.uuid().nullable()),
   ticket_url: ticketUrlSchema,
+  entry: z
+    .string()
+    .transform((value) => value || null)
+    .pipe(z.enum(VENUE_ENTRIES).nullable()),
 });
 
 function parseVenue(formData: FormData) {
@@ -75,6 +80,7 @@ function parseVenue(formData: FormData) {
     is_active: formData.get("is_active") === "on",
     place_id: formData.get("place_id") ?? "",
     ticket_url: formData.get("ticket_url") ?? "",
+    entry: formData.get("entry") ?? "",
   });
 }
 

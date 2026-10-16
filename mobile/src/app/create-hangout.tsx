@@ -53,7 +53,7 @@ import {
   type MeetupErrorKey,
   type OpenMeetup,
 } from '@/lib/meetups';
-import { placeEmoji, placeName, usePlacesInView, type Place } from '@/lib/places';
+import { entryFilter, placeEmoji, placeName, usePlacesInView, type Place, type PlaceEntry } from '@/lib/places';
 import {
   HANGOUT_PROMOTION_KINDS,
   isHangoutVenue,
@@ -99,9 +99,10 @@ export default function CreateHangoutScreen() {
   const meetups = useOpenMeetups(Boolean(session));
   const location = useCurrentLocation();
   const coords = location.state.status === 'granted' ? location.state.coords : null;
-  const { places: mapPlaces, onBoundsChange } = usePlacesInView('hangout');
-
   const [promo, setPromo] = useState<PromotionKind | null>(null);
+  // Tickets / Free entry also filter the map's places by entry (Event / Party only filter partner venues).
+  const entry = promo === 'ticket' || promo === 'free_entry' ? entryFilter(promo, language) : null;
+  const { places: mapPlaces, onBoundsChange } = usePlacesInView('hangout', entry);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [chosen, setChosen] = useState<Chosen | null>(null);
   const [listOpen, setListOpen] = useState(false);
@@ -110,8 +111,12 @@ export default function CreateHangoutScreen() {
   const [bottomHeight, setBottomHeight] = useState(0);
 
   const venueById = new Map(venues.venues.map((venue) => [venue.id, venue]));
+  // A venue matches a button when it has that promotion, or (Tickets / Free entry) when its entry fits.
   const venueMatches = (venue: Venue | undefined) =>
-    Boolean(venue) && (promo === null || Boolean(venue?.promotions.some((p) => p.kind === promo)));
+    Boolean(venue) &&
+    (promo === null ||
+      Boolean(venue?.promotions.some((p) => p.kind === promo)) ||
+      Boolean(entry && venue?.entry && entry.includes(venue.entry)));
   const hangoutVenues = venues.venues.filter((venue) => isHangoutVenue(venue) && venueMatches(venue));
   const shownVenueIds = new Set(hangoutVenues.map((venue) => venue.id));
   // With a filter on, only hangouts at venues that have that promotion.
@@ -410,6 +415,7 @@ function SelectionCard({
   // OpenStreetMap, if it has one. Neither for most places.
   const tickets = venue ? ticketLink(venue) : null;
   const website = !tickets && selection.type === 'place' && isSafeLink(selection.place.website) ? selection.place.website : null;
+  const entry: PlaceEntry | null | undefined = venue ? venue.entry : selection.type === 'place' ? selection.place.entry : null;
 
   return (
     <View style={[styles.placeCard, styles.inset]}>
@@ -426,6 +432,19 @@ function SelectionCard({
           <Text style={styles.closeText}>✕</Text>
         </Pressable>
       </View>
+
+      {entry && (
+        <View style={styles.entryRow}>
+          <Icon name={entry === 'free' ? 'check' : 'ticket'} size={16} color={entry === 'free' ? Colors.text : Colors.accent} />
+          <Text style={styles.entryText}>
+            {entry === 'free'
+              ? t('hangouts.entryFree')
+              : entry === 'ticket'
+                ? t('hangouts.entryTicket')
+                : t('hangouts.entryFreeThai')}
+          </Text>
+        </View>
+      )}
 
       {venue ? (
         venue.promotions.length > 0 ? (
@@ -843,6 +862,8 @@ const useStyles = makeStyles((Colors) => ({
     borderRadius: Radius.pill,
     overflow: 'hidden',
   },
+  entryRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginTop: -Spacing.xs },
+  entryText: { ...Type.label, color: Colors.textSecondary, flex: 1 },
   rowLink: {
     flexDirection: 'row',
     alignItems: 'center',

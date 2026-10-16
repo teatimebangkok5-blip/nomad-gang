@@ -19,7 +19,19 @@ export type Place = {
   lng: number;
   // Official website from OpenStreetMap (https only), shown as "Official website".
   website?: string | null;
+  // Hangout places: whether entry needs a ticket (null = not confirmed).
+  entry?: PlaceEntry | null;
 };
+
+// 'free_thai': free for Thai citizens, foreigners pay (e.g. Wat Pho, Grand Palace).
+export type PlaceEntry = 'ticket' | 'free' | 'free_thai';
+
+// What the Tickets / Free entry buttons show. Free-for-Thais places count as free in Thai and as ticketed in English
+// (the founder's decision: Thai users get in free, visitors need a ticket).
+export function entryFilter(button: 'ticket' | 'free_entry', language: Language): PlaceEntry[] {
+  if (button === 'ticket') return language === 'th' ? ['ticket'] : ['ticket', 'free_thai'];
+  return language === 'th' ? ['free', 'free_thai'] : ['free'];
+}
 
 export function placeName(place: Pick<Place, 'name' | 'name_en' | 'name_th'>, language: Language): string {
   return (language === 'th' ? place.name_th : place.name_en) || place.name;
@@ -141,38 +153,61 @@ export type MapBounds = { west: number; south: number; east: number; north: numb
 // Below this zoom too much of Bangkok is in view, so place dots are hidden. Hangout places are fewer and further
 // apart, so they show from further out.
 const PLACES_MIN_ZOOM: Record<PlacePurpose, number> = { food: 14, hangout: 12 };
+// With the Tickets / Free entry filter on there are far fewer places, so they show from further out.
+const FILTERED_MIN_ZOOM = 11;
 
-// Places inside the visible map area, refreshed (debounced) as the map moves.
-export function usePlacesInView(purpose: PlacePurpose = 'food') {
+// Places inside the visible map area, refreshed (debounced) as the map moves or the entry filter changes.
+// `entry` limits them to places with that entry (Tickets / Free entry buttons); null shows all.
+export function usePlacesInView(purpose: PlacePurpose = 'food', entry: PlaceEntry[] | null = null) {
   const [places, setPlaces] = useState<Place[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latest = useRef(0);
+  const lastBounds = useRef<MapBounds | null>(null);
+  const entryKey = entry ? entry.join(',') : '';
 
-  const onBoundsChange = useCallback((bounds: MapBounds) => {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(async () => {
-      if (bounds.zoom < PLACES_MIN_ZOOM[purpose]) {
-        setPlaces([]);
-        return;
-      }
-      const request = ++latest.current;
-      const { data, error } = await supabase.rpc('places_in_bounds', {
-        p_west: bounds.west,
-        p_south: bounds.south,
-        p_east: bounds.east,
-        p_north: bounds.north,
-        p_limit: 400,
-        p_purpose: purpose,
-      });
-      // Ignore answers to older requests that arrive late.
-      if (request !== latest.current) return;
-      if (error) {
-        console.warn('Loading places failed', error.message);
-        return;
-      }
-      setPlaces(data as Place[]);
-    }, 350);
-  }, [purpose]);
+  const schedule = useCallback(
+    (bounds: MapBounds) => {
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(async () => {
+        const filter = entryKey ? entryKey.split(',') : null;
+        if (bounds.zoom < (filter ? FILTERED_MIN_ZOOM : PLACES_MIN_ZOOM[purpose])) {
+          setPlaces([]);
+          return;
+        }
+        const request = ++latest.current;
+        const { data, error } = await supabase.rpc('places_in_bounds', {
+          p_west: bounds.west,
+          p_south: bounds.south,
+          p_east: bounds.east,
+          p_north: bounds.north,
+          p_limit: 400,
+          p_purpose: purpose,
+          p_entry: filter,
+        });
+        // Ignore answers to older requests that arrive late.
+        if (request !== latest.current) return;
+        if (error) {
+          console.warn('Loading places failed', error.message);
+          return;
+        }
+        setPlaces(data as Place[]);
+      }, 350);
+    },
+    [purpose, entryKey],
+  );
+
+  const onBoundsChange = useCallback(
+    (bounds: MapBounds) => {
+      lastBounds.current = bounds;
+      schedule(bounds);
+    },
+    [schedule],
+  );
+
+  // Filter changed: reload the same map area.
+  useEffect(() => {
+    if (lastBounds.current) schedule(lastBounds.current);
+  }, [schedule]);
 
   useEffect(
     () => () => {
@@ -187,7 +222,7 @@ export function usePlacesInView(purpose: PlacePurpose = 'food') {
 export async function fetchPlace(id: string): Promise<Place | null> {
   const { data } = await supabase
     .from('places')
-    .select('id, name, name_en, name_th, kind, lat, lng, website')
+    .select('id, name, name_en, name_th, kind, lat, lng, website, entry')
     .eq('id', id)
     .maybeSingle();
   return (data as Place | null) ?? null;

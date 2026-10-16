@@ -164,6 +164,9 @@ const en = {
     chat: 'Hangout chat',
     buyTickets: 'Buy tickets',
     officialWebsite: 'Official website',
+    entryTicket: 'Entry ticket needed',
+    entryFree: 'Free entry',
+    entryFreeThai: 'Ticket needed for visitors · free for Thai citizens',
     errors: {
       auth_required: 'Please sign in first.',
       not_allowed: 'Verify your phone number to create or join hangouts.',

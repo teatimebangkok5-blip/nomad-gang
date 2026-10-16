@@ -44,6 +44,17 @@ Product spec and tech stack below are agreed. Built so far:
   venue's). Places without one show **Official website** if OpenStreetMap has one (`places.website`, 168 hangout
   places, seeded by `*_seed_hangout_place_websites.sql`; plain http links were skipped). Not from Google Maps: that
   needs the paid Places API. All these links must be **https** (database checks + `openLink()`).
+  All 168 OSM websites were opened and checked by hand (`*_fix_place_websites.sql`): 48 removed (dead, hijacked by
+  gambling sites, YouTube/Wikipedia/Facebook/Linktree, directories, wrong place), 10 corrected; 120 remain.
+  **Tickets / Free entry buttons** (`*_place_entry.sql`): `places.entry` / `venues.entry` = `ticket`, `free` or
+  `free_thai` (free for Thai citizens, foreigners pay), null = unconfirmed (shown on the map, under neither button).
+  Set by type (malls, markets, parks/gardens, monuments and **temples** free; zoos, aquariums, theme/water parks,
+  cinemas, theatres, escape rooms, arcades, ice rinks ticketed), then OSM `fee` tags, then ~60 well-known places
+  checked against official and published fees (only the group is stored, not prices): the 8 famous temples that charge
+  foreigners are `free_thai`, Wat Hua Lamphong is null (fee not confirmed). Galleries and most museums stay null
+  (founder's decision: unconfirmed places are left out of both buttons). `free_thai` shows under **Free entry in Thai** and **Tickets in English** (`entryFilter()` in
+  `src/lib/places.ts`); `places_in_bounds(…, p_entry)` filters on the server. Venues: founder sets Entry in the admin
+  panel, else the linked place's. Event / Party buttons work as before. The place card shows the entry line.
 - **Not started:** check-ins (50 m), QR codes and redemptions, staff QR page, redemption feed and push
   notifications, Instagram on profiles, tables/users in the admin panel. Places missing from OpenStreetMap can be added by the founder (admin insert into `places`; no UI yet).
 - Running on the founder's Redmi as a local release APK, connected to the real Supabase project

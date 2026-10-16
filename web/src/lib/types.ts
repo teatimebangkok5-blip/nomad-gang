@@ -25,6 +25,14 @@ export const CATEGORY_LABELS: Record<VenueCategory, string> = {
   entertainment: "Fun & games (cinema, bowling, …)",
 };
 
+export const VENUE_ENTRIES = ["ticket", "free", "free_thai"] as const;
+export type VenueEntry = (typeof VENUE_ENTRIES)[number];
+export const ENTRY_LABELS: Record<VenueEntry, string> = {
+  ticket: "Needs an entry ticket (or pay to play)",
+  free: "Free entry",
+  free_thai: "Free for Thai citizens, foreigners pay",
+};
+
 export const PROMOTION_KINDS = ["discount", "offer", "event", "party", "ticket", "free_entry"] as const;
 export type PromotionKind = (typeof PROMOTION_KINDS)[number];
 
@@ -65,6 +73,8 @@ export type Venue = {
   place_id: string | null;
   // Official ticket page (https), shown in the app as "Buy tickets".
   ticket_url: string | null;
+  // Tickets / Free entry buttons in the app. Null = use the linked map place's entry.
+  entry: VenueEntry | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

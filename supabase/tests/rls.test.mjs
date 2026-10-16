@@ -416,7 +416,7 @@ const lumphiniId = r.rows?.[0]?.id;
 check("Lumphini Park is a hangout place", r.rows?.[0]?.kind === "park");
 r = await tryQuery("authenticated", user, `select count(*)::int n from public.places_in_bounds(100.0, 13.0, 101.0, 14.5, 1000) where id = $1`, [lumphiniId]);
 check("food map doesn't show hangout places", r.rows?.[0]?.n === 0);
-r = await tryQuery("authenticated", user, `select count(*)::int n from public.places_in_bounds(100.0, 13.0, 101.0, 14.5, 1000, 'hangout') where id = $1`, [lumphiniId]);
+r = await tryQuery("authenticated", user, `select count(*)::int n from public.places_in_bounds(100.535, 13.725, 100.548, 13.736, 400, 'hangout') where id = $1`, [lumphiniId]);
 check("hangout map shows hangout places", r.rows?.[0]?.n === 1);
 r = await tryQuery("authenticated", user, `select count(*)::int n from public.places_in_bounds(100.0, 13.0, 101.0, 14.5, 1000, 'hangout') where id = $1`, [placeId]);
 check("hangout map doesn't show food places", r.rows?.[0]?.n === 0);
@@ -533,6 +533,32 @@ r = await promo(`'event', 'x', 'x', '', '', 'other', null, null, now() + interva
 check("event with a non-https ticket link rejected", !!r.error);
 r = await tryQuery("authenticated", user, `select public.admin_save_promotion($1, null, 'event', 'x', 'x', '', '', 'other', null, null, now() + interval '1 day', now() + interval '2 days', true, 'https://x.com')`, [parkVenueId]);
 check("app users can't save promotions with ticket links", !!r.error);
+
+// --- Website clean-up and entry (Tickets / Free entry buttons)
+r = await tryQuery("anon", null, `select count(*)::int n from public.places where website ~ '(youtu|facebook|wikipedia|linktr|meechaitravel|pantipplaza)'`);
+check("wrong / unofficial websites removed", r.rows?.[0]?.n === 0);
+r = await tryQuery("anon", null, `select website from public.places where name_en = 'Wat Phra Kaew'`);
+check("wrong website corrected to the official one", r.rows?.[0]?.website === "https://www.royalgrandpalace.th/en/home");
+const entryOf = async (type, id) =>
+  (await tryQuery("anon", null, `select entry from public.places where osm_type = $1 and osm_id = $2`, [type, id])).rows?.[0]?.entry;
+check("Grand Palace: free for Thai citizens", (await entryOf("way", 23482754)) === "free_thai");
+check("Wat Pho: free for Thai citizens", (await entryOf("way", 376312450)) === "free_thai");
+check("Bangkok National Museum: ticket", (await entryOf("relation", 20505832)) === "ticket");
+check("Suan Luang Rama IX: ticket (10 baht) despite being a park", (await entryOf("way", 33042465)) === "ticket");
+check("Lumphini Park: free (public park)", (await entryOf("way", 23483299)) === "free");
+check("Chatuchak Market: free", (await entryOf("way", 37911198)) === "free");
+r = await tryQuery("anon", null, `select count(*) filter (where entry = 'free')::int f, count(*) filter (where entry is null)::int u from public.places where kind = 'temple'`);
+check("temples are free, except the checked paid ones and Wat Hua Lamphong (unconfirmed)", r.rows?.[0]?.f > 800 && r.rows[0].u === 1);
+r = await tryQuery("anon", null, `select count(*)::int n from public.places where purpose = 'food' and entry is not null`);
+check("food places have no entry", r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", user, `select count(*)::int n, count(*) filter (where entry = 'free')::int f from public.places_in_bounds(100.0, 13.0, 101.0, 14.5, 1000, 'hangout', array['free'])`);
+check("entry filter returns only matching places", r.rows?.[0]?.n > 0 && r.rows[0].n === r.rows[0].f);
+r = await tryQuery("authenticated", user, `select count(*)::int n from public.places_in_bounds(100.48, 13.73, 100.51, 13.76, 400, 'hangout', array['ticket', 'free_thai']) where entry = 'free_thai'`);
+check("Tickets (English) includes free-for-Thais temples", r.rows?.[0]?.n >= 3);
+r = await tryQuery("authenticated", admin, `update public.venues set entry = 'free_thai' where id = $1 returning id`, [parkVenueId]);
+check("founder sets a venue's entry", r.rows?.length === 1);
+r = await tryQuery("authenticated", admin, `update public.venues set entry = 'maybe' where id = $1`, [parkVenueId]);
+check("unknown entry value rejected", !!r.error);
 
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

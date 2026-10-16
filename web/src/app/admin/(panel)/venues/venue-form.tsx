@@ -2,7 +2,15 @@
 
 import { useActionState, useRef, useState } from "react";
 import { Field, FormMessage, SubmitButton, inputClass } from "@/components/form";
-import { CATEGORY_LABELS, DINING_CATEGORIES, HANGOUT_CATEGORIES, type FormState, type Venue } from "@/lib/types";
+import {
+  CATEGORY_LABELS,
+  DINING_CATEGORIES,
+  ENTRY_LABELS,
+  HANGOUT_CATEGORIES,
+  VENUE_ENTRIES,
+  type FormState,
+  type Venue,
+} from "@/lib/types";
 import { PlaceSearch } from "./place-search";
 
 type VenueFormAction = (prev: FormState, formData: FormData) => Promise<FormState>;
@@ -149,6 +157,22 @@ export function VenueForm({ action, venue, hangout = false }: { action: VenueFor
           />
         </Field>
       </div>
+
+      <Field
+        label="Entry (hangout venues)"
+        name="entry"
+        errors={errors.entry}
+        hint={'Decides whether the venue shows under the app’s "Tickets" or "Free entry" button. "Free for Thai citizens" shows under Free entry in Thai and Tickets in English. Leave unset to use the map data.'}
+      >
+        <select id="entry" name="entry" defaultValue={venue?.entry ?? ""} className={inputClass}>
+          <option value="">Not set (use the map data)</option>
+          {VENUE_ENTRIES.map((entry) => (
+            <option key={entry} value={entry}>
+              {ENTRY_LABELS[entry]}
+            </option>
+          ))}
+        </select>
+      </Field>
 
       <Field
         label="Official ticket link (optional)"

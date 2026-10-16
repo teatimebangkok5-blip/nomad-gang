@@ -166,6 +166,9 @@ const th: Translation = {
     chat: 'แชตแฮงเอาท์',
     buyTickets: 'ซื้อตั๋ว',
     officialWebsite: 'เว็บไซต์ทางการ',
+    entryTicket: 'ต้องซื้อบัตรเข้าชม',
+    entryFree: 'เข้าชมฟรี',
+    entryFreeThai: 'คนไทยเข้าชมฟรี · ชาวต่างชาติต้องซื้อบัตร',
     errors: {
       auth_required: 'กรุณาเข้าสู่ระบบก่อน',
       not_allowed: 'กรุณายืนยันเบอร์โทรศัพท์เพื่อสร้างหรือเข้าร่วมแฮงเอาท์',

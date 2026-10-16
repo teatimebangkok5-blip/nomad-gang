@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 
+import type { PlaceEntry } from '@/lib/places';
 import { supabase, uniqueChannelName } from '@/lib/supabase';
 
 // Food and drink venues host tables; hangout venues (parks, malls, museums, …) show on the Hangout map.
@@ -70,17 +71,19 @@ export type Venue = {
   place_id: string | null;
   // Official ticket page (https), set by the founder. Shown as "Buy tickets".
   ticket_url: string | null;
+  // Entry ticket or free (Tickets / Free entry buttons): set by the founder, else the linked map place's.
+  entry: PlaceEntry | null;
   // The active coupon promotion (discount, offer or ticket discount), if any.
   deal: VenueDeal | null;
   // Every active promotion, events/parties that have not ended yet, soonest first.
   promotions: VenueDeal[];
 };
 
-type VenueRow = Omit<Venue, 'deal' | 'promotions'> & { deals: VenueDeal[] };
+type VenueRow = Omit<Venue, 'deal' | 'promotions'> & { deals: VenueDeal[]; place: { entry: PlaceEntry | null } | null };
 
 // Row Level Security only returns live venues and their active promotions, so no filters are needed here.
 const VENUE_COLUMNS =
-  'id, name_en, name_th, category, address_en, address_th, lat, lng, photo_path, place_id, ticket_url, deals(id, kind, title_en, title_th, details_en, details_th, starts_at, ends_at, ticket_url)';
+  'id, name_en, name_th, category, address_en, address_th, lat, lng, photo_path, place_id, ticket_url, entry, place:places(entry), deals(id, kind, title_en, title_th, details_en, details_th, starts_at, ends_at, ticket_url)';
 
 type VenuesState =
   | { status: 'loading'; venues: Venue[] }
@@ -95,11 +98,16 @@ async function fetchVenues(): Promise<Venue[] | null> {
     return null;
   }
   const now = Date.now();
-  return (data as VenueRow[]).map(({ deals, ...venue }) => {
+  return (data as unknown as VenueRow[]).map(({ deals, place, ...venue }) => {
     const promotions = deals
       .filter((deal) => !deal.ends_at || new Date(deal.ends_at).getTime() > now)
       .sort((a, b) => (a.starts_at ?? '').localeCompare(b.starts_at ?? ''));
-    return { ...venue, promotions, deal: promotions.find((deal) => COUPON_KINDS.includes(deal.kind)) ?? null };
+    return {
+      ...venue,
+      entry: venue.entry ?? place?.entry ?? null,
+      promotions,
+      deal: promotions.find((deal) => COUPON_KINDS.includes(deal.kind)) ?? null,
+    };
   });
 }
 

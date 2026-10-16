@@ -24,10 +24,20 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+// Phone check after Google sign-in. Off until SMS is set up (the founder's decision); the database has the matching
+// app_settings.require_phone_verification. Turn both on before launch.
+export const requirePhoneVerification = process.env.EXPO_PUBLIC_REQUIRE_PHONE === 'true';
+
 // The saved session, or, in the temporary preview build (skipLogin), a guest account so tables can be created and
 // joined before Google sign-in is set up. The guest session is saved on the phone like any other.
 async function restoreSession(): Promise<Session | null> {
   const { data } = await supabase.auth.getSession();
+  // Once real sign-in is on, a guest left over from the preview build signs out, so everyone uses their own
+  // Google account (and keeps their own data).
+  if (!skipLogin && data.session?.user.is_anonymous) {
+    await supabase.auth.signOut();
+    return null;
+  }
   if (data.session || !skipLogin) return data.session;
 
   const { data: guest, error } = await supabase.auth.signInAnonymously();

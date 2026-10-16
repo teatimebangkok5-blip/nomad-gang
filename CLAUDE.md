@@ -62,16 +62,29 @@ Product spec and tech stack below are agreed. Built so far:
   `focus`) and opens the place's card; areas only move the map. UI: `src/components/map-search.tsx` (`MapSearchBar` in
   the header, `MapSearchResults` rendered at the screen's top level because Android ignores touches outside a parent's
   bounds), hook `useMapSearch` in `src/lib/map-search.ts`. Place icons for the map and results: `src/lib/place-icons.ts`.
+- **Profiles, follows, feedback** (added 2026-10-16, `*_profiles_follows_feedback.sql`): `src/app/profile/[userId].tsx`
+  (open by tapping a person in a table/hangout or Travellers nearby; Settings → My profile) shows name, Instagram link
+  (`profiles.instagram`, set via `update_my_profile`, links/@ are cleaned to a handle), Followers / Following, tables
+  and hangouts attended (ended, not cancelled), 👍 / 👎 totals, and Follow; Block/Report menu. **Follows** are one-way
+  like Instagram (`follows`, `follow_user` / `unfollow_user`; mutual = friends; blocking removes them); Travellers
+  nearby has a Follow button per person. **Feedback**: after a table or hangout ends (not cancelled, for 14 days)
+  members give each other 👍 or 👎 on the table screen (`member_feedback`, `give_feedback(meetup, user, 1|-1|0)`);
+  who gave what is private, `get_profile` returns totals. Any signed-in user can open a profile except across a
+  block. Data: `src/lib/profiles.ts`.
+- **Login without SMS for now** (founder's decision 2026-10-16): `app_settings.require_phone_verification` (default
+  false) and `EXPO_PUBLIC_REQUIRE_PHONE` (default false) let Google accounts in without the phone check; turn both on
+  once SMS is set up. With `EXPO_PUBLIC_SKIP_LOGIN=false`, a leftover anonymous guest session is signed out on start.
+  Google sign-in still needs the founder's Google Cloud OAuth clients (README; local APK SHA-1 is listed there).
 - **Not started:** check-ins (50 m), QR codes and redemptions, staff QR page, redemption feed and push
-  notifications, Instagram on profiles, tables/users in the admin panel. Places missing from OpenStreetMap can be added by the founder (admin insert into `places`; no UI yet).
+  notifications, tables/users in the admin panel. Places missing from OpenStreetMap can be added by the founder (admin insert into `places`; no UI yet).
 - Running on the founder's Redmi as a local release APK, connected to the real Supabase project
   (`zxghiilryqzexzvacbrl`, migrations applied by Supabase's GitHub integration on push to `main`).
-- Google sign-in and phone verification are **not configured yet** (no Google OAuth clients, providers off in
-  Supabase). Until they are, `mobile/.env.local` has the **temporary** `EXPO_PUBLIC_SKIP_LOGIN=true`
-  (`src/lib/preview.ts`): the app opens straight to home, signs in as an **anonymous guest** (needs "Anonymous
-  sign-ins" on in Supabase) and shows a "Preview mode" notice. Guests may create/join tables only while
-  `app_settings.allow_guest_meetups` is true. **Before any build for real users or Google Play: set the switch to
-  false and set `allow_guest_meetups = false`.**
+- **Google sign-in is on** (2026-10-16): the founder created the Google Cloud OAuth clients (Web client ID in
+  `mobile/.env.local` as `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`; Android client for the debug-key SHA-1 in README) and
+  enabled Google in Supabase. `EXPO_PUBLIC_SKIP_LOGIN=false` now (the preview/guest mode in `src/lib/preview.ts`
+  still exists for testing). **Phone verification is not configured** (no SMS provider): the phone check is off via
+  `EXPO_PUBLIC_REQUIRE_PHONE=false` + `app_settings.require_phone_verification = false`. **Before Google Play:** set
+  up SMS, turn both on, set `allow_guest_meetups = false` and consider turning off Anonymous sign-ins in Supabase.
 
 Setup steps (Supabase, Google sign-in, SMS, Android build) are in `README.md`.
 

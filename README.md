@@ -70,6 +70,14 @@ live from your PC.
 3. In Supabase, **Authentication → Sign In / Providers → Google**: turn it on and paste the Client ID (into
    **Client IDs**) and the secret.
 4. The Android client is created in step 3 of "Build and install" below, once Expo has made your app's signing key.
+   For the **local release APK** (built with `gradlew.bat assembleRelease`, signed with
+   `mobile/android/app/debug.keystore`), create the Android client now: **Create credentials → OAuth client ID →
+   Android**, package name `com.tablemeet.app`, SHA-1 `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`.
+   (Google Play builds get their own key later; add its SHA-1 as another Android client then.)
+5. Put the **Web** client ID in `mobile/.env.local` as `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, set
+   `EXPO_PUBLIC_SKIP_LOGIN=false`, and rebuild the app. Any guest account left on the phone is signed out, so
+   everyone uses their own Google account. The SMS phone check stays off until step 2 is done
+   (`EXPO_PUBLIC_REQUIRE_PHONE` and `app_settings.require_phone_verification`).
 
 ### 2. Phone verification (SMS)
 

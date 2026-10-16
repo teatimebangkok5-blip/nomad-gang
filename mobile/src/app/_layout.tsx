@@ -5,7 +5,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
-import { AuthProvider, useAuth } from '@/lib/auth';
+import { AuthProvider, requirePhoneVerification, useAuth } from '@/lib/auth';
 import { skipLogin } from '@/lib/preview';
 import { ThemeProvider, useTheme } from '@/lib/theme';
 
@@ -25,7 +25,9 @@ export default function RootLayout() {
 // With the temporary skipLogin switch, always -> home.
 function RootNavigator() {
   const { name: themeName, colors: Colors } = useTheme();
-  const { ready, session, phoneVerified } = useAuth();
+  const { ready, session, phoneVerified: verified } = useAuth();
+  // While the phone check is off (until SMS is set up), a Google account goes straight in.
+  const phoneVerified = verified || !requirePhoneVerification;
 
   useEffect(() => {
     if (ready) SplashScreen.hideAsync();
@@ -52,6 +54,7 @@ function RootNavigator() {
           <Stack.Screen name="travellers" />
           <Stack.Screen name="dm/[userId]" />
           <Stack.Screen name="table-chat/[id]" />
+          <Stack.Screen name="profile/[userId]" />
         </Stack.Protected>
       </Stack>
     </>

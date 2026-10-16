@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, FlatList, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
@@ -13,6 +13,7 @@ import { useAuth } from '@/lib/auth';
 import { formatDayLabel, bangkokDay, bangkokMinutes, formatClock } from '@/lib/bangkok-time';
 import { useThreads, type ThreadSummary } from '@/lib/chat';
 import { useCurrentLocation } from '@/lib/location';
+import { useFollowing } from '@/lib/profiles';
 import { makeStyles, useColors } from '@/lib/theme';
 import { useDiscoverable, useNearbyTravellers, type Traveller } from '@/lib/travellers';
 
@@ -81,6 +82,7 @@ function NearbyTab({ myId }: { myId: string | undefined }) {
   const location = useCurrentLocation();
   const coords = location.state.status === 'granted' ? location.state.coords : null;
   const { travellers } = useNearbyTravellers(visibility.on === true && coords !== null, coords);
+  const following = useFollowing(myId);
   const [turningOn, setTurningOn] = useState(false);
 
   if (visibility.on === null) {
@@ -155,27 +157,49 @@ function NearbyTab({ myId }: { myId: string | undefined }) {
           </View>
         )
       }
-      renderItem={({ item }) => (
-        <View style={styles.person}>
-          <Avatar name={item.display_name} />
-          <View style={styles.personBody}>
-            <Text style={styles.personName} numberOfLines={1}>
-              {item.display_name}
-            </Text>
-            <Text style={styles.muted}>
-              {t('travellers.distance', { km: item.distance_km.toFixed(1) })} ·{' '}
-              {item.minutes_ago < 5 ? t('travellers.activeNow') : t('travellers.activeAgo', { min: item.minutes_ago })}
-            </Text>
+      renderItem={({ item }) => {
+        const followed = following.ids.has(item.user_id);
+        return (
+          <View style={styles.person}>
+            {/* Name and avatar open the person's profile. */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${t('profile.open')}: ${item.display_name}`}
+              onPress={() => router.push({ pathname: '/profile/[userId]', params: { userId: item.user_id } })}
+              style={({ pressed }) => [styles.personMain, pressed && styles.pressed]}>
+              <Avatar name={item.display_name} />
+              <View style={styles.personBody}>
+                <Text style={styles.personName} numberOfLines={1}>
+                  {item.display_name}
+                </Text>
+                <Text style={styles.muted} numberOfLines={1}>
+                  {t('travellers.distance', { km: item.distance_km.toFixed(1) })} ·{' '}
+                  {item.minutes_ago < 5 ? t('travellers.activeNow') : t('travellers.activeAgo', { min: item.minutes_ago })}
+                </Text>
+              </View>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: followed }}
+              onPress={async () => {
+                const error = await following.toggle(item.user_id);
+                if (error) Alert.alert(t(`profile.errors.${error}`));
+              }}
+              style={({ pressed }) => [styles.followButton, followed && styles.followButtonOn, pressed && styles.pressed]}>
+              <Text style={[styles.followButtonText, followed && styles.followButtonTextOn]}>
+                {followed ? t('profile.unfollow') : t('profile.follow')}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('travellers.message')}
+              onPress={() => openChat(item)}
+              style={({ pressed }) => [styles.messageButton, pressed && styles.pressed]}>
+              <Icon name="chat" size={18} color={Colors.onBrand} />
+            </Pressable>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => openChat(item)}
-            style={({ pressed }) => [styles.messageButton, pressed && styles.pressed]}>
-            <Icon name="chat" size={16} color={Colors.onBrand} />
-            <Text style={styles.messageButtonText}>{t('travellers.message')}</Text>
-          </Pressable>
-        </View>
-      )}
+        );
+      }}
     />
   );
 }
@@ -315,6 +339,7 @@ const useStyles = makeStyles((Colors) => ({
     borderColor: Colors.border,
   },
   pressed: { opacity: 0.7 },
+  personMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   personBody: { flex: 1, gap: 2 },
   personName: { ...Type.heading, color: Colors.text, flexShrink: 1 },
   threadTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
@@ -331,13 +356,21 @@ const useStyles = makeStyles((Colors) => ({
   },
   avatarText: { ...Type.heading, color: Colors.text },
   messageButton: {
-    flexDirection: 'row',
+    width: 40,
+    height: 40,
     alignItems: 'center',
-    gap: 6,
-    minHeight: 38,
-    paddingHorizontal: Spacing.md,
+    justifyContent: 'center',
     borderRadius: Radius.pill,
     backgroundColor: Colors.orange,
   },
-  messageButtonText: { ...Type.label, color: Colors.onBrand, fontWeight: '800' },
+  followButton: {
+    minHeight: 38,
+    paddingHorizontal: Spacing.md,
+    justifyContent: 'center',
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.violet,
+  },
+  followButtonOn: { backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.borderStrong },
+  followButtonText: { ...Type.label, color: Colors.white, fontWeight: '800' },
+  followButtonTextOn: { color: Colors.text },
 }));

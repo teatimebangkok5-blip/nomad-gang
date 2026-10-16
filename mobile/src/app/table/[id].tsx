@@ -22,6 +22,7 @@ import {
   useMeetup,
   type MeetupErrorKey,
 } from '@/lib/meetups';
+import { useMyFeedback } from '@/lib/profiles';
 import { venuePhotoUrl } from '@/lib/supabase';
 import { PROMOTION_EMOJI, useVenues } from '@/lib/venues';
 import { makeStyles, useColors } from '@/lib/theme';
@@ -38,6 +39,18 @@ export default function TableScreen() {
   const venues = useVenues();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<MeetupErrorKey | null>(null);
+  // 👍 / 👎 for the other members: once it has ended (not cancelled), for 14 days, if you were there.
+  const [openedAt] = useState(() => Date.now());
+  const loaded = state.status === 'ready' ? state.meetup : null;
+  const endsAt = loaded ? new Date(loaded.ends_at).getTime() : 0;
+  const canRate = Boolean(
+    loaded &&
+      loaded.status === 'open' &&
+      endsAt <= openedAt &&
+      endsAt > openedAt - 14 * 24 * 60 * 60 * 1000 &&
+      loaded.members.some((m) => m.user_id === session?.user.id),
+  );
+  const feedback = useMyFeedback(id, canRate);
 
   async function run(action: (meetupId: string) => Promise<{ error: MeetupErrorKey | null }>) {
     setError(null);
@@ -204,20 +217,55 @@ export default function TableScreen() {
             </Text>
           )}
 
-          <Text style={styles.heading}>{t('tables.whoIsComing')}</Text>
+          <Text style={styles.heading}>{canRate ? t('feedback.title') : t('tables.whoIsComing')}</Text>
+          {canRate && <Text style={styles.feedbackBody}>{t('feedback.body')}</Text>}
           <View style={styles.members}>
-            {meetup.members.map((member) => (
-              <View key={member.user_id} style={styles.member}>
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{member.display_name.slice(0, 1).toUpperCase() || '?'}</Text>
+            {meetup.members.map((member) => {
+              const vote = feedback.votes.get(member.user_id);
+              const rateable = canRate && member.user_id !== userId;
+              return (
+                <View key={member.user_id} style={styles.member}>
+                  {/* Tap a person to open their profile. */}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${t('profile.open')}: ${member.display_name}`}
+                    onPress={() => router.push({ pathname: '/profile/[userId]', params: { userId: member.user_id } })}
+                    style={({ pressed }) => [styles.memberMain, pressed && styles.memberPressed]}>
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>{member.display_name.slice(0, 1).toUpperCase() || '?'}</Text>
+                    </View>
+                    <Text style={styles.memberName} numberOfLines={1}>
+                      {member.display_name}
+                      {member.user_id === userId ? ` (${t('tables.you')})` : ''}
+                    </Text>
+                    {member.user_id === meetup.host_id && <Text style={styles.hostTag}>{t('tables.host')}</Text>}
+                  </Pressable>
+                  {rateable && (
+                    <View style={styles.votes}>
+                      {([1, -1] as const).map((value) => (
+                        <Pressable
+                          key={value}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: vote === value }}
+                          accessibilityLabel={t(value === 1 ? 'feedback.good' : 'feedback.bad', { name: member.display_name })}
+                          hitSlop={4}
+                          onPress={async () => {
+                            const problem = await feedback.give(member.user_id, value);
+                            if (problem) Alert.alert(t(`profile.errors.${problem}`));
+                          }}
+                          style={({ pressed }) => [
+                            styles.voteButton,
+                            vote === value && (value === 1 ? styles.voteUp : styles.voteDown),
+                            pressed && styles.memberPressed,
+                          ]}>
+                          <Text style={styles.voteEmoji}>{value === 1 ? '👍' : '👎'}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
                 </View>
-                <Text style={styles.memberName} numberOfLines={1}>
-                  {member.display_name}
-                  {member.user_id === userId ? ` (${t('tables.you')})` : ''}
-                </Text>
-                {member.user_id === meetup.host_id && <Text style={styles.hostTag}>{t('tables.host')}</Text>}
-              </View>
-            ))}
+              );
+            })}
           </View>
 
           {errorText && (
@@ -320,11 +368,28 @@ const useStyles = makeStyles((Colors) => ({
   member: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
+    gap: Spacing.sm,
     padding: Spacing.sm,
     borderRadius: Radius.md,
     backgroundColor: Colors.surface,
   },
+  memberMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  memberPressed: { opacity: 0.7 },
+  feedbackBody: { ...Type.small, color: Colors.textSecondary, marginTop: -Spacing.sm, marginBottom: Spacing.md },
+  votes: { flexDirection: 'row', gap: Spacing.xs },
+  voteButton: {
+    width: 44,
+    height: 40,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  voteUp: { backgroundColor: Colors.orangeTint, borderColor: Colors.orange },
+  voteDown: { backgroundColor: Colors.dangerBg, borderColor: Colors.danger },
+  voteEmoji: { fontSize: 18 },
   avatar: {
     width: 36,
     height: 36,

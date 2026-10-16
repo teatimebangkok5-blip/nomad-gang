@@ -40,6 +40,8 @@ await db.exec(`
 
 await db.exec(migration);
 console.log("migration applied OK");
+// The checks below were written for the launch rules (phone required); the "no phone check" mode is tested at the end.
+await db.exec(`update public.app_settings set require_phone_verification = true`);
 
 const admin = "11111111-1111-1111-1111-111111111111";
 const user = "22222222-2222-2222-2222-222222222222";
@@ -587,6 +589,94 @@ r = await tryQuery("anon", null, `select count(*)::int n from public.search_map(
 check("% is searched literally, not as a wildcard", r.rows?.[0]?.n === 0);
 r = await tryQuery("anon", null, `select count(*)::int n from public.search_map('a', 'food')`);
 check("one-letter searches return nothing", r.rows?.[0]?.n === 0);
+
+// --- Google accounts without a phone check, profiles, follows, feedback
+r = await tryQuery("authenticated", unverified, `select public.create_meetup_at_place($1, $2, 3)`, [placeId, inHours(30)]);
+check("with the phone check on, a Google account without a phone can't create", /not_allowed/.test(r.error ?? ""));
+await db.exec(`update public.app_settings set require_phone_verification = false`);
+r = await tryQuery("authenticated", unverified, `select public.create_meetup_at_place($1, $2, 3) as id`, [placeId, inHours(30)]);
+check("with the phone check off (for now), a Google account can create a table", !r.error);
+const googleTableId = r.rows?.[0]?.id;
+await db.exec(`update public.app_settings set allow_guest_meetups = false`);
+r = await tryQuery("authenticated", g0, `select public.join_meetup($1)`, [googleTableId]);
+check("guests still need allow_guest_meetups", /not_allowed/.test(r.error ?? ""));
+await db.exec(`update public.app_settings set allow_guest_meetups = true`);
+r = await tryQuery("authenticated", user, `update public.app_settings set require_phone_verification = false returning id`);
+check("app users can't change the phone setting", !r.error && r.rows.length === 0);
+
+r = await tryQuery("authenticated", user, `select public.update_my_profile('  Somchai J.  ', 'https://www.instagram.com/somchai.eats/?igsh=abc')`);
+check("profile saved; Instagram link turned into a handle", !r.error);
+r = await tryQuery("authenticated", g1, `select display_name, instagram from public.profiles where id = $1`, [user]);
+check("others see the name and Instagram handle", r.rows?.[0]?.display_name === "Somchai J." && r.rows[0].instagram === "somchai.eats");
+r = await tryQuery("authenticated", user, `select public.update_my_profile('Somchai', '@bad handle!')`);
+check("invalid Instagram rejected", /invalid_instagram/.test(r.error ?? ""));
+r = await tryQuery("authenticated", user, `select public.update_my_profile('   ', null)`);
+check("empty name rejected", /name_required/.test(r.error ?? ""));
+r = await tryQuery("authenticated", user, `update public.profiles set instagram = 'no spaces allowed' where id = $1`, [user]);
+check("bad Instagram blocked even on direct update", !!r.error);
+
+r = await tryQuery("authenticated", g1, `select public.follow_user($1)`, [user]);
+check("follow someone", !r.error);
+r = await tryQuery("authenticated", g1, `select public.follow_user($1)`, [user]);
+check("following twice is harmless", !r.error);
+r = await tryQuery("authenticated", g1, `select public.follow_user($1)`, [g1]);
+check("can't follow yourself", /not_found/.test(r.error ?? ""));
+r = await tryQuery("authenticated", user, `insert into public.follows (follower_id, followee_id) values ($1, $2)`, [g2, user]);
+check("can't create follows directly (or for someone else)", !!r.error);
+r = await tryQuery("authenticated", user, `select public.follow_user($1)`, [g0]);
+check("can't follow someone across a block", /blocked/.test(r.error ?? ""));
+r = await tryQuery("authenticated", user, `select public.follow_user($1)`, [g1]);
+r = await tryQuery("authenticated", g1, `select followers, following, i_follow, follows_me from public.get_profile($1)`, [user]);
+check("profile counts followers / following and mutual follow", r.rows?.[0]?.followers === 1 && r.rows[0].following === 1 && r.rows[0].i_follow && r.rows[0].follows_me);
+r = await tryQuery("authenticated", g1, `select public.unfollow_user($1)`, [user]);
+r = await tryQuery("authenticated", g2, `select followers from public.get_profile($1)`, [user]);
+check("unfollow", r.rows?.[0]?.followers === 0);
+r = await tryQuery("authenticated", g0, `select count(*)::int n from public.get_profile($1)`, [user]);
+check("blocked people can't see each other's profile", r.rows?.[0]?.n === 0);
+r = await tryQuery("anon", null, `select count(*)::int n from public.get_profile($1)`, [user]);
+check("signed-out visitors can't load profiles", !!r.error || r.rows?.[0]?.n === 0);
+await tryQuery("authenticated", g2, `select public.follow_user($1)`, [g1]);
+await tryQuery("authenticated", g1, `insert into public.blocks (blocker_id, blocked_id) values ($1, $2)`, [g1, g2]);
+r = await tryQuery("service_role", null, `select count(*)::int n from public.follows where follower_id = $1 and followee_id = $2`, [g2, g1]);
+check("blocking removes follows", r.rows?.[0]?.n === 0);
+await db.exec(`delete from public.blocks where blocker_id = '${g1}' and blocked_id = '${g2}'`);
+
+// Feedback: a hangout of user + g1 + g2 that has ended.
+r = await hangout(g2, { lat: 13.75, lng: 100.5, spotName: "Feedback test", size: 5 });
+const fbId = r.rows?.[0]?.id;
+await tryQuery("authenticated", user, `select public.join_meetup($1)`, [fbId]);
+await tryQuery("authenticated", g1, `select public.join_meetup($1)`, [fbId]);
+const vote = (who, to, v) => tryQuery("authenticated", who, `select public.give_feedback($1, $2, $3)`, [fbId, to, v]);
+r = await vote(user, g1, 1);
+check("no feedback before it has ended", /meetup_not_ended/.test(r.error ?? ""));
+await db.exec(`update public.meetups set starts_at = now() - interval '3 hours', ends_at = now() - interval '1 hour' where id = '${fbId}'`);
+r = await vote(user, g1, 1);
+check("member gives 👍 after it ended", !r.error);
+r = await vote(g2, g1, -1);
+check("another member gives 👎", !r.error);
+r = await vote(user, g1, -1);
+check("a vote can be changed", !r.error);
+r = await vote(user, g1, 1);
+r = await vote(user, user, 1);
+check("can't rate yourself", /not_member/.test(r.error ?? ""));
+r = await vote(g0, g1, 1);
+check("non-members can't rate", /not_member/.test(r.error ?? ""));
+r = await vote(user, g1, 5);
+check("only 👍 or 👎", /invalid_vote/.test(r.error ?? ""));
+r = await tryQuery("authenticated", user, `insert into public.member_feedback (meetup_id, from_id, to_id, vote) values ($1, $2, $3, 1)`, [fbId, user, g2]);
+check("feedback can't be written directly", !!r.error);
+r = await tryQuery("authenticated", g1, `select count(*)::int n from public.member_feedback where to_id = $1`, [g1]);
+check("who gave what stays private", r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", user, `select vote from public.member_feedback where meetup_id = $1 and to_id = $2`, [fbId, g1]);
+check("people see the vote they gave", r.rows?.[0]?.vote === 1);
+r = await tryQuery("authenticated", g2, `select thumbs_up, thumbs_down, hangouts from public.get_profile($1)`, [g1]);
+check("profile shows 👍 / 👎 totals and hangouts attended", r.rows?.[0]?.thumbs_up === 1 && r.rows[0].thumbs_down === 1 && r.rows[0].hangouts === 1);
+r = await vote(user, g1, 0);
+r = await tryQuery("authenticated", g2, `select thumbs_up from public.get_profile($1)`, [g1]);
+check("a vote can be taken back", r.rows?.[0]?.thumbs_up === 0);
+await db.exec(`update public.meetups set starts_at = now() - interval '20 days', ends_at = now() - interval '19 days' where id = '${fbId}'`);
+r = await vote(user, g1, 1);
+check("feedback closes 14 days after the end", /feedback_closed/.test(r.error ?? ""));
 
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

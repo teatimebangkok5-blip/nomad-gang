@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Alert, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,7 +12,7 @@ import { skipLogin } from '@/lib/preview';
 import { makeStyles, useColors, useTheme, type ThemeName } from '@/lib/theme';
 import { useDiscoverable } from '@/lib/travellers';
 
-// Settings: appearance (dark / light), language, visibility to travellers, and sign out.
+// Settings: my profile, appearance (dark / light), language, visibility to travellers, and sign out.
 export default function SettingsScreen() {
   const styles = useStyles();
   const { t } = useTranslation();
@@ -42,6 +43,16 @@ export default function SettingsScreen() {
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
       <ScreenHeader title={t('settings.title')} />
       <ScrollView contentContainerStyle={styles.content}>
+        {session && (
+          <View style={styles.group}>
+            <OptionRow
+              icon="person"
+              label={t('settings.myProfile')}
+              onPress={() => router.push({ pathname: '/profile/[userId]', params: { userId: session.user.id } })}
+            />
+          </View>
+        )}
+
         <Text style={styles.sectionTitle}>{t('settings.appearance')}</Text>
         <View style={styles.group}>
           {themes.map((option) => (

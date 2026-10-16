@@ -24,17 +24,14 @@ import { Logo } from '@/components/logo';
 import { MeetupCard } from '@/components/meetup-card';
 import { MapSearchBar, MapSearchResults } from '@/components/map-search';
 import { SlideUpPanel } from '@/components/slide-up-panel';
-import { VenueCard } from '@/components/venue-card';
 import { VenueMap, type MapFocus, type MapPin } from '@/components/venue-map';
 import { AREA_ZOOM, PLACE_ZOOM, useMapSearch, type SearchResult } from '@/lib/map-search';
 import { Radius, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { useThreads } from '@/lib/chat';
-import { PromoFilter } from '@/components/promo-filter';
-import { CATEGORY_EMOJI } from '@/components/venue-map';
 import { formatWhen } from '@/lib/bangkok-time';
-import { distanceMeters, useCurrentLocation } from '@/lib/location';
+import { useCurrentLocation } from '@/lib/location';
 import {
   directionsUrl,
   joinMeetup,
@@ -46,7 +43,8 @@ import {
 } from '@/lib/meetups';
 import { placeName, usePlacesInView, type Place } from '@/lib/places';
 import { skipLogin } from '@/lib/preview';
-import { isHangoutVenue, PROMOTION_EMOJI, useVenues, type PromotionKind, type Venue } from '@/lib/venues';
+import { isHangoutVenue, PROMOTION_EMOJI, useVenues, type Venue } from '@/lib/venues';
+import { useMyName } from '@/lib/profiles';
 import { makeStyles, useColors } from '@/lib/theme';
 
 // What the bottom card shows: a partner venue, any Bangkok food place (OpenStreetMap) someone tapped, or the
@@ -56,16 +54,16 @@ type Selection =
   | { type: 'place'; place: Place }
   | { type: 'hangouts'; key: string };
 
-// Home: a full-screen map of open tables and hangouts. Logo and the Discount/Offer/Event/Party buttons float on top;
-// a swipeable row of cards, "Create table", "Create hangout" and a "List" button float at the bottom. "List" slides
-// up a panel with everything open and the partner places. Hangout venues (parks, malls, …) live on the Hangout map.
+// Home: a full-screen map of the open tables and hangouts people created, plus food place icons (partner venues
+// and their Discount/Offer/Event/Party buttons are on the Create table map). My profile, the logo, language,
+// Travellers, Settings and the search bar float on top; a swipeable row of cards, "Create table", "Create hangout"
+// and a "List" button (everything open) float at the bottom.
 export default function HomeScreen() {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const language = currentLanguage();
   const { session } = useAuth();
   const venues = useVenues();
   const meetups = useOpenMeetups(Boolean(session));
@@ -74,7 +72,6 @@ export default function HomeScreen() {
     (thread) => thread.status === 'pending' && thread.requested_by !== session?.user.id,
   ).length;
   const location = useCurrentLocation();
-  const [promo, setPromo] = useState<PromotionKind | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const { places: mapPlaces, onBoundsChange } = usePlacesInView();
   const [joiningId, setJoiningId] = useState<string | null>(null);
@@ -86,20 +83,14 @@ export default function HomeScreen() {
   const venueById = new Map(venues.venues.map((venue) => [venue.id, venue]));
   const diningVenues = venues.venues.filter((venue) => !isHangoutVenue(venue));
   const diningVenueIds = new Set(diningVenues.map((venue) => venue.id));
-  const search = useMapSearch('food', diningVenues);
+  // Partner venues live on the Create table map, so home search finds places and areas only.
+  const search = useMapSearch('food', []);
+  const myName = useMyName(session?.user.id);
   const [focus, setFocus] = useState<MapFocus | null>(null);
-  const filtersOn = promo !== null;
-  const venueMatches = (venue: Venue | undefined) =>
-    Boolean(venue) &&
-    (promo === null || Boolean(venue?.promotions.some((p) => p.kind === promo)));
-  // Tables at other places have no promotions, so they only show when no filter is on.
-  const meetupMatches = (meetup: OpenMeetup) =>
-    meetup.venue_id ? venueMatches(venueById.get(meetup.venue_id)) : !filtersOn;
+  const visibleMeetups = meetups.meetups;
 
-  const visibleMeetups = meetups.meetups.filter(meetupMatches);
-
-  // Partner venues: pin shows the promotion type (or the place type), badge = open tables and hangouts there.
-  // Tables at food places share a 👥 pin per place; hangouts anywhere else share a 🙌 pin per place or spot.
+  // Home shows what people created: tables share a 👥 pin per venue or place (partner venues themselves aren't
+  // pinned on home), hangouts share a 🙌 pin per place or spot.
   const tablesAtVenue = new Map<string, number>();
   const tablesAtPlace = new Map<string, OpenMeetup[]>();
   const hangoutGroups = new Map<string, OpenMeetup[]>();
@@ -123,17 +114,11 @@ export default function HomeScreen() {
   const selectedPlaceId = selection?.type === 'place' ? selection.place.id : null;
   const selectedHangoutsKey = selection?.type === 'hangouts' ? selection.key : null;
   const pins: MapPin[] = [
-    ...diningVenues.filter(venueMatches).map((venue) => {
-      const shown = (promo && venue.promotions.find((p) => p.kind === promo)) || venue.deal || venue.promotions[0];
-      return {
-        key: `v:${venue.id}`,
-        lat: venue.lat,
-        lng: venue.lng,
-        emoji: shown ? PROMOTION_EMOJI[shown.kind] : CATEGORY_EMOJI[venue.category],
-        label: localized(venue, 'name', language),
-        count: tablesAtVenue.get(venue.id),
-        selected: venue.id === selectedVenueId,
-      };
+    ...[...tablesAtVenue].flatMap(([venueId, count]) => {
+      const venue = venueById.get(venueId);
+      return venue
+        ? [{ key: `v:${venueId}`, lat: venue.lat, lng: venue.lng, emoji: '👥', tone: 'violet' as const, count, selected: venueId === selectedVenueId }]
+        : [];
     }),
     ...[...tablesAtPlace].flatMap(([placeId, list]) => {
       const first = list[0];
@@ -148,11 +133,6 @@ export default function HomeScreen() {
         : [];
     }),
   ];
-
-  const places = diningVenues
-    .filter(venueMatches)
-    .map((venue) => ({ venue, distance: coords ? distanceMeters(coords, venue) : null }))
-    .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
 
   const cardWidth = Math.min(width - Spacing.lg * 2 - Spacing.xl, 420);
 
@@ -260,7 +240,23 @@ export default function HomeScreen() {
           pointerEvents="none"
         />
         <View style={[styles.topBar, { paddingTop: insets.top + Spacing.sm }]}>
-          <Logo size={20} />
+          <View style={styles.brand}>
+            {/* My profile, top left. */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('profile.myProfile')}
+              hitSlop={8}
+              disabled={!session}
+              onPress={() => session && router.push({ pathname: '/profile/[userId]', params: { userId: session.user.id } })}
+              style={({ pressed }) => [styles.profileButton, pressed && styles.roundButtonPressed]}>
+              {myName ? (
+                <Text style={styles.profileInitial}>{myName.slice(0, 1).toUpperCase()}</Text>
+              ) : (
+                <Icon name="person" size={20} color={Colors.text} />
+              )}
+            </Pressable>
+            <Logo size={20} />
+          </View>
           <View style={styles.topActions}>
             <LanguageToggle />
             <Pressable
@@ -291,16 +287,6 @@ export default function HomeScreen() {
           // Developer-only notice (English on purpose): reminds that this build skips sign-in.
           <Text style={styles.previewNotice}>Preview mode: sign-in is turned off</Text>
         )}
-
-        <View style={styles.chips}>
-          <PromoFilter
-            value={promo}
-            onChange={(value) => {
-              setPromo(value);
-              setSelection(null);
-            }}
-          />
-        </View>
 
         {location.state.status === 'denied' && (
           <Pressable
@@ -400,9 +386,6 @@ export default function HomeScreen() {
           meetups={visibleMeetups}
           meetupsStatus={session ? meetups.status : 'ready'}
           renderMeetup={renderMeetup}
-          places={places}
-          venuesStatus={venues.status}
-          onRetryVenues={venues.retry}
           onRefresh={async () => {
             location.refresh();
             await Promise.all([venues.pullToRefresh(), meetups.reload()]);
@@ -538,17 +521,11 @@ function ListPanel({
   meetups,
   meetupsStatus,
   renderMeetup,
-  places,
-  venuesStatus,
-  onRetryVenues,
   onRefresh,
 }: {
   meetups: OpenMeetup[];
   meetupsStatus: 'loading' | 'ready' | 'error';
   renderMeetup: (meetup: OpenMeetup) => React.ReactNode;
-  places: { venue: Venue; distance: number | null }[];
-  venuesStatus: 'loading' | 'ready' | 'error';
-  onRetryVenues: () => void;
   onRefresh: () => Promise<void>;
 }) {
   const styles = useStyles();
@@ -588,28 +565,6 @@ function ListPanel({
         </View>
       )}
 
-      <Text style={[styles.sectionTitle, styles.sectionSpacing]}>{t('tables.partnerPlaces')}</Text>
-      {places.length === 0 ? (
-        venuesStatus === 'loading' ? (
-          <ActivityIndicator color={Colors.accent} style={styles.cardsSpinner} />
-        ) : (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>{venuesStatus === 'error' ? t('home.errorTitle') : t('home.emptyTitle')}</Text>
-            <Text style={styles.emptyBody}>{venuesStatus === 'error' ? t('home.errorBody') : t('home.emptyBody')}</Text>
-            {venuesStatus === 'error' && (
-              <View style={styles.retry}>
-                <Button title={t('common.tryAgain')} variant="secondary" onPress={onRetryVenues} />
-              </View>
-            )}
-          </View>
-        )
-      ) : (
-        <View style={styles.list}>
-          {places.map(({ venue, distance }) => (
-            <VenueCard key={venue.id} venue={venue} distance={distance} />
-          ))}
-        </View>
-      )}
     </ScrollView>
   );
 }
@@ -624,6 +579,18 @@ const useStyles = makeStyles((Colors) => ({
     paddingHorizontal: Spacing.lg,
   },
   topActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  brand: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  profileButton: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.violetTint,
+    borderWidth: 2,
+    borderColor: Colors.violet,
+  },
+  profileInitial: { ...Type.heading, fontWeight: '800', color: Colors.text },
   roundButton: {
     width: 40,
     height: 40,

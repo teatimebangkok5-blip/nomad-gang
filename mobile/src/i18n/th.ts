@@ -254,7 +254,6 @@ const th: Translation = {
     dark: 'มืด',
     light: 'สว่าง',
     language: 'ภาษา',
-    myProfile: 'โปรไฟล์ของฉัน',
     account: 'บัญชี',
   },
   promo: {

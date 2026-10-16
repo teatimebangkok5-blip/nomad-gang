@@ -6,9 +6,11 @@ This file guides Claude Code when working in this repository.
 Product spec and tech stack below are agreed. Built so far:
 - **Done:** database for venues, deals, coupon codes, venue staff logins and the admin role (`supabase/`), the
   admin panel for managing them (`web/`), and the Android app's welcome/Google sign-in, phone verification, home
-  (**full-screen map** of open tables and Bangkok food places; logo, language, settings and the Discount/Offer/Event/Party buttons float on top over a fade; a
-  swipeable row of table cards, "Create table" and a "List" button float at the bottom; "List" slides up a panel
-  with open tables + partner places; tapping a pin filters the cards to that venue), the Create table flow and the
+  (**full-screen map** of the open tables and hangouts people created (👥 / 🙌 pins, also at partner venues) and
+  Bangkok food place icons; **no partner venue pins and no Discount/Offer/Event/Party buttons on home** (founder,
+  2026-10-16: those are on the Create table map). My profile (avatar, top left), logo, language, Travellers,
+  settings and the search bar float on top over a fade; a swipeable row of cards, "Create table", "Create hangout"
+  and a "List" button float at the bottom; "List" slides up the open tables and hangouts), the Create table flow and the
   table screen (join / leave / cancel) (`mobile/`). `VenueMap` takes `fullScreen` + `mapPadding` (measured overlay
   heights) so centering and the map attribution stay clear of the floating UI.
   There is no place-type (cafe/restaurant/rooftop/bar) filter any more (removed 2026-10-16 at the founder's request); tapping a place
@@ -244,7 +246,9 @@ How the key rules map onto this:
   - Maps: `src/components/venue-map.tsx` wraps MapLibre (`Map`, `Camera`, `Marker` for emoji pins,
     `GeoJSONSource` + symbol `Layer` for places, `UserLocation`). Places show as **colored circle icons with their
     name beside them** (like Apple Maps): OSM kind → icon/color via `placeIcon()` / `PLACE_ICON_COLORS` in
-    `src/lib/places.ts`, images in `assets/images/map-icons/` (Material Icons, Apache 2.0) registered with `Images`.
+    `src/lib/places.ts`, images in `assets/images/map-icons/` (120 px **3D** glossy balls with a shadow and the white
+    Material icon, Apache 2.0, drawn by a System.Drawing script; shown at `PLACE_ICON_SIZE` 0.32 ≈ 32 dp) registered
+    with `Images`. Pins (`PinView`) are 50 dp 3D balls: gradient, shine, white rim, elevation shadow, ground shadow.
     Overlapping icons hide until zoomed in (MapLibre collision); names hide first. Labels use `Noto Sans Bold` (must
     be a font OpenFreeMap serves; it has Thai). Pins with a `label` (partner venues) get their name beside them too.
     Props: `pins`, `places`, `onPlacePress`, `onMapPress`, `onBoundsChange`, `fullScreen`, `mapPadding`

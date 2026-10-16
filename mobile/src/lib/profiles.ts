@@ -1,4 +1,5 @@
 import type { PostgrestError } from '@supabase/supabase-js';
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 
 import { supabase } from '@/lib/supabase';
@@ -39,6 +40,26 @@ function errorKey(error: PostgrestError | null): ProfileErrorKey | null {
   if (!error) return null;
   console.warn('Profile request failed', error.message);
   return KNOWN_ERRORS.find((key) => error.message.includes(key)) ?? 'generic';
+}
+
+// The signed-in person's display name (for the profile button on home). Reloads when the screen comes back into
+// focus, so a name changed on the profile page shows straight away.
+export function useMyName(myId: string | undefined) {
+  const [name, setName] = useState<string | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!myId) return;
+      supabase
+        .from('profiles')
+        .select('display_name')
+        .eq('id', myId)
+        .maybeSingle()
+        .then(({ data }) => setName((data as { display_name: string } | null)?.display_name ?? null));
+    }, [myId]),
+  );
+
+  return name;
 }
 
 export function instagramUrl(handle: string): string {

@@ -252,7 +252,6 @@ const en = {
     dark: 'Dark',
     light: 'Light',
     language: 'Language',
-    myProfile: 'My profile',
     account: 'Account',
   },
   promo: {

@@ -8,6 +8,7 @@ import {
   UserLocation,
   type CameraRef,
 } from '@maplibre/maplibre-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, Text, View } from 'react-native';
@@ -25,8 +26,9 @@ const MAP_IMAGES = Object.fromEntries(
   Object.entries(PLACE_ICON_IMAGES).map(([key, source]) => [`tm-${key}`, source]),
 );
 
-// The icon files are 96 px, which the map treats as 96 dp; this shows them at about 27 dp.
-const PLACE_ICON_SIZE = 0.28;
+// The icon files are 120 px (a 100 px ball plus its shadow), which the map treats as 120 dp; this shows the ball at
+// about 32 dp.
+const PLACE_ICON_SIZE = 0.32;
 // The label font must be one the map style's font server has (OpenFreeMap: Noto Sans, with Thai).
 const LABEL_FONT = ['Noto Sans Bold'];
 
@@ -221,7 +223,7 @@ export function VenueMap({
                 textSize: 12,
                 textAnchor: 'left',
                 textJustify: 'left',
-                textOffset: [1.25, 0],
+                textOffset: [1.6, -0.1],
                 textMaxWidth: 9,
                 textOptional: true,
                 textColor: ['get', 'color'],
@@ -243,8 +245,8 @@ export function VenueMap({
                 textSize: 13,
                 textAnchor: 'left',
                 textJustify: 'left',
-                // Right of the pin's circle, which sits about 30 dp above the point.
-                textOffset: [1.6, -2.3],
+                // Right of the pin's ball, which sits about 38 dp above the point.
+                textOffset: [2.2, -2.9],
                 textMaxWidth: 9,
                 textColor: ['get', 'color'],
                 textHaloColor: Colors.bg,
@@ -267,14 +269,35 @@ export function VenueMap({
   );
 }
 
+// 3D pin: glossy gradient ball (light top -> deep bottom) with a white rim, a shine, the tail, and a soft shadow on
+// the ground. Orange for partner venues, violet for tables / hangouts / travellers, pink when selected.
+const PIN_GRADIENTS = {
+  orange: ['#FFC266', '#FF9A1B', '#D96A00'],
+  violet: ['#A88BFF', '#7B4DFF', '#4F25C9'],
+  pink: ['#FF7AAE', '#FF1F78', '#C4004F'],
+} as const;
+
 function PinView({ pin }: { pin: MapPin }) {
   const styles = useStyles();
+  const tone = pin.selected ? 'pink' : pin.tone === 'violet' ? 'violet' : 'orange';
+  const gradient = PIN_GRADIENTS[tone];
   return (
     <View style={styles.pinWrap}>
-      <View style={[styles.pin, pin.tone === 'violet' && styles.pinViolet, pin.selected && styles.pinSelected]}>
-        <Text style={styles.emoji}>{pin.emoji}</Text>
+      <View style={[styles.pinBody, pin.selected && styles.pinSelected]}>
+        <View style={styles.pin}>
+          <LinearGradient colors={gradient} start={{ x: 0.3, y: 0 }} end={{ x: 0.7, y: 1 }} style={StyleSheet.absoluteFill} />
+          {/* Shine across the top. */}
+          <LinearGradient
+            colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={styles.shine}
+          />
+          <Text style={styles.emoji}>{pin.emoji}</Text>
+        </View>
+        <View style={[styles.tail, { backgroundColor: gradient[2] }]} />
       </View>
-      <View style={[styles.tail, pin.tone === 'violet' && styles.pinViolet, pin.selected && styles.tailSelected]} />
+      <View style={styles.groundShadow} />
       {pin.count ? (
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{pin.count}</Text>
@@ -284,7 +307,7 @@ function PinView({ pin }: { pin: MapPin }) {
   );
 }
 
-const PIN = 40;
+const PIN = 50;
 
 const useStyles = makeStyles((Colors) => ({
   frame: {
@@ -295,41 +318,59 @@ const useStyles = makeStyles((Colors) => ({
     backgroundColor: Colors.surface,
   },
   mapBackground: { backgroundColor: Colors.surface },
-  pinWrap: { alignItems: 'center', paddingTop: 6, paddingRight: 8 },
+  pinWrap: { alignItems: 'center', paddingTop: 6, paddingRight: 10, paddingLeft: 2 },
+  pinBody: { alignItems: 'center' },
   pin: {
     width: PIN,
     height: PIN,
     borderRadius: PIN / 2,
-    backgroundColor: Colors.orange,
-    borderWidth: 2,
-    borderColor: Colors.bg,
+    borderWidth: 3,
+    borderColor: Colors.white,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  pinViolet: { backgroundColor: Colors.violet },
-  pinSelected: { backgroundColor: Colors.pink, transform: [{ scale: 1.15 }] },
-  emoji: { fontSize: 20 },
-  tail: {
-    width: 10,
-    height: 10,
-    marginTop: -6,
+    overflow: 'hidden',
     backgroundColor: Colors.orange,
-    transform: [{ rotate: '45deg' }],
+    // Raised off the map.
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 4 },
   },
-  tailSelected: { backgroundColor: Colors.pink },
+  pinSelected: { transform: [{ scale: 1.15 }] },
+  shine: { position: 'absolute', top: 2, left: 7, right: 7, height: PIN * 0.42, borderRadius: PIN },
+  emoji: { fontSize: 25, textShadowColor: 'rgba(0,0,0,0.35)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 3 },
+  tail: {
+    width: 14,
+    height: 14,
+    marginTop: -9,
+    borderRightWidth: 3,
+    borderBottomWidth: 3,
+    borderColor: Colors.white,
+    transform: [{ rotate: '45deg' }],
+    elevation: 7,
+  },
+  groundShadow: {
+    width: 22,
+    height: 7,
+    marginTop: -2,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0, 0, 0, 0.28)',
+  },
   badge: {
     position: 'absolute',
     top: 0,
     right: 0,
-    minWidth: 20,
-    height: 20,
+    minWidth: 22,
+    height: 22,
     paddingHorizontal: 5,
-    borderRadius: 10,
+    borderRadius: 11,
     backgroundColor: Colors.pink,
     borderWidth: 2,
-    borderColor: Colors.bg,
+    borderColor: Colors.white,
     alignItems: 'center',
     justifyContent: 'center',
+    elevation: 9,
   },
-  badgeText: { fontSize: 11, lineHeight: 13, fontWeight: '800', color: Colors.onBrand },
+  badgeText: { fontSize: 12, lineHeight: 14, fontWeight: '800', color: Colors.white },
 }));

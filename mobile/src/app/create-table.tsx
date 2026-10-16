@@ -9,6 +9,7 @@ import { Chip } from '@/components/chip';
 import { Icon } from '@/components/icon';
 import { MapHeader } from '@/components/map-header';
 import { MapSearchBar, MapSearchResults } from '@/components/map-search';
+import { PromoFilter } from '@/components/promo-filter';
 import { ScreenHeader } from '@/components/screen-header';
 import { SlideUpPanel } from '@/components/slide-up-panel';
 import { VenueCard } from '@/components/venue-card';
@@ -20,7 +21,7 @@ import { distanceMeters, useCurrentLocation } from '@/lib/location';
 import { AREA_ZOOM, PLACE_ZOOM, useMapSearch, type SearchResult } from '@/lib/map-search';
 import { createMeetup, createMeetupAtPlace, type MeetupErrorKey } from '@/lib/meetups';
 import { fetchPlace, placeName, usePlacesInView, type Place } from '@/lib/places';
-import { isHangoutVenue, PROMOTION_EMOJI, useVenues } from '@/lib/venues';
+import { isHangoutVenue, PROMOTION_EMOJI, useVenues, type PromotionKind } from '@/lib/venues';
 import { makeStyles, useColors } from '@/lib/theme';
 
 // Picked on the step-1 map: a partner venue, or any Bangkok food place (OpenStreetMap).
@@ -68,12 +69,15 @@ export default function CreateTableScreen() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<MeetupErrorKey | null>(null);
 
-  // Tables are for food and drink, so hangout venues (parks, museums, …) aren't offered.
+  // Tables are for food and drink, so hangout venues (parks, museums, …) aren't offered. The Discount / Offer /
+  // Event / Party buttons show only the partner venues with that promotion.
+  const [promo, setPromo] = useState<PromotionKind | null>(null);
   const places = venues.venues
     .filter((venue) => !isHangoutVenue(venue))
+    .filter((venue) => promo === null || venue.promotions.some((p) => p.kind === promo))
     .map((venue) => ({ venue, distance: coords ? distanceMeters(coords, venue) : null }))
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
-  const search = useMapSearch('food', places.map(({ venue }) => venue));
+  const search = useMapSearch('food', venues.venues.filter((venue) => !isHangoutVenue(venue)));
   const [focus, setFocus] = useState<MapFocus | null>(null);
 
   // Search result: move the map there and pick it (areas just move the map).
@@ -149,7 +153,16 @@ export default function CreateTableScreen() {
         />
 
         <MapHeader title={t('tables.chooseTitle')} hint={t('tables.pickAnyPlace')} onHeight={setTopHeight}>
-          <MapSearchBar value={search.query} onChangeText={search.setQuery} placeholder={t('search.foodPlaceholder')} />
+          <View style={styles.searchRow}>
+            <MapSearchBar value={search.query} onChangeText={search.setQuery} placeholder={t('search.foodPlaceholder')} />
+          </View>
+          <PromoFilter
+            value={promo}
+            onChange={(value) => {
+              setPromo(value);
+              setPicked(null);
+            }}
+          />
         </MapHeader>
 
         <View
@@ -350,6 +363,7 @@ function StepButton({
 
 const useStyles = makeStyles((Colors) => ({
   root: { flex: 1, backgroundColor: Colors.bg },
+  searchRow: { marginBottom: Spacing.sm },
   safe: { flex: 1, backgroundColor: Colors.bg },
   flex: { flex: 1 },
   content: { paddingBottom: Spacing.xxl * 2 },

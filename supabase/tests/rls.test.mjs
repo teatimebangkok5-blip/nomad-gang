@@ -548,6 +548,8 @@ check("Suan Luang Rama IX: ticket (10 baht) despite being a park", (await entryO
 check("Lumphini Park: free (public park)", (await entryOf("way", 23483299)) === "free");
 check("Chatuchak Market: free", (await entryOf("way", 37911198)) === "free");
 check("MahaNakhon SkyWalk: ticket", (await entryOf("node", 6259620985)) === "ticket");
+r = await tryQuery("anon", null, `select website from public.places where osm_type = 'node' and osm_id = 6259620985`);
+check("MahaNakhon SkyWalk has its official website", r.rows?.[0]?.website === "https://kingpowermahanakhon.co.th/");
 check("Chong Nonsi Skywalk: free", (await entryOf("way", 198877011)) === "free");
 r = await tryQuery("anon", null, `select count(*) filter (where entry = 'free')::int f, count(*) filter (where entry is null)::int u from public.places where kind = 'temple'`);
 check("temples are free, except the checked paid ones and Wat Hua Lamphong (unconfirmed)", r.rows?.[0]?.f > 800 && r.rows[0].u === 1);

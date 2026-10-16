@@ -9,7 +9,7 @@ import { Icon, type IconName } from '@/components/icon';
 import { LanguageToggle } from '@/components/language-toggle';
 import { Logo } from '@/components/logo';
 import { Radius, Spacing, Type } from '@/constants/theme';
-import { signInWithGoogle } from '@/lib/auth';
+import { requirePhoneVerification, signInWithGoogle } from '@/lib/auth';
 import { supabaseConfigured } from '@/lib/supabase';
 import { makeStyles, useColors } from '@/lib/theme';
 
@@ -79,7 +79,7 @@ export default function WelcomeScreen() {
           </Text>
         )}
         <Button title={t('welcome.continueWithGoogle')} onPress={handleGoogle} loading={signingIn} />
-        <Text style={styles.note}>{t('welcome.nextStepNote')}</Text>
+        {requirePhoneVerification && <Text style={styles.note}>{t('welcome.nextStepNote')}</Text>}
       </View>
     </SafeAreaView>
   );

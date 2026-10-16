@@ -547,6 +547,8 @@ check("Bangkok National Museum: ticket", (await entryOf("relation", 20505832)) =
 check("Suan Luang Rama IX: ticket (10 baht) despite being a park", (await entryOf("way", 33042465)) === "ticket");
 check("Lumphini Park: free (public park)", (await entryOf("way", 23483299)) === "free");
 check("Chatuchak Market: free", (await entryOf("way", 37911198)) === "free");
+check("MahaNakhon SkyWalk: ticket", (await entryOf("node", 6259620985)) === "ticket");
+check("Chong Nonsi Skywalk: free", (await entryOf("way", 198877011)) === "free");
 r = await tryQuery("anon", null, `select count(*) filter (where entry = 'free')::int f, count(*) filter (where entry is null)::int u from public.places where kind = 'temple'`);
 check("temples are free, except the checked paid ones and Wat Hua Lamphong (unconfirmed)", r.rows?.[0]?.f > 800 && r.rows[0].u === 1);
 r = await tryQuery("anon", null, `select count(*)::int n from public.places where purpose = 'food' and entry is not null`);

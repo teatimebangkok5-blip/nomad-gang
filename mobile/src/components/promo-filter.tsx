@@ -31,7 +31,7 @@ export function PromoFilter({
             onPress={() => onChange(selected ? null : kind)}
             style={({ pressed }) => [styles.button, selected && styles.selected, pressed && !selected && styles.pressed]}>
             <Text style={styles.emoji}>{PROMOTION_EMOJI[kind]}</Text>
-            <Text style={[styles.label, selected && styles.labelSelected]}>{t(`promo.${kind}`)}</Text>
+            <Text style={[styles.label, selected && styles.labelSelected]}>{t(`promoFilter.${kind}`)}</Text>
           </Pressable>
         );
       })}

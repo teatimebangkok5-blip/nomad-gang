@@ -264,6 +264,14 @@ const th: Translation = {
     ticket: 'ตั๋วลดราคา',
     free_entry: 'เข้าฟรี',
   },
+  promoFilter: {
+    discount: 'ส่วนลด',
+    offer: 'ข้อเสนอ',
+    event: 'อีเวนต์',
+    party: 'ปาร์ตี้',
+    ticket: 'ตั๋วเข้าชม',
+    free_entry: 'เข้าฟรี',
+  },
   weekday: {
     sun: 'อา.',
     mon: 'จ.',

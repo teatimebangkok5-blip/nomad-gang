@@ -259,6 +259,15 @@ const en = {
     offer: 'Offer',
     event: 'Event',
     party: 'Party',
+    ticket: 'Ticket discount',
+    free_entry: 'Free entry',
+  },
+  // The filter buttons on the maps (Tickets / Free entry filter places by entry, not only promotions).
+  promoFilter: {
+    discount: 'Discount',
+    offer: 'Offer',
+    event: 'Event',
+    party: 'Party',
     ticket: 'Tickets',
     free_entry: 'Free entry',
   },

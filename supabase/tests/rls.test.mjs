@@ -552,6 +552,8 @@ r = await tryQuery("anon", null, `select website from public.places where osm_ty
 check("MahaNakhon SkyWalk has its official website", r.rows?.[0]?.website === "https://kingpowermahanakhon.co.th/");
 r = await tryQuery("anon", null, `select website from public.places where osm_type = 'way' and osm_id = 706259602`);
 check("Safari World has the founder's website", r.rows?.[0]?.website === "https://www.safariworld.online/");
+r = await tryQuery("anon", null, `select website from public.places where osm_type = 'way' and osm_id = 666021136`);
+check("Erawan Museum has its official website", r.rows?.[0]?.website === "https://www.erawanmuseum.com/en/rate/");
 check("Chong Nonsi Skywalk: free", (await entryOf("way", 198877011)) === "free");
 r = await tryQuery("anon", null, `select count(*) filter (where entry = 'free')::int f, count(*) filter (where entry is null)::int u from public.places where kind = 'temple'`);
 check("temples are free, except the checked paid ones and Wat Hua Lamphong (unconfirmed)", r.rows?.[0]?.f > 800 && r.rows[0].u === 1);

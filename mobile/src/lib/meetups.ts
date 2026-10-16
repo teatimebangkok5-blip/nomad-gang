@@ -47,6 +47,8 @@ export type MeetupDetail = MeetupPlace & {
   max_people: number;
   status: 'open' | 'cancelled';
   members: MeetupMember[];
+  // The place's official website (OpenStreetMap), if any.
+  place_website: string | null;
 };
 
 // Error messages from the database functions are short keys like "meetup_full"; this turns them into the
@@ -246,9 +248,16 @@ export function useOpenMeetups(enabled: boolean) {
 
 type MeetupRow = Omit<
   MeetupDetail,
-  'members' | 'place_name' | 'place_name_en' | 'place_name_th' | 'place_lat' | 'place_lng'
+  'members' | 'place_name' | 'place_name_en' | 'place_name_th' | 'place_lat' | 'place_lng' | 'place_website'
 > & {
-  place: { name: string; name_en: string | null; name_th: string | null; lat: number; lng: number } | null;
+  place: {
+    name: string;
+    name_en: string | null;
+    name_th: string | null;
+    lat: number;
+    lng: number;
+    website: string | null;
+  } | null;
   spot_name: string | null;
   spot_lat: number | null;
   spot_lng: number | null;
@@ -259,7 +268,7 @@ async function fetchMeetup(id: string): Promise<MeetupDetail | null | 'error'> {
   const { data, error } = await supabase
     .from('meetups')
     .select(
-      'id, kind, venue_id, place_id, place:places(name, name_en, name_th, lat, lng), spot_name, spot_lat, spot_lng, ' +
+      'id, kind, venue_id, place_id, place:places(name, name_en, name_th, lat, lng, website), spot_name, spot_lat, spot_lng, ' +
         'host_id, title, description, starts_at, ends_at, max_people, status, ' +
         'meetup_members(user_id, joined_at, profiles(display_name))',
     )
@@ -281,6 +290,7 @@ async function fetchMeetup(id: string): Promise<MeetupDetail | null | 'error'> {
     place_name_th: place?.name_th ?? null,
     place_lat: place?.lat ?? spot_lat,
     place_lng: place?.lng ?? spot_lng,
+    place_website: place?.website ?? null,
     members,
   };
 }

@@ -118,6 +118,7 @@ export default function CreateTableScreen() {
             lat: venue.lat,
             lng: venue.lng,
             emoji: venue.deal ? PROMOTION_EMOJI[venue.deal.kind] : CATEGORY_EMOJI[venue.category],
+            label: localized(venue, 'name', language),
             selected: picked?.type === 'venue' && venue.id === picked.venueId,
           }))}
           onPinPress={(id) => setPicked({ type: 'venue', venueId: id })}

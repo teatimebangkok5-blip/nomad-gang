@@ -53,6 +53,8 @@ export type VenueDeal = {
   details_th: string;
   starts_at: string | null;
   ends_at: string | null;
+  // Official ticket page for this event or ticket discount (https), set by the founder.
+  ticket_url: string | null;
 };
 
 export type Venue = {
@@ -66,6 +68,8 @@ export type Venue = {
   lng: number;
   photo_path: string | null;
   place_id: string | null;
+  // Official ticket page (https), set by the founder. Shown as "Buy tickets".
+  ticket_url: string | null;
   // The active coupon promotion (discount, offer or ticket discount), if any.
   deal: VenueDeal | null;
   // Every active promotion, events/parties that have not ended yet, soonest first.
@@ -76,7 +80,7 @@ type VenueRow = Omit<Venue, 'deal' | 'promotions'> & { deals: VenueDeal[] };
 
 // Row Level Security only returns live venues and their active promotions, so no filters are needed here.
 const VENUE_COLUMNS =
-  'id, name_en, name_th, category, address_en, address_th, lat, lng, photo_path, place_id, deals(id, kind, title_en, title_th, details_en, details_th, starts_at, ends_at)';
+  'id, name_en, name_th, category, address_en, address_th, lat, lng, photo_path, place_id, ticket_url, deals(id, kind, title_en, title_th, details_en, details_th, starts_at, ends_at, ticket_url)';
 
 type VenuesState =
   | { status: 'loading'; venues: Venue[] }

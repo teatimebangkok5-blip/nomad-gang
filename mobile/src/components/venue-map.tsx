@@ -1,12 +1,67 @@
-import { Camera, GeoJSONSource, Layer, Map, Marker, UserLocation, type CameraRef } from '@maplibre/maplibre-react-native';
+import {
+  Camera,
+  GeoJSONSource,
+  Images,
+  Layer,
+  Map,
+  Marker,
+  UserLocation,
+  type CameraRef,
+} from '@maplibre/maplibre-react-native';
 import { useEffect, useRef } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import { StyleSheet, Text, View, type ImageRequireSource } from 'react-native';
 
 import { Radius } from '@/constants/theme';
+import { currentLanguage } from '@/i18n';
 import type { Coords } from '@/lib/location';
-import { type MapBounds, type Place } from '@/lib/places';
+import { PLACE_ICON_COLORS, placeIcon, placeName, type MapBounds, type Place, type PlaceIcon } from '@/lib/places';
 import { makeStyles, useColors, useTheme } from '@/lib/theme';
 import type { VenueCategory } from '@/lib/venues';
+
+// Place icons for the map's symbol layer (see PLACE_ICON_COLORS in src/lib/places.ts).
+const PLACE_ICON_IMAGES: Record<PlaceIcon, ImageRequireSource> = {
+  food: require('@/assets/images/map-icons/food.png'),
+  fastfood: require('@/assets/images/map-icons/fastfood.png'),
+  cafe: require('@/assets/images/map-icons/cafe.png'),
+  bakery: require('@/assets/images/map-icons/bakery.png'),
+  icecream: require('@/assets/images/map-icons/icecream.png'),
+  bar: require('@/assets/images/map-icons/bar.png'),
+  pub: require('@/assets/images/map-icons/pub.png'),
+  temple: require('@/assets/images/map-icons/temple.png'),
+  park: require('@/assets/images/map-icons/park.png'),
+  market: require('@/assets/images/map-icons/market.png'),
+  mall: require('@/assets/images/map-icons/mall.png'),
+  museum: require('@/assets/images/map-icons/museum.png'),
+  theatre: require('@/assets/images/map-icons/theatre.png'),
+  cinema: require('@/assets/images/map-icons/cinema.png'),
+  fun: require('@/assets/images/map-icons/fun.png'),
+  zoo: require('@/assets/images/map-icons/zoo.png'),
+  attraction: require('@/assets/images/map-icons/attraction.png'),
+  monument: require('@/assets/images/map-icons/monument.png'),
+  castle: require('@/assets/images/map-icons/castle.png'),
+  viewpoint: require('@/assets/images/map-icons/viewpoint.png'),
+  place: require('@/assets/images/map-icons/place.png'),
+};
+// Prefixed so they can't clash with the map style's own images.
+const MAP_IMAGES = Object.fromEntries(
+  Object.entries(PLACE_ICON_IMAGES).map(([key, source]) => [`tm-${key}`, source]),
+);
+
+// The icon files are 96 px, which the map treats as 96 dp; this shows them at about 27 dp.
+const PLACE_ICON_SIZE = 0.28;
+// The label font must be one the map style's font server has (OpenFreeMap: Noto Sans, with Thai).
+const LABEL_FONT = ['Noto Sans Bold'];
+
+// Lighter label colors on the dark map so they stay readable.
+function lighten(hex: string, amount: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const channel = (shift: number) => {
+    const c = (n >> shift) & 255;
+    return Math.round(c + (255 - c) * amount);
+  };
+  return `rgb(${channel(16)}, ${channel(8)}, ${channel(0)})`;
+}
 
 // Free map: MapLibre with OpenFreeMap tiles (OpenStreetMap data). No API key, no billing.
 // The style includes the required "© OpenStreetMap" credit, shown via the map's attribution button.
@@ -20,6 +75,8 @@ export type MapPin = {
   lat: number;
   lng: number;
   emoji: string;
+  // Name shown beside the pin (e.g. the partner venue's name).
+  label?: string;
   // Violet for tables at places and travellers; orange (default) for partner venues.
   tone?: 'orange' | 'violet';
   // Shown as a badge, e.g. the number of open tables at the venue.
@@ -49,7 +106,6 @@ export function VenueMap({
   onPinPress,
   places = [],
   onPlacePress,
-  placeTone = 'orange',
   onMapPress,
   onBoundsChange,
   userCoords,
@@ -59,11 +115,9 @@ export function VenueMap({
 }: {
   pins: MapPin[];
   onPinPress: (key: string) => void;
-  // Bangkok places (OpenStreetMap) drawn as small dots; tapping one calls onPlacePress.
+  // Bangkok places (OpenStreetMap) drawn as colored icons with their names; tapping one calls onPlacePress.
   places?: Place[];
   onPlacePress?: (place: Place) => void;
-  // Dot color: orange for food places, violet for hangout places.
-  placeTone?: 'orange' | 'violet';
   // Tap on the map itself (not on a pin or a dot), e.g. to drop a pin anywhere.
   onMapPress?: (coords: Coords) => void;
   // Called when the visible area changes (used to load the places in view).
@@ -79,6 +133,10 @@ export function VenueMap({
   const styles = useStyles();
   const Colors = useColors();
   const { name: themeName } = useTheme();
+  // Re-renders the labels when the language changes.
+  useTranslation();
+  const language = currentLanguage();
+  const labelColor = (hex: string) => (themeName === 'dark' ? lighten(hex, 0.3) : hex);
   const cameraRef = useRef<CameraRef>(null);
   const centeredOnUser = useRef(false);
   // A tap on a pin can also reach the map; ignore map taps right after a pin tap.
@@ -97,8 +155,26 @@ export function VenueMap({
       type: 'Feature',
       id: place.id,
       geometry: { type: 'Point', coordinates: [place.lng, place.lat] },
-      properties: { id: place.id },
+      properties: {
+        id: place.id,
+        icon: `tm-${placeIcon(place.kind)}`,
+        name: placeName(place, language),
+        color: labelColor(PLACE_ICON_COLORS[placeIcon(place.kind)]),
+      },
     })),
+  };
+
+  // Names beside the pins (partner venues), drawn by the map under the pin views.
+  const pinLabelsGeoJson: GeoJSON.FeatureCollection = {
+    type: 'FeatureCollection',
+    features: pins
+      .filter((pin) => pin.label)
+      .map((pin) => ({
+        type: 'Feature',
+        id: pin.key,
+        geometry: { type: 'Point', coordinates: [pin.lng, pin.lat] },
+        properties: { name: pin.label, color: pin.tone === 'violet' ? labelColor(Colors.violet) : Colors.accent },
+      })),
   };
 
   const start = userCoords ?? BANGKOK;
@@ -132,6 +208,7 @@ export function VenueMap({
         }>
         <Camera ref={cameraRef} initialViewState={{ center: [start.lng, start.lat], zoom: 13 }} />
         {userCoords && <UserLocation />}
+        <Images images={MAP_IMAGES} />
 
         {places.length > 0 && (
           <GeoJSONSource
@@ -143,15 +220,47 @@ export function VenueMap({
               const place = places.find((p) => p.id === id);
               if (place) onPlacePress?.(place);
             }}>
+            {/* Icons that would overlap are hidden until the map is zoomed in; names hide first. */}
             <Layer
-              id="places-dots"
-              type="circle"
+              id="places-icons"
+              type="symbol"
               style={{
-                circleRadius: 6,
-                circleColor: placeTone === 'violet' ? Colors.violet : Colors.orange,
-                circleOpacity: 0.9,
-                circleStrokeWidth: 2,
-                circleStrokeColor: Colors.bg,
+                iconImage: ['get', 'icon'],
+                iconSize: PLACE_ICON_SIZE,
+                iconPadding: [1],
+                textField: ['get', 'name'],
+                textFont: LABEL_FONT,
+                textSize: 12,
+                textAnchor: 'left',
+                textJustify: 'left',
+                textOffset: [1.25, 0],
+                textMaxWidth: 9,
+                textOptional: true,
+                textColor: ['get', 'color'],
+                textHaloColor: Colors.bg,
+                textHaloWidth: 1.5,
+              }}
+            />
+          </GeoJSONSource>
+        )}
+
+        {pinLabelsGeoJson.features.length > 0 && (
+          <GeoJSONSource id="pin-labels" data={pinLabelsGeoJson}>
+            <Layer
+              id="pin-labels-text"
+              type="symbol"
+              style={{
+                textField: ['get', 'name'],
+                textFont: LABEL_FONT,
+                textSize: 13,
+                textAnchor: 'left',
+                textJustify: 'left',
+                // Right of the pin's circle, which sits about 30 dp above the point.
+                textOffset: [1.6, -2.3],
+                textMaxWidth: 9,
+                textColor: ['get', 'color'],
+                textHaloColor: Colors.bg,
+                textHaloWidth: 1.5,
               }}
             />
           </GeoJSONSource>

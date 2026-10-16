@@ -34,9 +34,16 @@ Product spec and tech stack below are agreed. Built so far:
   directly, several open a card). Hangouts are `meetups` with `kind = 'hangout'`, so `table/[id].tsx` (adapts its
   wording), join/leave/cancel and the group chat are shared. Create table step 1 is now a full-screen map too.
   Shared full-screen-map UI: `MapHeader` (`src/components/map-header.tsx`) and `SlideUpPanel`
-  (`src/components/slide-up-panel.tsx`). `VenueMap` also takes `onMapPress` and `placeTone`.
+  (`src/components/slide-up-panel.tsx`). `VenueMap` also takes `onMapPress`.
   Admin: **"Add hangout venue"** (`/admin/venues/new?for=hangout`), venues listed as Food & drink / Hangout, and
   promotion kinds **Ticket discount** and **Free entry**.
+  **Buy tickets / Official website** (added 2026-10-16, `*_ticket_links.sql`): the founder can paste an official
+  ticket page on a venue (`venues.ticket_url`) or on one event/ticket/party/free-entry promotion
+  (`deals.ticket_url`, `admin_save_promotion(…, p_ticket_url)`); the Hangout place card and the hangout screen show
+  **Buy tickets** only where one is set (`ticketLink()` in `src/lib/links.ts`: a promotion's link first, then the
+  venue's). Places without one show **Official website** if OpenStreetMap has one (`places.website`, 168 hangout
+  places, seeded by `*_seed_hangout_place_websites.sql`; plain http links were skipped). Not from Google Maps: that
+  needs the paid Places API. All these links must be **https** (database checks + `openLink()`).
 - **Not started:** check-ins (50 m), QR codes and redemptions, staff QR page, redemption feed and push
   notifications, Instagram on profiles, tables/users in the admin panel. Places missing from OpenStreetMap can be added by the founder (admin insert into `places`; no UI yet).
 - Running on the founder's Redmi as a local release APK, connected to the real Supabase project
@@ -204,8 +211,13 @@ How the key rules map onto this:
     title), `src/app/create-hangout.tsx` (see Hangouts above) and `src/app/table/[id].tsx` (a table or hangout:
     members, join/leave; host sees Cancel). All are registered inside the signed-in guard in `_layout.tsx`.
   - Maps: `src/components/venue-map.tsx` wraps MapLibre (`Map`, `Camera`, `Marker` for emoji pins,
-    `GeoJSONSource` + circle `Layer` for place dots, `UserLocation`). Props: `pins`, `places`, `onPlacePress`,
-    `onBoundsChange`, `fullScreen`, `mapPadding` (→ `contentInset`). Keep `attribution` on (OSM licence).
+    `GeoJSONSource` + symbol `Layer` for places, `UserLocation`). Places show as **colored circle icons with their
+    name beside them** (like Apple Maps): OSM kind → icon/color via `placeIcon()` / `PLACE_ICON_COLORS` in
+    `src/lib/places.ts`, images in `assets/images/map-icons/` (Material Icons, Apache 2.0) registered with `Images`.
+    Overlapping icons hide until zoomed in (MapLibre collision); names hide first. Labels use `Noto Sans Bold` (must
+    be a font OpenFreeMap serves; it has Thai). Pins with a `label` (partner venues) get their name beside them too.
+    Props: `pins`, `places`, `onPlacePress`, `onMapPress`, `onBoundsChange`, `fullScreen`, `mapPadding`
+    (→ `contentInset`). Keep `attribution` on (OSM licence).
   - `src/i18n/`: i18next with `en.ts` (source, typed keys) and `th.ts` (must match). `localized(row, 'name', lang)`
     picks `name_th`/`name_en` columns. The language choice is saved on the phone; the default follows the phone language.
   - `src/components/`: `Button`, `Icon` (expo-symbols: Material names on Android, SF Symbols for iOS; add new icons

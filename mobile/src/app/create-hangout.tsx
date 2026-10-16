@@ -39,6 +39,7 @@ import {
   timeSlots,
   type BangkokDay,
 } from '@/lib/bangkok-time';
+import { isSafeLink, openLink, ticketLink } from '@/lib/links';
 import { distanceMeters, useCurrentLocation } from '@/lib/location';
 import {
   createHangout,
@@ -92,6 +93,7 @@ export default function CreateHangoutScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const language = currentLanguage();
   const { session } = useAuth();
   const venues = useVenues();
   const meetups = useOpenMeetups(Boolean(session));
@@ -146,6 +148,7 @@ export default function CreateHangoutScreen() {
         lat: venue.lat,
         lng: venue.lng,
         emoji: shown ? PROMOTION_EMOJI[shown.kind] : CATEGORY_EMOJI[venue.category],
+        label: localized(venue, 'name', language),
         count: hangoutsAtVenue.get(venue.id),
         selected: selectedKey === `v:${venue.id}`,
       };
@@ -254,7 +257,6 @@ export default function CreateHangoutScreen() {
         userCoords={coords}
         onPinPress={handlePinPress}
         places={mapPlaces}
-        placeTone="violet"
         onPlacePress={handlePlacePress}
         onMapPress={(at) => setSelection({ type: 'spot', ...at })}
         onBoundsChange={onBoundsChange}
@@ -404,6 +406,10 @@ function SelectionCard({
         ? { lat: hangouts[0].place_lat, lng: hangouts[0].place_lng }
         : null;
   }
+  // "Buy tickets" only where the founder added an official ticket link; otherwise the place's official website from
+  // OpenStreetMap, if it has one. Neither for most places.
+  const tickets = venue ? ticketLink(venue) : null;
+  const website = !tickets && selection.type === 'place' && isSafeLink(selection.place.website) ? selection.place.website : null;
 
   return (
     <View style={[styles.placeCard, styles.inset]}>
@@ -445,6 +451,22 @@ function SelectionCard({
         </ScrollView>
       )}
 
+      {tickets ? (
+        <Button
+          title={t('hangouts.buyTickets')}
+          variant="secondary"
+          icon={<Icon name="ticket" size={20} color={Colors.accent} />}
+          onPress={() => openLink(tickets)}
+        />
+      ) : website ? (
+        <Button
+          title={t('hangouts.officialWebsite')}
+          variant="secondary"
+          icon={<Icon name="website" size={20} color={Colors.text} />}
+          onPress={() => openLink(website)}
+        />
+      ) : null}
+
       <View style={styles.placeActions}>
         <View style={styles.flex}>
           <Button
@@ -470,6 +492,7 @@ function SelectionCard({
 
 function PromotionRow({ promotion }: { promotion: VenueDeal }) {
   const styles = useStyles();
+  const Colors = useColors();
   const { t } = useTranslation();
   const language = currentLanguage();
   const live = isHappeningNow(promotion);
@@ -494,6 +517,17 @@ function PromotionRow({ promotion }: { promotion: VenueDeal }) {
         </Text>
       </View>
       {live && <Text style={styles.liveBadge}>{t('hangouts.happeningNow')}</Text>}
+      {isSafeLink(promotion.ticket_url) && (
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={`${t('hangouts.buyTickets')}: ${localized(promotion, 'title', language)}`}
+          hitSlop={8}
+          onPress={() => openLink(promotion.ticket_url)}
+          style={({ pressed }) => [styles.rowLink, pressed && styles.pressed]}>
+          <Icon name="ticket" size={16} color={Colors.accent} />
+          <Text style={styles.rowLinkText}>{t('hangouts.buyTickets')}</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -809,6 +843,16 @@ const useStyles = makeStyles((Colors) => ({
     borderRadius: Radius.pill,
     overflow: 'hidden',
   },
+  rowLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: Spacing.sm,
+    minHeight: 32,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.surface,
+  },
+  rowLinkText: { ...Type.label, color: Colors.accent },
   placeHangouts: { gap: Spacing.sm },
   placeHangout: { width: 300 },
   placeActions: { flexDirection: 'row', gap: Spacing.sm },

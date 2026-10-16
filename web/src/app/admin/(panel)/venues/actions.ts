@@ -34,6 +34,14 @@ const coordinatesSchema = z
     return { lat, lng };
   });
 
+// Optional official ticket page. https only (the database checks this too).
+const ticketUrlSchema = z
+  .string()
+  .trim()
+  .max(500, "Too long")
+  .refine((value) => value === "" || /^https:\/\/\S+$/i.test(value), "Paste a link that starts with https://")
+  .transform((value) => value || null);
+
 const venueSchema = z.object({
   name_en: z.string().trim().min(1, "Required"),
   name_th: z.string().trim().min(1, "Required"),
@@ -50,6 +58,7 @@ const venueSchema = z.object({
     .trim()
     .transform((value) => value || null)
     .pipe(z.uuid().nullable()),
+  ticket_url: ticketUrlSchema,
 });
 
 function parseVenue(formData: FormData) {
@@ -65,6 +74,7 @@ function parseVenue(formData: FormData) {
     checkin_radius_m: formData.get("checkin_radius_m") ?? "50",
     is_active: formData.get("is_active") === "on",
     place_id: formData.get("place_id") ?? "",
+    ticket_url: formData.get("ticket_url") ?? "",
   });
 }
 
@@ -174,6 +184,7 @@ const promotionSchema = z
     starts_at: z.string().trim(),
     ends_at: z.string().trim(),
     is_active: z.boolean(),
+    ticket_url: ticketUrlSchema,
   })
   .transform((data, ctx) => {
     const hasCoupon = COUPON_KINDS.includes(data.kind);
@@ -230,6 +241,7 @@ export async function savePromotion(venueId: string, _prev: FormState, formData:
     starts_at: formData.get("starts_at") ?? "",
     ends_at: formData.get("ends_at") ?? "",
     is_active: formData.get("is_active") === "on",
+    ticket_url: formData.get("ticket_url") ?? "",
   });
   if (!parsed.success) {
     return { error: "Please fix the highlighted fields.", fieldErrors: z.flattenError(parsed.error).fieldErrors };
@@ -250,6 +262,7 @@ export async function savePromotion(venueId: string, _prev: FormState, formData:
     p_starts_at: p.starts_at?.toISOString() ?? null,
     p_ends_at: p.ends_at?.toISOString() ?? null,
     p_is_active: p.is_active,
+    p_ticket_url: p.ticket_url,
   });
   if (error) {
     if (error.code === "23505") {

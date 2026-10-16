@@ -12,6 +12,7 @@ import { Radius, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { formatWhen, formatWhenRange } from '@/lib/bangkok-time';
+import { isSafeLink, openLink, ticketLink } from '@/lib/links';
 import {
   cancelMeetup,
   directionsUrl,
@@ -85,6 +86,9 @@ export default function TableScreen() {
   const isHangout = meetup.kind === 'hangout';
   const placeLabel = venue ? localized(venue, 'name', language) : meetupPlaceName(meetup, language);
   const errorText = error ? (isHangout ? t(`hangouts.errors.${error}`) : t(`tables.errors.${error}`)) : null;
+  // Hangouts: the official ticket page the founder added, else the place's official website (OpenStreetMap).
+  const tickets = isHangout && venue ? ticketLink(venue) : null;
+  const website = isHangout && !tickets && isSafeLink(meetup.place_website) ? meetup.place_website : null;
 
   function confirm(message: string, actionLabel: string, action: () => void) {
     Alert.alert(message, undefined, [
@@ -150,6 +154,12 @@ export default function TableScreen() {
               <Pressable accessibilityRole="link" onPress={() => Linking.openURL(directionsUrl(mapsTarget))} style={styles.fact}>
                 <Icon name="map" size={18} color={Colors.accent} />
                 <Text style={styles.mapsLink}>{t('tables.openInMaps')}</Text>
+              </Pressable>
+            )}
+            {(tickets || website) && (
+              <Pressable accessibilityRole="link" onPress={() => openLink(tickets ?? website)} style={styles.fact}>
+                <Icon name={tickets ? 'ticket' : 'website'} size={18} color={Colors.accent} />
+                <Text style={styles.mapsLink}>{tickets ? t('hangouts.buyTickets') : t('hangouts.officialWebsite')}</Text>
               </Pressable>
             )}
           </View>

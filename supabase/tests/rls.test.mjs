@@ -507,5 +507,32 @@ check("free entry with only a start date rejected", !!r.error);
 r = await tryQuery("authenticated", user, `select count(*)::int n from public.deals where venue_id = $1`, [parkVenueId]);
 check("app users see the hangout venue's promotions", r.rows?.[0]?.n === 3);
 
+// --- Ticket links and official websites
+r = await tryQuery("anon", null, `select count(*)::int n from public.places where website is not null`);
+check("official websites of hangout places seeded (https only)", r.rows?.[0]?.n > 100);
+r = await tryQuery("anon", null, `select count(*)::int n from public.places where website not like 'https://%'`);
+check("no non-https websites stored", r.rows?.[0]?.n === 0);
+r = await tryQuery("anon", null, `select lat, lng, website from public.places where osm_type = 'node' and osm_id = 1696984912`);
+const tussauds = r.rows?.[0];
+check("Madame Tussauds has its official website", tussauds?.website === "https://www.madametussauds.com/bangkok");
+r = await tryQuery("authenticated", user, `select website from public.places_in_bounds($2 - 0.001, $1 - 0.001, $2 + 0.001, $1 + 0.001, 400, 'hangout') where website is not null`, [tussauds?.lat, tussauds?.lng]);
+check("hangout map gets place websites", r.rows?.some((row) => row.website === tussauds?.website));
+r = await tryQuery("authenticated", admin, `update public.venues set ticket_url = 'https://tickets.example.com/park' where id = $1 returning id`, [parkVenueId]);
+check("founder sets a venue's ticket link", r.rows?.length === 1);
+r = await tryQuery("authenticated", admin, `update public.venues set ticket_url = 'http://tickets.example.com' where id = $1`, [parkVenueId]);
+check("non-https ticket link rejected", !!r.error);
+r = await tryQuery("authenticated", admin, `update public.venues set ticket_url = 'javascript:alert(1)' where id = $1`, [parkVenueId]);
+check("script links rejected", !!r.error);
+r = await tryQuery("anon", null, `select ticket_url from public.venues where id = $1`, [parkVenueId]);
+check("anyone can read a live venue's ticket link", r.rows?.[0]?.ticket_url === "https://tickets.example.com/park");
+r = await promo(`'event', 'Lantern night', 'คืนโคมไฟ', '', '', 'other', null, null, now() + interval '5 days', now() + interval '5 days 4 hours', true, ' https://tickets.example.com/lanterns '`);
+const lanternId = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", user, `select ticket_url from public.deals where id = $1`, [lanternId]);
+check("event saved with its own ticket link (trimmed)", r.rows?.[0]?.ticket_url === "https://tickets.example.com/lanterns");
+r = await promo(`'event', 'x', 'x', '', '', 'other', null, null, now() + interval '5 days', now() + interval '6 days', true, 'ftp://x'`);
+check("event with a non-https ticket link rejected", !!r.error);
+r = await tryQuery("authenticated", user, `select public.admin_save_promotion($1, null, 'event', 'x', 'x', '', '', 'other', null, null, now() + interval '1 day', now() + interval '2 days', true, 'https://x.com')`, [parkVenueId]);
+check("app users can't save promotions with ticket links", !!r.error);
+
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

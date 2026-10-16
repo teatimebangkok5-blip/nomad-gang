@@ -17,6 +17,8 @@ export type Place = {
   kind: string;
   lat: number;
   lng: number;
+  // Official website from OpenStreetMap (https only), shown as "Official website".
+  website?: string | null;
 };
 
 export function placeName(place: Pick<Place, 'name' | 'name_en' | 'name_th'>, language: Language): string {
@@ -57,6 +59,81 @@ const HANGOUT_KIND_EMOJI: Record<string, string> = {
 
 export function placeEmoji(kind: string): string {
   return HANGOUT_KIND_EMOJI[kind] ?? '📍';
+}
+
+// Map icons: a colored circle with a white icon (assets/images/map-icons/<icon>.png, made from Google's Material
+// icons, Apache 2.0) and the place name beside it in the same color.
+export const PLACE_ICON_COLORS = {
+  food: '#F08A24',
+  fastfood: '#F08A24',
+  cafe: '#A0673A',
+  bakery: '#C9772E',
+  icecream: '#E8508C',
+  bar: '#B83FA0',
+  pub: '#B83FA0',
+  temple: '#D69A1E',
+  park: '#38A24F',
+  market: '#E59E0B',
+  mall: '#E59E0B',
+  museum: '#DB4F8C',
+  theatre: '#DB4F8C',
+  cinema: '#8B5CF6',
+  fun: '#8B5CF6',
+  zoo: '#1E9E8C',
+  attraction: '#3F78E0',
+  monument: '#3F78E0',
+  castle: '#3F78E0',
+  viewpoint: '#3F78E0',
+  place: '#7C7C8F',
+} as const;
+export type PlaceIcon = keyof typeof PLACE_ICON_COLORS;
+
+// OpenStreetMap kind (food and hangout places) → map icon.
+const KIND_ICON: Record<string, PlaceIcon> = {
+  restaurant: 'food',
+  food_court: 'food',
+  fast_food: 'fastfood',
+  cafe: 'cafe',
+  coffee: 'cafe',
+  tea: 'cafe',
+  bakery: 'bakery',
+  pastry: 'bakery',
+  confectionery: 'bakery',
+  deli: 'bakery',
+  ice_cream: 'icecream',
+  bar: 'bar',
+  biergarten: 'pub',
+  pub: 'pub',
+  temple: 'temple',
+  park: 'park',
+  garden: 'park',
+  nature_reserve: 'park',
+  market: 'market',
+  mall: 'mall',
+  museum: 'museum',
+  gallery: 'museum',
+  arts_centre: 'museum',
+  theatre: 'theatre',
+  cinema: 'cinema',
+  theme_park: 'fun',
+  water_park: 'fun',
+  amusement_arcade: 'fun',
+  bowling_alley: 'fun',
+  escape_game: 'fun',
+  ice_rink: 'fun',
+  miniature_golf: 'fun',
+  zoo: 'zoo',
+  aquarium: 'zoo',
+  attraction: 'attraction',
+  monument: 'monument',
+  castle: 'castle',
+  fort: 'castle',
+  palace: 'castle',
+  viewpoint: 'viewpoint',
+};
+
+export function placeIcon(kind: string): PlaceIcon {
+  return KIND_ICON[kind] ?? 'place';
 }
 
 export type MapBounds = { west: number; south: number; east: number; north: number; zoom: number };
@@ -110,7 +187,7 @@ export function usePlacesInView(purpose: PlacePurpose = 'food') {
 export async function fetchPlace(id: string): Promise<Place | null> {
   const { data } = await supabase
     .from('places')
-    .select('id, name, name_en, name_th, kind, lat, lng')
+    .select('id, name, name_en, name_th, kind, lat, lng, website')
     .eq('id', id)
     .maybeSingle();
   return (data as Place | null) ?? null;

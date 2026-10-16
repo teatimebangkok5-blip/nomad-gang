@@ -63,6 +63,8 @@ export type Venue = {
   checkin_radius_m: number;
   photo_path: string | null;
   place_id: string | null;
+  // Official ticket page (https), shown in the app as "Buy tickets".
+  ticket_url: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -80,6 +82,8 @@ export type Deal = {
   details_th: string;
   discount_type: DiscountType;
   discount_value: number | null;
+  // Official ticket page for this event / ticket discount (https).
+  ticket_url: string | null;
   is_active: boolean;
 };
 

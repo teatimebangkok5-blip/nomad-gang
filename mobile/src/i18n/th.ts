@@ -164,6 +164,8 @@ const th: Translation = {
     cancelled: 'แฮงเอาท์นี้ถูกยกเลิกแล้ว',
     ended: 'แฮงเอาท์นี้จบไปแล้ว',
     chat: 'แชตแฮงเอาท์',
+    buyTickets: 'ซื้อตั๋ว',
+    officialWebsite: 'เว็บไซต์ทางการ',
     errors: {
       auth_required: 'กรุณาเข้าสู่ระบบก่อน',
       not_allowed: 'กรุณายืนยันเบอร์โทรศัพท์เพื่อสร้างหรือเข้าร่วมแฮงเอาท์',

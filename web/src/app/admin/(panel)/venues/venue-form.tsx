@@ -150,6 +150,23 @@ export function VenueForm({ action, venue, hangout = false }: { action: VenueFor
         </Field>
       </div>
 
+      <Field
+        label="Official ticket link (optional)"
+        name="ticket_url"
+        errors={errors.ticket_url}
+        hint='The venue’s own page for buying entry tickets. The app shows a "Buy tickets" button only when this is set. Must start with https://'
+      >
+        <input
+          id="ticket_url"
+          name="ticket_url"
+          type="url"
+          inputMode="url"
+          defaultValue={venue?.ticket_url ?? ""}
+          placeholder="https://"
+          className={inputClass}
+        />
+      </Field>
+
       <label className="flex items-start gap-3 rounded-lg border border-ink-200 bg-ink-50 p-3">
         <input
           type="checkbox"

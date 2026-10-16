@@ -21,6 +21,8 @@ const ICONS = {
   entertainment: { android: 'local_activity', ios: 'ticket.fill' },
   hangout: { android: 'celebration', ios: 'party.popper.fill' },
   pin: { android: 'pin_drop', ios: 'mappin.and.ellipse' },
+  ticket: { android: 'confirmation_number', ios: 'ticket.fill' },
+  website: { android: 'open_in_new', ios: 'arrow.up.right.square' },
   deal: { android: 'sell', ios: 'tag.fill' },
   location: { android: 'location_on', ios: 'location.fill' },
   locationOff: { android: 'location_off', ios: 'location.slash.fill' },

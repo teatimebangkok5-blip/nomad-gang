@@ -63,6 +63,7 @@ export default function HomeScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const language = currentLanguage();
   const { session } = useAuth();
   const venues = useVenues();
   const meetups = useOpenMeetups(Boolean(session));
@@ -125,6 +126,7 @@ export default function HomeScreen() {
         lat: venue.lat,
         lng: venue.lng,
         emoji: shown ? PROMOTION_EMOJI[shown.kind] : CATEGORY_EMOJI[venue.category],
+        label: localized(venue, 'name', language),
         count: tablesAtVenue.get(venue.id),
         selected: venue.id === selectedVenueId,
       };

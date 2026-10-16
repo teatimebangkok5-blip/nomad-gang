@@ -162,6 +162,8 @@ const en = {
     cancelled: 'This hangout was cancelled.',
     ended: 'This hangout has ended.',
     chat: 'Hangout chat',
+    buyTickets: 'Buy tickets',
+    officialWebsite: 'Official website',
     errors: {
       auth_required: 'Please sign in first.',
       not_allowed: 'Verify your phone number to create or join hangouts.',

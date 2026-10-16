@@ -196,6 +196,24 @@ function PromotionForm({
         </div>
       )}
 
+      {(kind === "ticket" || kind === "event" || kind === "party" || kind === "free_entry") && (
+        <Field
+          label="Ticket link (optional)"
+          name="ticket_url"
+          errors={errors.ticket_url}
+          hint='Official page to buy tickets for this event or offer. Shows as "Buy tickets" in the app. Must start with https://'
+        >
+          <input
+            name="ticket_url"
+            type="url"
+            inputMode="url"
+            defaultValue={promotion?.ticket_url ?? ""}
+            placeholder="https://"
+            className={inputClass}
+          />
+        </Field>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <label className="flex items-center gap-3 text-sm">
           <input

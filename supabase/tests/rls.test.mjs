@@ -408,5 +408,104 @@ check("non-members can't post in the table chat", !!r.error);
 r = await tryQuery("authenticated", g1, `insert into public.meetup_messages (meetup_id, sender_id, body) values ($1, $2, 'fake')`, [placeMeetupId, user]);
 check("can't post as someone else", !!r.error);
 
+// --- Hangouts: places, spots, venues, ticket discounts and free entry
+r = await tryQuery("anon", null, `select count(*)::int n from public.places where purpose = 'hangout'`);
+check("Bangkok hangout places seeded", r.rows?.[0]?.n > 2000);
+r = await tryQuery("anon", null, `select id, kind from public.places where osm_type = 'way' and osm_id = 23483299`);
+const lumphiniId = r.rows?.[0]?.id;
+check("Lumphini Park is a hangout place", r.rows?.[0]?.kind === "park");
+r = await tryQuery("authenticated", user, `select count(*)::int n from public.places_in_bounds(100.0, 13.0, 101.0, 14.5, 1000) where id = $1`, [lumphiniId]);
+check("food map doesn't show hangout places", r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", user, `select count(*)::int n from public.places_in_bounds(100.0, 13.0, 101.0, 14.5, 1000, 'hangout') where id = $1`, [lumphiniId]);
+check("hangout map shows hangout places", r.rows?.[0]?.n === 1);
+r = await tryQuery("authenticated", user, `select count(*)::int n from public.places_in_bounds(100.0, 13.0, 101.0, 14.5, 1000, 'hangout') where id = $1`, [placeId]);
+check("hangout map doesn't show food places", r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", user, `select public.create_meetup_at_place($1, $2, 4)`, [lumphiniId, inHours(2)]);
+check("tables can't be created at a hangout place", /venue_unavailable/.test(r.error ?? ""));
+
+const hangout = (who, a) =>
+  tryQuery("authenticated", who,
+    `select public.create_hangout(p_title => $1, p_description => $2, p_starts_at => $3, p_duration_minutes => $4,
+       p_max_people => $5, p_venue_id => $6, p_place_id => $7, p_spot_lat => $8, p_spot_lng => $9, p_spot_name => $10) as id`,
+    [a.title ?? "Sunset walk", a.description ?? "", a.startsAt ?? inHours(2), a.duration ?? 120, a.size ?? 2,
+      a.venueId ?? null, a.placeId ?? null, a.lat ?? null, a.lng ?? null, a.spotName ?? null]);
+
+r = await hangout(user, { placeId: lumphiniId, description: "  Bring water  " });
+check("hangout at a hangout place", !r.error);
+const hangoutId = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", user, `select kind, place_name, description, (ends_at - starts_at) = interval '2 hours' as two_hours from public.list_open_meetups() where id = $1`, [hangoutId]);
+check("hangout listed with kind, place, description and its own length",
+  r.rows?.[0]?.kind === "hangout" && r.rows[0].place_name === "สวนลุมพินี" && r.rows[0].description === "Bring water" && r.rows[0].two_hours === true);
+r = await hangout(user, { lat: 13.7466, lng: 100.5393, spotName: "  Siam BTS exit 1  ", size: 30, duration: 720 });
+check("hangout at any spot on the map, 30 people, 12 hours", !r.error);
+const spotHangoutId = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", g1, `select place_id, place_name, place_lat, joined from public.list_open_meetups() where id = $1`, [spotHangoutId]);
+check("spot hangout listed with the spot's name and pin", r.rows?.[0]?.place_id === null && r.rows[0].place_name === "Siam BTS exit 1" && r.rows[0].place_lat === 13.7466 && r.rows[0].joined === false);
+r = await hangout(user, { lat: 18.79, lng: 98.98, spotName: "Chiang Mai" });
+check("spot outside Bangkok rejected", /outside_bangkok/.test(r.error ?? ""));
+r = await hangout(user, { lat: 13.75, lng: 100.5, spotName: "   " });
+check("spot without a name rejected", /spot_name_required/.test(r.error ?? ""));
+r = await hangout(user, { placeId: lumphiniId, lat: 13.75, lng: 100.5, spotName: "x" });
+check("hangout with two locations rejected", /invalid_place/.test(r.error ?? ""));
+r = await hangout(user, { placeId: lumphiniId, size: 31 });
+check("hangout larger than 30 rejected", /invalid_size/.test(r.error ?? ""));
+r = await hangout(user, { placeId: lumphiniId, size: 1 });
+check("hangout of 1 rejected", /invalid_size/.test(r.error ?? ""));
+r = await hangout(user, { placeId: lumphiniId, title: "   " });
+check("hangout without a title rejected", /title_required/.test(r.error ?? ""));
+r = await hangout(user, { placeId: lumphiniId, duration: 15 });
+check("hangout shorter than 30 min rejected", /invalid_duration/.test(r.error ?? ""));
+r = await hangout(user, { placeId: lumphiniId, duration: 13 * 60 });
+check("hangout longer than 12 hours rejected", /invalid_duration/.test(r.error ?? ""));
+r = await hangout(user, { placeId: lumphiniId, startsAt: inHours(24 * 15) });
+check("hangout more than 14 days ahead rejected", /invalid_time/.test(r.error ?? ""));
+r = await hangout(unverified, { placeId: lumphiniId });
+check("unverified user can't create a hangout", /not_allowed/.test(r.error ?? ""));
+r = await tryQuery("anon", null, `select public.create_hangout('x', '', now() + interval '1 hour', 60, 2, null, $1)`, [lumphiniId]);
+check("signed-out visitor can't create a hangout", !!r.error);
+r = await tryQuery("authenticated", user, `insert into public.meetups (kind, spot_name, spot_lat, spot_lng, host_id, title, starts_at, ends_at, max_people) values ('hangout', 'x', 13.7, 100.5, $1, 'x', now(), now() + interval '1 hour', 2)`, [user]);
+check("direct insert of a hangout blocked", !!r.error);
+
+r = await tryQuery("authenticated", g1, `select public.join_meetup($1)`, [hangoutId]);
+check("people join a hangout like a table", !r.error);
+r = await tryQuery("authenticated", g2, `select public.join_meetup($1)`, [hangoutId]);
+check("a hangout for 2 is full with 2", /meetup_full/.test(r.error ?? ""));
+r = await tryQuery("authenticated", g1, `insert into public.meetup_messages (meetup_id, sender_id, body) values ($1, $2, 'Meet at the gate')`, [hangoutId, g1]);
+check("hangout members use the group chat", !r.error);
+
+r = await tryQuery("authenticated", admin,
+  `insert into public.venues (name_en, name_th, category, lat, lng, is_active) values ('Benjakitti Park', 'สวนเบญจกิติ', 'park', 13.7301, 100.5585, true) returning id`);
+check("admin can create a hangout venue", !r.error);
+const parkVenueId = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", user, `select public.create_meetup($1, $2, 3)`, [parkVenueId, inHours(2)]);
+check("tables can't be created at a hangout venue", /venue_unavailable/.test(r.error ?? ""));
+r = await hangout(user, { venueId: parkVenueId });
+check("hangout at a hangout venue", !r.error);
+r = await hangout(user, { lat: 13.75, lng: 100.5, spotName: "Somewhere" });
+check("a person can host at most 3 open hangouts", /too_many_open/.test(r.error ?? ""));
+r = await tryQuery("authenticated", g2, `select public.create_meetup_at_place($1, $2, 3)`, [placeId, inHours(6)]);
+check("hangouts don't count towards the 3-table limit", !r.error);
+
+const promo = (args) => tryQuery("authenticated", admin, `select public.admin_save_promotion($1, null, ${args}) as id`, [parkVenueId]);
+r = await promo(`'ticket', '20% off entry', 'ลดค่าเข้า 20%', '', '', 'percent', 20, 'PARK20', null, null, true`);
+check("ongoing ticket discount with a coupon code", !r.error);
+r = await tryQuery("authenticated", admin, `select coupon_code from public.deal_coupons where deal_id = $1`, [r.rows?.[0]?.id]);
+check("ticket discount stores its coupon code", r.rows?.[0]?.coupon_code === "PARK20");
+r = await promo(`'ticket', 'Festival ฿100 off', 'ลด 100 บาท', '', '', 'fixed_thb', 100, 'FEST100', now() + interval '3 days', now() + interval '4 days', true`);
+check("dated ticket discount for an event (several tickets per venue)", !r.error);
+r = await promo(`'ticket', 'x', 'x', '', '', 'percent', 10, '', null, null, true`);
+check("ticket discount without a coupon code rejected", !!r.error);
+r = await promo(`'ticket', 'x', 'x', '', '', 'other', null, 'X', null, null, true`);
+check("ticket discount without an amount rejected", !!r.error);
+r = await promo(`'free_entry', 'Free entry', 'เข้าฟรี', '', '', 'other', null, null, null, null, true`);
+check("free entry listing without a coupon", !r.error);
+const freeId = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", admin, `select count(*)::int n from public.deal_coupons where deal_id = $1`, [freeId]);
+check("free entry has no coupon code", r.rows?.[0]?.n === 0);
+r = await promo(`'free_entry', 'x', 'x', '', '', 'other', null, null, now() + interval '1 day', null, true`);
+check("free entry with only a start date rejected", !!r.error);
+r = await tryQuery("authenticated", user, `select count(*)::int n from public.deals where venue_id = $1`, [parkVenueId]);
+check("app users see the hangout venue's promotions", r.rows?.[0]?.n === 3);
+
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

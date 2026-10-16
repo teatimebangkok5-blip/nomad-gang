@@ -2,12 +2,18 @@
 
 import { useActionState, useRef, useState } from "react";
 import { Field, FormMessage, SubmitButton, inputClass } from "@/components/form";
-import { CATEGORY_LABELS, VENUE_CATEGORIES, type FormState, type Venue } from "@/lib/types";
+import { CATEGORY_LABELS, DINING_CATEGORIES, HANGOUT_CATEGORIES, type FormState, type Venue } from "@/lib/types";
 import { PlaceSearch } from "./place-search";
 
 type VenueFormAction = (prev: FormState, formData: FormData) => Promise<FormState>;
 
-export function VenueForm({ action, venue }: { action: VenueFormAction; venue?: Venue }) {
+const CATEGORY_GROUPS = [
+  { label: "Food & drink: people create tables here", categories: DINING_CATEGORIES },
+  { label: "Hangout: people create hangouts here", categories: HANGOUT_CATEGORIES },
+];
+
+// `hangout` (new hangout venue): only the hangout categories are offered.
+export function VenueForm({ action, venue, hangout = false }: { action: VenueFormAction; venue?: Venue; hangout?: boolean }) {
   const [state, formAction, pending] = useActionState(action, {});
   const errors = state.fieldErrors ?? {};
   const [coordinates, setCoordinates] = useState(venue ? `${venue.lat}, ${venue.lng}` : "");
@@ -33,7 +39,8 @@ export function VenueForm({ action, venue }: { action: VenueFormAction; venue?: 
       />
       {placeId && (
         <p className="-mt-3 text-xs text-ink-600">
-          Linked to a place on the app&apos;s map. Tables people create there get this venue&apos;s promotions.{" "}
+          Linked to a place on the app&apos;s map. Tables and hangouts people create there get this venue&apos;s
+          promotions.{" "}
           <button type="button" className="text-brand-700 underline" onClick={() => setPlaceId("")}>
             Unlink
           </button>
@@ -54,10 +61,14 @@ export function VenueForm({ action, venue }: { action: VenueFormAction; venue?: 
           <option value="" disabled>
             Choose…
           </option>
-          {VENUE_CATEGORIES.map((category) => (
-            <option key={category} value={category}>
-              {CATEGORY_LABELS[category]}
-            </option>
+          {CATEGORY_GROUPS.filter((group) => !hangout || group.categories === HANGOUT_CATEGORIES).map((group) => (
+            <optgroup key={group.label} label={group.label}>
+              {group.categories.map((category) => (
+                <option key={category} value={category}>
+                  {CATEGORY_LABELS[category]}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
       </Field>

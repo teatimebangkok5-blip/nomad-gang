@@ -15,10 +15,23 @@ const KIND_LABELS: Record<string, string> = {
   bakery: "Bakery",
   coffee: "Coffee shop",
   tea: "Tea shop",
+  temple: "Temple",
+  park: "Park",
+  garden: "Garden",
+  market: "Market",
+  mall: "Mall",
+  museum: "Museum",
+  gallery: "Gallery",
+  attraction: "Attraction",
+  viewpoint: "Viewpoint",
+  cinema: "Cinema",
+  theatre: "Theatre",
+  zoo: "Zoo",
+  theme_park: "Theme park",
 };
 
-// Find the venue among Bangkok's food places (OpenStreetMap) and link it: the venue then replaces that place's dot
-// on the app's map, and its check-in point and names are filled in when empty.
+// Find the venue among Bangkok's places (OpenStreetMap: food places and hangout places) and link it: the venue then
+// replaces that place's dot on the app's map, and its check-in point and names are filled in when empty.
 export function PlaceSearch({ onPick }: { onPick: (place: PlaceResult) => void }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PlaceResult[] | null>(null);
@@ -81,7 +94,10 @@ export function PlaceSearch({ onPick }: { onPick: (place: PlaceResult) => void }
                     <span className="text-ink-500"> · {place.name_th}</span>
                   )}
                 </span>
-                <span className="block text-xs text-ink-600">{KIND_LABELS[place.kind] ?? place.kind}</span>
+                <span className="block text-xs text-ink-600">
+                  {KIND_LABELS[place.kind] ?? place.kind.replace(/_/g, " ")}
+                  {place.purpose === "hangout" && " · hangout place"}
+                </span>
               </button>
             </li>
           ))}

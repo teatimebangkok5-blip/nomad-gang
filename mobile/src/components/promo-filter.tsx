@@ -2,23 +2,26 @@ import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, Text } from 'react-native';
 
 import { Radius, Spacing, Type } from '@/constants/theme';
-import { PROMOTION_EMOJI, PROMOTION_KINDS, type PromotionKind } from '@/lib/venues';
+import { DINING_PROMOTION_KINDS, PROMOTION_EMOJI, type PromotionKind } from '@/lib/venues';
 import { makeStyles } from '@/lib/theme';
 
-// Floating "what's on" buttons: Discount, Offer, Event, Party. Tap to filter, tap again to clear.
+// Floating "what's on" buttons: Discount, Offer, Event, Party on the food map; Tickets, Free entry, Event, Party on
+// the Hangout map. Tap to filter, tap again to clear.
 export function PromoFilter({
   value,
   onChange,
+  kinds = DINING_PROMOTION_KINDS,
 }: {
   value: PromotionKind | null;
   onChange: (value: PromotionKind | null) => void;
+  kinds?: readonly PromotionKind[];
 }) {
   const styles = useStyles();
   const { t } = useTranslation();
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-      {PROMOTION_KINDS.map((kind) => {
+      {kinds.map((kind) => {
         const selected = kind === value;
         return (
           <Pressable

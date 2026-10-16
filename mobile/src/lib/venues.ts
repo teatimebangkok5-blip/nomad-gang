@@ -3,14 +3,26 @@ import { AppState } from 'react-native';
 
 import { supabase, uniqueChannelName } from '@/lib/supabase';
 
-export const VENUE_CATEGORIES = ['cafe', 'restaurant', 'rooftop', 'bar'] as const;
+// Food and drink venues host tables; hangout venues (parks, malls, museums, …) show on the Hangout map.
+export const DINING_CATEGORIES = ['cafe', 'restaurant', 'rooftop', 'bar'] as const;
+export const HANGOUT_CATEGORIES = ['attraction', 'park', 'mall', 'museum', 'temple', 'market', 'entertainment'] as const;
+export const VENUE_CATEGORIES = [...DINING_CATEGORIES, ...HANGOUT_CATEGORIES] as const;
 export type VenueCategory = (typeof VENUE_CATEGORIES)[number];
 
-export const PROMOTION_KINDS = ['discount', 'offer', 'event', 'party'] as const;
+export function isHangoutVenue(venue: Pick<Venue, 'category'>): boolean {
+  return (HANGOUT_CATEGORIES as readonly string[]).includes(venue.category);
+}
+
+export const PROMOTION_KINDS = ['discount', 'offer', 'event', 'party', 'ticket', 'free_entry'] as const;
 export type PromotionKind = (typeof PROMOTION_KINDS)[number];
 
-// Discount and offer use the coupon (unlocked when 3+ people check in); event and party are dated listings.
-export const COUPON_KINDS: readonly PromotionKind[] = ['discount', 'offer'];
+// The filter buttons on each map.
+export const DINING_PROMOTION_KINDS: readonly PromotionKind[] = ['discount', 'offer', 'event', 'party'];
+export const HANGOUT_PROMOTION_KINDS: readonly PromotionKind[] = ['ticket', 'free_entry', 'event', 'party'];
+
+// Discount and offer use the coupon (unlocked when 3+ people check in); a ticket discount uses the coupon too, but
+// any member of a hangout there can use it. Event, party and free entry are listings without a coupon.
+export const COUPON_KINDS: readonly PromotionKind[] = ['discount', 'offer', 'ticket'];
 
 // Used on the floating filter buttons and on map pins.
 export const PROMOTION_EMOJI: Record<PromotionKind, string> = {
@@ -18,7 +30,19 @@ export const PROMOTION_EMOJI: Record<PromotionKind, string> = {
   offer: '🎁',
   event: '🎵',
   party: '🎉',
+  ticket: '🎟️',
+  free_entry: '🆓',
 };
+
+// An event, party or dated ticket/free-entry promotion that is on right now.
+export function isHappeningNow(promotion: Pick<VenueDeal, 'starts_at' | 'ends_at'>, now = Date.now()): boolean {
+  return (
+    promotion.starts_at !== null &&
+    promotion.ends_at !== null &&
+    new Date(promotion.starts_at).getTime() <= now &&
+    new Date(promotion.ends_at).getTime() > now
+  );
+}
 
 export type VenueDeal = {
   id: string;
@@ -42,7 +66,7 @@ export type Venue = {
   lng: number;
   photo_path: string | null;
   place_id: string | null;
-  // The active discount or offer (coupon), if any.
+  // The active coupon promotion (discount, offer or ticket discount), if any.
   deal: VenueDeal | null;
   // Every active promotion, events/parties that have not ended yet, soonest first.
   promotions: VenueDeal[];

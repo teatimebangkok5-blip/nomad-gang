@@ -46,6 +46,7 @@ function RootNavigator() {
         <Stack.Protected guard={skipLogin || (!!session && phoneVerified)}>
           <Stack.Screen name="index" />
           <Stack.Screen name="create-table" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="create-hangout" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="table/[id]" />
           <Stack.Screen name="settings" />
           <Stack.Screen name="travellers" />

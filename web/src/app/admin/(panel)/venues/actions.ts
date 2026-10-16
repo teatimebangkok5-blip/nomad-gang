@@ -4,7 +4,16 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
-import { COUPON_KINDS, DISCOUNT_TYPES, PROMOTION_KINDS, VENUE_CATEGORIES, type FormState } from "@/lib/types";
+import {
+  COUPON_KINDS,
+  DATED_KINDS,
+  DISCOUNT_KINDS,
+  DISCOUNT_TYPES,
+  OPTIONALLY_DATED_KINDS,
+  PROMOTION_KINDS,
+  VENUE_CATEGORIES,
+  type FormState,
+} from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Venues
@@ -141,7 +150,7 @@ export async function setVenuePhoto(venueId: string, photoPath: string | null): 
 }
 
 // ---------------------------------------------------------------------------
-// Promotions: discount and offer (coupon code), event and party (dated)
+// Promotions: discount, offer and ticket discount (coupon code); event and party (dated); free entry
 // ---------------------------------------------------------------------------
 
 // <input type="datetime-local"> gives "2026-10-20T20:00" with no zone; the admin works in Bangkok time.
@@ -174,7 +183,7 @@ const promotionSchema = z
 
     let discountValue: number | null = null;
     let discountType: (typeof DISCOUNT_TYPES)[number] = "other";
-    if (data.kind === "discount") {
+    if (DISCOUNT_KINDS.includes(data.kind)) {
       discountType = data.discount_type === "fixed_thb" ? "fixed_thb" : "percent";
       const value = Number(data.discount_value);
       const max = discountType === "percent" ? 100 : 100000;
@@ -190,7 +199,10 @@ const promotionSchema = z
 
     let startsAt: Date | null = null;
     let endsAt: Date | null = null;
-    if (!hasCoupon) {
+    const datesRequired = DATED_KINDS.includes(data.kind);
+    const datesOptional = OPTIONALLY_DATED_KINDS.includes(data.kind);
+    // Optional dates: leave both empty for an ongoing promotion, or set both for an event.
+    if (datesRequired || (datesOptional && (data.starts_at || data.ends_at))) {
       startsAt = fromBangkokInput(data.starts_at);
       endsAt = fromBangkokInput(data.ends_at);
       if (!startsAt) ctx.addIssue({ code: "custom", path: ["starts_at"], message: "Pick a start date and time" });
@@ -270,6 +282,7 @@ export type PlaceResult = {
   name_en: string | null;
   name_th: string | null;
   kind: string;
+  purpose: "food" | "hangout";
   lat: number;
   lng: number;
 };

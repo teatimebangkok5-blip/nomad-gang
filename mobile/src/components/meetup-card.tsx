@@ -27,28 +27,45 @@ export function MeetupCard({
   const language = currentLanguage();
   const start = new Date(meetup.starts_at);
   const full = meetup.member_count >= meetup.max_people;
+  const hangout = meetup.kind === 'hangout';
+  const placeLabel = venue ? localized(venue, 'name', language) : meetupPlaceName(meetup, language);
 
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
-      <View style={styles.when}>
-        <Text style={styles.day} numberOfLines={1}>
+      style={({ pressed }) => [styles.card, hangout && styles.cardHangout, pressed && styles.pressed]}>
+      <View style={[styles.when, hangout && styles.whenHangout]}>
+        <Text style={[styles.day, hangout && styles.dayHangout]} numberOfLines={1}>
           {formatDayLabel(bangkokDay(start), t)}
         </Text>
         <Text style={styles.time}>{formatClock(bangkokMinutes(start))}</Text>
       </View>
 
       <View style={styles.body}>
-        <Text style={styles.venue} numberOfLines={1}>
-          {venue ? localized(venue, 'name', language) : meetupPlaceName(meetup, language)}
-        </Text>
-        {meetup.title ? (
-          <Text style={styles.title} numberOfLines={1}>
-            {meetup.title}
-          </Text>
-        ) : null}
+        {hangout ? (
+          // Hangouts lead with what's happening, then where.
+          <>
+            <Text style={styles.tag}>🙌 {t('hangouts.hangout')}</Text>
+            <Text style={styles.venue} numberOfLines={1}>
+              {meetup.title}
+            </Text>
+            <Text style={styles.title} numberOfLines={1}>
+              {placeLabel}
+            </Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.venue} numberOfLines={1}>
+              {placeLabel}
+            </Text>
+            {meetup.title ? (
+              <Text style={styles.title} numberOfLines={1}>
+                {meetup.title}
+              </Text>
+            ) : null}
+          </>
+        )}
         <Text style={styles.people}>{t('tables.peopleCount', { count: meetup.member_count, max: meetup.max_people })}</Text>
         {venue?.deal && (
           <Text style={styles.deal} numberOfLines={1}>
@@ -91,6 +108,7 @@ const useStyles = makeStyles((Colors) => ({
     borderWidth: 1,
     borderColor: Colors.border,
   },
+  cardHangout: { borderColor: Colors.violet },
   pressed: { opacity: 0.75 },
   when: {
     width: 68,
@@ -99,7 +117,10 @@ const useStyles = makeStyles((Colors) => ({
     backgroundColor: Colors.orangeTint,
     alignItems: 'center',
   },
+  whenHangout: { backgroundColor: Colors.violetTint },
   day: { ...Type.small, fontSize: 12, color: Colors.glow, fontWeight: '600' },
+  dayHangout: { color: Colors.textSecondary },
+  tag: { ...Type.small, fontSize: 11, fontWeight: '700', color: Colors.textSecondary },
   time: { ...Type.heading, color: Colors.text, fontWeight: '800' },
   body: { flex: 1, gap: 2 },
   venue: { ...Type.heading, color: Colors.text },

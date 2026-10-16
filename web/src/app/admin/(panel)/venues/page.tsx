@@ -4,7 +4,16 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { requireAdmin } from "@/lib/auth";
 import { buttonClass } from "@/components/form";
-import { CATEGORY_LABELS, COUPON_KINDS, PROMOTION_LABELS, describeDiscount, type Deal, type Venue } from "@/lib/types";
+import {
+  CATEGORY_LABELS,
+  COUPON_KINDS,
+  DISCOUNT_KINDS,
+  PROMOTION_LABELS,
+  describeDiscount,
+  isHangoutCategory,
+  type Deal,
+  type Venue,
+} from "@/lib/types";
 
 export const metadata: Metadata = { title: "Venues" };
 
@@ -20,12 +29,18 @@ export default function VenuesPage() {
         <div>
           <h1 className="text-2xl font-semibold">Venues</h1>
           <p className="mt-1 text-sm text-ink-600">
-            Partner cafes, restaurants, rooftops and bars. Only venues marked <em>Live</em> show in the app.
+            Partner cafes, restaurants, rooftops and bars (tables), and hangout places such as parks, malls and museums
+            (hangouts). Only venues marked <em>Live</em> show in the app.
           </p>
         </div>
-        <Link href="/admin/venues/new" className={buttonClass("primary")}>
-          Add venue
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/admin/venues/new" className={buttonClass("primary")}>
+            Add venue
+          </Link>
+          <Link href="/admin/venues/new?for=hangout" className={buttonClass("secondary")}>
+            Add hangout venue
+          </Link>
+        </div>
       </div>
 
       <Suspense fallback={<VenueListSkeleton />}>
@@ -45,6 +60,8 @@ async function VenueList() {
     .order("created_at", { ascending: false });
 
   const venues = (data ?? []) as VenueRow[];
+  const dining = venues.filter((venue) => !isHangoutCategory(venue.category));
+  const hangout = venues.filter((venue) => isHangoutCategory(venue.category));
 
   return (
     <>
@@ -64,39 +81,53 @@ async function VenueList() {
         </div>
       )}
 
-      {venues.length > 0 && (
-        <ul className="mt-6 divide-y divide-ink-200 overflow-hidden rounded-xl border border-ink-200 bg-white">
-          {venues.map((venue) => {
-            const active = venue.deals.filter((d) => d.is_active);
-            const coupon = active.find((d) => COUPON_KINDS.includes(d.kind));
-            const listings = active.filter((d) => !COUPON_KINDS.includes(d.kind)).map((d) => PROMOTION_LABELS[d.kind]);
-            const logins = venue.venue_accounts[0]?.count ?? 0;
-            const missing = [active.length === 0 && "no promotions", coupon && logins === 0 && "no staff login"].filter(Boolean);
-            return (
-              <li key={venue.id}>
-                <Link
-                  href={`/admin/venues/${venue.id}`}
-                  className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 hover:bg-ink-50"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">
-                      {venue.name_en} <span className="text-ink-500">· {venue.name_th}</span>
-                    </p>
-                    <p className="mt-0.5 text-sm text-ink-600">
-                      {CATEGORY_LABELS[venue.category]}
-                      {coupon && <> · {coupon.kind === "discount" ? describeDiscount(coupon) : coupon.title_en}</>}
-                      {listings.length > 0 && <> · {listings.join(", ")}</>}
-                      {missing.length > 0 && <span className="text-amber-700"> · {missing.join(", ")}</span>}
-                    </p>
-                  </div>
-                  <StatusBadge live={venue.is_active} />
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      {dining.length > 0 && <VenueGroup title="Food & drink venues" venues={dining} />}
+      {hangout.length > 0 && <VenueGroup title="Hangout venues" venues={hangout} />}
     </>
+  );
+}
+
+function VenueGroup({ title, venues }: { title: string; venues: VenueRow[] }) {
+  return (
+    <section className="mt-6">
+      <h2 className="text-sm font-semibold text-ink-700">{title}</h2>
+      <ul className="mt-2 divide-y divide-ink-200 overflow-hidden rounded-xl border border-ink-200 bg-white">
+        {venues.map((venue) => {
+          const active = venue.deals.filter((d) => d.is_active);
+          const coupons = active.filter((d) => COUPON_KINDS.includes(d.kind));
+          const listings = active.filter((d) => !COUPON_KINDS.includes(d.kind)).map((d) => PROMOTION_LABELS[d.kind]);
+          const logins = venue.venue_accounts[0]?.count ?? 0;
+          const missing = [active.length === 0 && "no promotions", coupons.length > 0 && logins === 0 && "no staff login"].filter(Boolean);
+          return (
+            <li key={venue.id}>
+              <Link
+                href={`/admin/venues/${venue.id}`}
+                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 hover:bg-ink-50"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-medium">
+                    {venue.name_en} <span className="text-ink-500">· {venue.name_th}</span>
+                  </p>
+                  <p className="mt-0.5 text-sm text-ink-600">
+                    {CATEGORY_LABELS[venue.category]}
+                    {coupons.map((coupon, i) => (
+                      <span key={i}>
+                        {" "}
+                        · {DISCOUNT_KINDS.includes(coupon.kind) ? describeDiscount(coupon) : coupon.title_en}
+                        {coupon.kind === "ticket" && " tickets"}
+                      </span>
+                    ))}
+                    {listings.length > 0 && <> · {listings.join(", ")}</>}
+                    {missing.length > 0 && <span className="text-amber-700"> · {missing.join(", ")}</span>}
+                  </p>
+                </div>
+                <StatusBadge live={venue.is_active} />
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 

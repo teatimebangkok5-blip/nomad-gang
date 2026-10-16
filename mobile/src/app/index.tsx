@@ -1,11 +1,10 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
   Alert,
-  BackHandler,
   FlatList,
   Linking,
   Pressable,
@@ -16,7 +15,6 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
@@ -24,6 +22,7 @@ import { Icon } from '@/components/icon';
 import { LanguageToggle } from '@/components/language-toggle';
 import { Logo } from '@/components/logo';
 import { MeetupCard } from '@/components/meetup-card';
+import { SlideUpPanel } from '@/components/slide-up-panel';
 import { VenueCard } from '@/components/venue-card';
 import { VenueMap, type MapPin } from '@/components/venue-map';
 import { Radius, Spacing, Type } from '@/constants/theme';
@@ -34,17 +33,30 @@ import { PromoFilter } from '@/components/promo-filter';
 import { CATEGORY_EMOJI } from '@/components/venue-map';
 import { formatWhen } from '@/lib/bangkok-time';
 import { distanceMeters, useCurrentLocation } from '@/lib/location';
-import { directionsUrl, joinMeetup, useOpenMeetups, type OpenMeetup } from '@/lib/meetups';
+import {
+  directionsUrl,
+  joinMeetup,
+  meetupCoords,
+  meetupLocationKey,
+  meetupPlaceName,
+  useOpenMeetups,
+  type OpenMeetup,
+} from '@/lib/meetups';
 import { placeName, usePlacesInView, type Place } from '@/lib/places';
 import { skipLogin } from '@/lib/preview';
-import { PROMOTION_EMOJI, useVenues, type PromotionKind, type Venue } from '@/lib/venues';
+import { isHangoutVenue, PROMOTION_EMOJI, useVenues, type PromotionKind, type Venue } from '@/lib/venues';
 import { makeStyles, useColors } from '@/lib/theme';
 
-// What the bottom card shows: a partner venue, or any Bangkok food place (OpenStreetMap) someone tapped.
-type Selection = { type: 'venue'; venueId: string } | { type: 'place'; place: Place };
+// What the bottom card shows: a partner venue, any Bangkok food place (OpenStreetMap) someone tapped, or the
+// hangouts at one spot (when there are several; a single one opens straight away).
+type Selection =
+  | { type: 'venue'; venueId: string }
+  | { type: 'place'; place: Place }
+  | { type: 'hangouts'; key: string };
 
-// Home: a full-screen map of open tables. Logo and the Discount/Offer/Event/Party buttons float on top; a swipeable row of table cards,
-// "Create table" and a "List" button float at the bottom. "List" slides up a panel with all tables and places.
+// Home: a full-screen map of open tables and hangouts. Logo and the Discount/Offer/Event/Party buttons float on top;
+// a swipeable row of cards, "Create table", "Create hangout" and a "List" button float at the bottom. "List" slides
+// up a panel with everything open and the partner places. Hangout venues (parks, malls, …) live on the Hangout map.
 export default function HomeScreen() {
   const styles = useStyles();
   const Colors = useColors();
@@ -67,18 +79,10 @@ export default function HomeScreen() {
   const [topHeight, setTopHeight] = useState(0);
   const [bottomHeight, setBottomHeight] = useState(0);
 
-  // Android back button closes the list panel before leaving the app.
-  useEffect(() => {
-    if (!listOpen) return;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      setListOpen(false);
-      return true;
-    });
-    return () => sub.remove();
-  }, [listOpen]);
-
   const coords = location.state.status === 'granted' ? location.state.coords : null;
   const venueById = new Map(venues.venues.map((venue) => [venue.id, venue]));
+  const diningVenues = venues.venues.filter((venue) => !isHangoutVenue(venue));
+  const diningVenueIds = new Set(diningVenues.map((venue) => venue.id));
   const filtersOn = promo !== null;
   const venueMatches = (venue: Venue | undefined) =>
     Boolean(venue) &&
@@ -88,22 +92,33 @@ export default function HomeScreen() {
     meetup.venue_id ? venueMatches(venueById.get(meetup.venue_id)) : !filtersOn;
 
   const visibleMeetups = meetups.meetups.filter(meetupMatches);
-  const meetupsAtSelection = (s: Selection) =>
-    meetups.meetups.filter((meetup) =>
-      s.type === 'venue' ? meetup.venue_id === s.venueId : !meetup.venue_id && meetup.place_id === s.place.id,
-    );
 
-  // Partner venues: pin shows the promotion type (or the place type), badge = open tables there.
+  // Partner venues: pin shows the promotion type (or the place type), badge = open tables and hangouts there.
+  // Tables at food places share a 👥 pin per place; hangouts anywhere else share a 🙌 pin per place or spot.
   const tablesAtVenue = new Map<string, number>();
   const tablesAtPlace = new Map<string, OpenMeetup[]>();
+  const hangoutGroups = new Map<string, OpenMeetup[]>();
   for (const meetup of visibleMeetups) {
-    if (meetup.venue_id) tablesAtVenue.set(meetup.venue_id, (tablesAtVenue.get(meetup.venue_id) ?? 0) + 1);
-    else if (meetup.place_id) tablesAtPlace.set(meetup.place_id, [...(tablesAtPlace.get(meetup.place_id) ?? []), meetup]);
+    if (meetup.venue_id && diningVenueIds.has(meetup.venue_id)) {
+      tablesAtVenue.set(meetup.venue_id, (tablesAtVenue.get(meetup.venue_id) ?? 0) + 1);
+    } else if (meetup.kind === 'hangout') {
+      const key = meetupLocationKey(meetup);
+      hangoutGroups.set(key, [...(hangoutGroups.get(key) ?? []), meetup]);
+    } else if (meetup.place_id) {
+      tablesAtPlace.set(meetup.place_id, [...(tablesAtPlace.get(meetup.place_id) ?? []), meetup]);
+    }
   }
+  const meetupsAtSelection = (s: Selection) =>
+    s.type === 'hangouts'
+      ? (hangoutGroups.get(s.key) ?? [])
+      : meetups.meetups.filter((meetup) =>
+          s.type === 'venue' ? meetup.venue_id === s.venueId : !meetup.venue_id && meetup.place_id === s.place.id,
+        );
   const selectedVenueId = selection?.type === 'venue' ? selection.venueId : null;
   const selectedPlaceId = selection?.type === 'place' ? selection.place.id : null;
+  const selectedHangoutsKey = selection?.type === 'hangouts' ? selection.key : null;
   const pins: MapPin[] = [
-    ...venues.venues.filter(venueMatches).map((venue) => {
+    ...diningVenues.filter(venueMatches).map((venue) => {
       const shown = (promo && venue.promotions.find((p) => p.kind === promo)) || venue.deal || venue.promotions[0];
       return {
         key: `v:${venue.id}`,
@@ -120,9 +135,15 @@ export default function HomeScreen() {
         ? [{ key: `p:${placeId}`, lat: first.place_lat, lng: first.place_lng, emoji: '👥', tone: 'violet' as const, count: list.length, selected: placeId === selectedPlaceId }]
         : [];
     }),
+    ...[...hangoutGroups].flatMap(([key, list]) => {
+      const at = meetupCoords(list[0], venueById);
+      return at
+        ? [{ key: `h:${key}`, ...at, emoji: '🙌', tone: 'violet' as const, count: list.length, selected: key === selectedHangoutsKey }]
+        : [];
+    }),
   ];
 
-  const places = venues.venues
+  const places = diningVenues
     .filter(venueMatches)
     .map((venue) => ({ venue, distance: coords ? distanceMeters(coords, venue) : null }))
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
@@ -130,6 +151,12 @@ export default function HomeScreen() {
   const cardWidth = Math.min(width - Spacing.lg * 2 - Spacing.xl, 420);
 
   function handlePinPress(key: string) {
+    if (key.startsWith('h:')) {
+      const group = hangoutGroups.get(key.slice(2)) ?? [];
+      if (group.length === 1) openTable(group[0]);
+      else if (group.length > 1) setSelection({ type: 'hangouts', key: key.slice(2) });
+      return;
+    }
     if (key.startsWith('v:')) {
       const venueId = key.slice(2);
       setSelection((current) => (current?.type === 'venue' && current.venueId === venueId ? null : { type: 'venue', venueId }));
@@ -162,8 +189,10 @@ export default function HomeScreen() {
   function createAt(s: Selection) {
     if (s.type === 'venue') {
       router.push({ pathname: '/create-table', params: { venueId: s.venueId } });
-    } else {
+    } else if (s.type === 'place') {
       router.push({ pathname: '/create-table', params: { placeId: s.place.id } });
+    } else {
+      router.push('/create-hangout');
     }
   }
 
@@ -268,7 +297,13 @@ export default function HomeScreen() {
         {selection ? (
           <PlaceCard
             selection={selection}
-            venue={selection.type === 'venue' ? venueById.get(selection.venueId) : undefined}
+            venue={
+              selection.type === 'venue'
+                ? venueById.get(selection.venueId)
+                : selection.type === 'hangouts'
+                  ? venueById.get(meetupsAtSelection(selection)[0]?.venue_id ?? '')
+                  : undefined
+            }
             tables={meetupsAtSelection(selection)}
             renderMeetup={renderMeetup}
             onCreate={() => createAt(selection)}
@@ -300,56 +335,45 @@ export default function HomeScreen() {
         <View style={styles.actions}>
           <View style={styles.createButton}>
             <Button
+              compact
               title={t('tables.createTable')}
-              icon={<Icon name="add" size={20} color={Colors.onBrand} />}
+              icon={<Icon name="add" size={18} color={Colors.onBrand} />}
               onPress={() => router.push('/create-table')}
+            />
+          </View>
+          <View style={styles.createButton}>
+            <Button
+              compact
+              variant="violet"
+              title={t('hangouts.createHangout')}
+              icon={<Icon name="hangout" size={18} color={Colors.white} />}
+              onPress={() => router.push('/create-hangout')}
             />
           </View>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel={t('tables.showList')}
             onPress={() => setListOpen(true)}
             style={({ pressed }) => [styles.listButton, pressed && styles.roundButtonPressed]}>
-            <Icon name="list" size={20} color={Colors.text} />
-            <Text style={styles.listButtonText}>{t('tables.showList')}</Text>
+            <Icon name="list" size={22} color={Colors.text} />
           </Pressable>
         </View>
       </View>
 
-      {listOpen && (
-        <>
-          <Animated.View entering={FadeIn} exiting={FadeOut} style={styles.scrim}>
-            <Pressable style={StyleSheet.absoluteFill} onPress={() => setListOpen(false)} accessibilityLabel={t('tables.showMap')} />
-          </Animated.View>
-          <Animated.View
-            entering={SlideInDown.duration(260)}
-            exiting={SlideOutDown.duration(200)}
-            style={[styles.sheet, { top: insets.top + 72, paddingBottom: insets.bottom }]}>
-            <View style={styles.sheetHeader}>
-              <View style={styles.handle} />
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setListOpen(false)}
-                hitSlop={8}
-                style={({ pressed }) => [styles.mapButton, pressed && styles.roundButtonPressed]}>
-                <Icon name="map" size={18} color={Colors.text} />
-                <Text style={styles.listButtonText}>{t('tables.showMap')}</Text>
-              </Pressable>
-            </View>
-            <ListPanel
-              meetups={visibleMeetups}
-              meetupsStatus={session ? meetups.status : 'ready'}
-              renderMeetup={renderMeetup}
-              places={places}
-              venuesStatus={venues.status}
-              onRetryVenues={venues.retry}
-              onRefresh={async () => {
-                location.refresh();
-                await Promise.all([venues.pullToRefresh(), meetups.reload()]);
-              }}
-            />
-          </Animated.View>
-        </>
-      )}
+      <SlideUpPanel open={listOpen} onClose={() => setListOpen(false)}>
+        <ListPanel
+          meetups={visibleMeetups}
+          meetupsStatus={session ? meetups.status : 'ready'}
+          renderMeetup={renderMeetup}
+          places={places}
+          venuesStatus={venues.status}
+          onRetryVenues={venues.retry}
+          onRefresh={async () => {
+            location.refresh();
+            await Promise.all([venues.pullToRefresh(), meetups.reload()]);
+          }}
+        />
+      </SlideUpPanel>
     </View>
   );
 }
@@ -373,17 +397,23 @@ function PlaceCard({
   const Colors = useColors();
   const { t } = useTranslation();
   const language = currentLanguage();
+  const hangouts = selection.type === 'hangouts';
+  const first = tables[0];
   const name = venue
     ? localized(venue, 'name', language)
     : selection.type === 'place'
       ? placeName(selection.place, language)
-      : '';
+      : first
+        ? meetupPlaceName(first, language)
+        : '';
   const mapsTarget =
     selection.type === 'place'
       ? { lat: selection.place.lat, lng: selection.place.lng, name }
       : venue
         ? { lat: venue.lat, lng: venue.lng, name }
-        : null;
+        : first && first.place_lat !== null && first.place_lng !== null
+          ? { lat: first.place_lat, lng: first.place_lng, name }
+          : null;
 
   return (
     <View style={styles.placeCard}>
@@ -412,13 +442,19 @@ function PlaceCard({
                 </Text>
                 <Text style={styles.promoMeta} numberOfLines={1}>
                   {t(`promo.${promotion.kind}`)}
-                  {promotion.starts_at ? ` · ${formatWhen(promotion.starts_at, t)}` : ` · ${t('home.groupRule')}`}
+                  {promotion.starts_at
+                    ? ` · ${formatWhen(promotion.starts_at, t)}`
+                    : promotion.kind === 'ticket'
+                      ? ` · ${t('hangouts.anyMember')}`
+                      : promotion.kind === 'free_entry'
+                        ? ''
+                        : ` · ${t('home.groupRule')}`}
                 </Text>
               </View>
             </View>
           ))}
         </View>
-      ) : (
+      ) : hangouts ? null : (
         <Text style={styles.placeNote}>{t('tables.noDealHere')}</Text>
       )}
 
@@ -434,11 +470,20 @@ function PlaceCard({
 
       <View style={styles.placeActions}>
         <View style={styles.createButton}>
-          <Button
-            title={t('tables.createHere')}
-            icon={<Icon name="add" size={20} color={Colors.onBrand} />}
-            onPress={onCreate}
-          />
+          {hangouts ? (
+            <Button
+              title={t('hangouts.createHangout')}
+              variant="violet"
+              icon={<Icon name="hangout" size={20} color={Colors.white} />}
+              onPress={onCreate}
+            />
+          ) : (
+            <Button
+              title={t('tables.createHere')}
+              icon={<Icon name="add" size={20} color={Colors.onBrand} />}
+              onPress={onCreate}
+            />
+          )}
         </View>
         {mapsTarget && (
           <Pressable
@@ -637,45 +682,15 @@ const useStyles = makeStyles((Colors) => ({
   cardsSpinner: { marginVertical: Spacing.lg },
   actions: { flexDirection: 'row', gap: Spacing.sm, paddingHorizontal: Spacing.lg },
   createButton: { flex: 1 },
+  // Square icon button (List, Open in Maps) next to the wide action buttons.
   listButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs,
+    justifyContent: 'center',
     minHeight: 52,
-    paddingHorizontal: Spacing.lg,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.borderStrong,
-  },
-  listButtonText: { ...Type.label, color: Colors.text },
-  scrim: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0, 0, 0, 0.45)' },
-  sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: Colors.bg,
-    borderTopLeftRadius: Radius.lg + 8,
-    borderTopRightRadius: Radius.lg + 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  sheetHeader: {
-    alignItems: 'center',
-    paddingTop: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-    gap: Spacing.sm,
-  },
-  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.borderStrong },
-  mapButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    alignSelf: 'flex-end',
-    minHeight: 36,
+    minWidth: 52,
     paddingHorizontal: Spacing.md,
-    borderRadius: Radius.pill,
+    borderRadius: Radius.md,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.borderStrong,

@@ -76,7 +76,9 @@ export function VenueCard({
             </Text>
             <View style={styles.groupBadge}>
               <Icon name="group" size={14} color={Colors.onBrand} />
-              <Text style={styles.groupText}>{t('home.groupRule')}</Text>
+              <Text style={styles.groupText}>
+                {venue.deal.kind === 'ticket' ? t('hangouts.anyMember') : t('home.groupRule')}
+              </Text>
             </View>
           </View>
         )}

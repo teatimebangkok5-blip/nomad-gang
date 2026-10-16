@@ -78,21 +78,11 @@ live from your PC.
 2. For testing without paying for SMS, add a **test phone number and code** on the same page, e.g.
    `66812345678=123456`. Typing `081 234 5678` in the app then accepts the code `123456`.
 
-### 3. Google Maps (home map and "Create table")
+### 3. Maps and places (free, nothing to set up)
 
-1. In the same Google Cloud project: **APIs & Services → Library → Maps SDK for Android → Enable**. Google asks
-   for a billing account; maps in mobile apps are free, but a card must be on file.
-2. **Credentials → Create credentials → API key**. Edit it: **Application restrictions → Android apps → Add**:
-   package `com.tablemeet.app`, SHA-1 `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25` (the test
-   signing key). **API restrictions → Maps SDK for Android.** Save.
-3. Add it to `mobile/.env.local` as `GOOGLE_MAPS_API_KEY=...` (no `EXPO_PUBLIC_` prefix) and rebuild the app.
-   Without a key the app shows "Map not set up yet" where the map goes.
-4. **Places API (New)** — the app uses it to check that a tapped place is food/drink. Enable **Places API (New)**
-   in the Library, then edit the same key → **API restrictions** → also tick **Places API (New)**. Until then every
-   place is allowed.
-5. **Admin "Find on Google Maps"** needs a second key for the server: **Create credentials → API key**, **API
-   restrictions → Places API (New)** only (no application restriction). Put it in `web/.env.local` as
-   `GOOGLE_PLACES_API_KEY=...` and restart the admin panel.
+The map uses MapLibre with free OpenFreeMap tiles, and the places come from OpenStreetMap (already loaded into the
+database: 9,336 Bangkok food and drink places for tables, and 2,810 places to hang out such as temples, parks,
+markets, malls and museums for hangouts). No Google key, card or billing is needed.
 
 ### 4. Guest testing before sign-in is ready
 

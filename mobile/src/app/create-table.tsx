@@ -2,52 +2,46 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
 import { Chip } from '@/components/chip';
 import { Icon } from '@/components/icon';
+import { MapHeader } from '@/components/map-header';
 import { ScreenHeader } from '@/components/screen-header';
+import { SlideUpPanel } from '@/components/slide-up-panel';
 import { VenueCard } from '@/components/venue-card';
 import { CATEGORY_EMOJI, VenueMap } from '@/components/venue-map';
 import { Radius, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
-import { bangkokDay, bangkokMinutes, formatClock, formatDayLabel, fromBangkok, type BangkokDay } from '@/lib/bangkok-time';
+import { bangkokDay, formatClock, formatDayLabel, fromBangkok, timeSlots, type BangkokDay } from '@/lib/bangkok-time';
 import { distanceMeters, useCurrentLocation } from '@/lib/location';
 import { createMeetup, createMeetupAtPlace, type MeetupErrorKey } from '@/lib/meetups';
 import { fetchPlace, placeName, usePlacesInView, type Place } from '@/lib/places';
-import { PROMOTION_EMOJI, useVenues } from '@/lib/venues';
+import { isHangoutVenue, PROMOTION_EMOJI, useVenues } from '@/lib/venues';
 import { makeStyles, useColors } from '@/lib/theme';
 
 // Picked on the step-1 map: a partner venue, or any Bangkok food place (OpenStreetMap).
 type Picked = { type: 'venue'; venueId: string } | { type: 'place'; place: Place };
 
 const DAYS_AHEAD = 7; // today + 6 more days (the server allows up to 7 days ahead)
-const FIRST_SLOT = 6 * 60; // 06:00
-const LAST_SLOT = 23 * 60 + 30; // 23:30
 const MIN_PEOPLE = 3;
 const MAX_PEOPLE = 12;
 
-// Half-hour start times for a day; for today, only times at least 15 minutes from now.
-function timeSlots(day: BangkokDay, now: Date): number[] {
-  const earliest = day === bangkokDay(now) ? bangkokMinutes(now) + 15 : 0;
-  const slots: number[] = [];
-  for (let minutes = FIRST_SLOT; minutes <= LAST_SLOT; minutes += 30) {
-    if (minutes >= earliest) slots.push(minutes);
-  }
-  return slots;
-}
-
-// Create a table: 1) pick a partner venue or any Bangkok food place on the map, 2) day, time, size and a title.
-// Opened with ?venueId=… or ?placeId=… (from "Create table here"), step 1 is skipped.
+// Create a table: 1) pick a partner venue or any Bangkok food place on a full-screen map, 2) day, time, size and a
+// title. Opened with ?venueId=… or ?placeId=… (from "Create table here"), step 1 is skipped.
 export default function CreateTableScreen() {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const language = currentLanguage();
   const venues = useVenues();
   const location = useCurrentLocation();
   const coords = location.state.status === 'granted' ? location.state.coords : null;
+  const [listOpen, setListOpen] = useState(false);
+  const [topHeight, setTopHeight] = useState(0);
+  const [bottomHeight, setBottomHeight] = useState(0);
 
   const params = useLocalSearchParams<{ venueId?: string; placeId?: string }>();
   const [picked, setPicked] = useState<Picked | null>(null);
@@ -72,7 +66,9 @@ export default function CreateTableScreen() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<MeetupErrorKey | null>(null);
 
+  // Tables are for food and drink, so hangout venues (parks, museums, …) aren't offered.
   const places = venues.venues
+    .filter((venue) => !isHangoutVenue(venue))
     .map((venue) => ({ venue, distance: coords ? distanceMeters(coords, venue) : null }))
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
   const pickedVenue = picked?.type === 'venue' ? venues.venues.find((venue) => venue.id === picked.venueId) : undefined;
@@ -110,35 +106,36 @@ export default function CreateTableScreen() {
     router.replace({ pathname: '/table/[id]', params: { id: result.data } });
   }
 
-  // Step 1: choose the place.
+  // Step 1: choose the place on a full-screen map (partner places also in the "List" panel).
   if (!chosen && !place && !params.placeId) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-        <ScreenHeader />
-        <ScrollView contentContainerStyle={styles.content}>
-          <View style={styles.pad}>
-            <Text style={styles.title}>{t('tables.chooseTitle')}</Text>
-            <Text style={styles.subtitle}>{t('tables.chooseBody')}</Text>
-          </View>
-          <View style={[styles.pad, styles.mapSection]}>
-            <VenueMap
-              height={340}
-              userCoords={coords}
-              pins={places.map(({ venue }) => ({
-                key: venue.id,
-                lat: venue.lat,
-                lng: venue.lng,
-                emoji: venue.deal ? PROMOTION_EMOJI[venue.deal.kind] : CATEGORY_EMOJI[venue.category],
-                selected: picked?.type === 'venue' && venue.id === picked.venueId,
-              }))}
-              onPinPress={(id) => setPicked({ type: 'venue', venueId: id })}
-              places={mapPlaces}
-              onPlacePress={handlePlacePress}
-              onBoundsChange={onBoundsChange}
-            />
-            <Text style={styles.hint}>{t('tables.pickAnyPlace')}</Text>
-            {picked && (
-              <View style={styles.choose}>
+      <View style={styles.root}>
+        <VenueMap
+          fullScreen
+          userCoords={coords}
+          pins={places.map(({ venue }) => ({
+            key: venue.id,
+            lat: venue.lat,
+            lng: venue.lng,
+            emoji: venue.deal ? PROMOTION_EMOJI[venue.deal.kind] : CATEGORY_EMOJI[venue.category],
+            selected: picked?.type === 'venue' && venue.id === picked.venueId,
+          }))}
+          onPinPress={(id) => setPicked({ type: 'venue', venueId: id })}
+          places={mapPlaces}
+          onPlacePress={handlePlacePress}
+          onBoundsChange={onBoundsChange}
+          mapPadding={{ top: topHeight, right: 0, bottom: bottomHeight, left: 0 }}
+        />
+
+        <MapHeader title={t('tables.chooseTitle')} hint={t('tables.pickAnyPlace')} onHeight={setTopHeight} />
+
+        <View
+          style={[styles.bottom, { paddingBottom: insets.bottom + Spacing.md }]}
+          pointerEvents="box-none"
+          onLayout={(e) => setBottomHeight(e.nativeEvent.layout.height)}>
+          {picked && (
+            <View style={styles.choose}>
+              <View style={styles.chooseHeader}>
                 <Text style={styles.chooseName} numberOfLines={2}>
                   {pickedVenue
                     ? localized(pickedVenue, 'name', language)
@@ -146,23 +143,48 @@ export default function CreateTableScreen() {
                       ? placeName(picked.place, language)
                       : ''}
                 </Text>
-                <Button title={t('tables.choosePlace')} onPress={choosePicked} />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('common.cancel')}
+                  hitSlop={10}
+                  onPress={() => setPicked(null)}
+                  style={({ pressed }) => [styles.closeButton, pressed && styles.stepPressed]}>
+                  <Text style={styles.closeText}>✕</Text>
+                </Pressable>
               </View>
-            )}
+              {pickedVenue?.deal ? (
+                <Text style={styles.deal} numberOfLines={2}>
+                  {PROMOTION_EMOJI[pickedVenue.deal.kind]} {localized(pickedVenue.deal, 'title', language)}
+                </Text>
+              ) : (
+                <Text style={styles.chooseNote}>{t('tables.noDealHere')}</Text>
+              )}
+              <Button title={t('tables.choosePlace')} onPress={choosePicked} />
+            </View>
+          )}
+          <View style={styles.listRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setListOpen(true)}
+              style={({ pressed }) => [styles.listButton, pressed && styles.stepPressed]}>
+              <Icon name="list" size={20} color={Colors.text} />
+              <Text style={styles.listButtonText}>{t('tables.partnerPlaces')}</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <SlideUpPanel open={listOpen} onClose={() => setListOpen(false)}>
+          <ScrollView contentContainerStyle={styles.sheetContent}>
+            <Text style={styles.sheetTitle}>{t('tables.partnerPlaces')}</Text>
+            <Text style={styles.subtitle}>{t('tables.chooseBody')}</Text>
             <View style={styles.list}>
               {places.map(({ venue, distance }) => (
-                <VenueCard
-                  key={venue.id}
-                  venue={venue}
-                  distance={distance}
-                  selected={picked?.type === 'venue' && venue.id === picked.venueId}
-                  onPress={() => setVenueId(venue.id)}
-                />
+                <VenueCard key={venue.id} venue={venue} distance={distance} onPress={() => setVenueId(venue.id)} />
               ))}
             </View>
-          </View>
-        </ScrollView>
-      </SafeAreaView>
+          </ScrollView>
+        </SlideUpPanel>
+      </View>
     );
   }
 
@@ -295,23 +317,48 @@ function StepButton({
 }
 
 const useStyles = makeStyles((Colors) => ({
+  root: { flex: 1, backgroundColor: Colors.bg },
   safe: { flex: 1, backgroundColor: Colors.bg },
   flex: { flex: 1 },
   content: { paddingBottom: Spacing.xxl * 2 },
   pad: { paddingHorizontal: Spacing.lg },
-  title: { ...Type.title, color: Colors.text },
   subtitle: { ...Type.body, color: Colors.textSecondary, marginTop: Spacing.xs },
-  mapSection: { marginTop: Spacing.lg },
+  bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, gap: Spacing.md, paddingHorizontal: Spacing.lg },
   choose: {
-    marginTop: Spacing.md,
     padding: Spacing.md,
-    gap: Spacing.md,
+    gap: Spacing.sm,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.surfaceRaised,
+    backgroundColor: Colors.overlay,
     borderWidth: 1,
     borderColor: Colors.pink,
   },
-  chooseName: { ...Type.heading, color: Colors.text },
+  chooseHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
+  chooseName: { ...Type.heading, color: Colors.text, flex: 1 },
+  chooseNote: { ...Type.small, color: Colors.textSecondary, marginBottom: Spacing.xs },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surfaceRaised,
+  },
+  closeText: { ...Type.label, color: Colors.textSecondary },
+  listRow: { flexDirection: 'row', justifyContent: 'flex-end' },
+  listButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    minHeight: 52,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderStrong,
+  },
+  listButtonText: { ...Type.label, color: Colors.text },
+  sheetContent: { padding: Spacing.lg, paddingBottom: Spacing.xxl * 2 },
+  sheetTitle: { ...Type.heading, color: Colors.text },
   list: { gap: Spacing.md, marginTop: Spacing.lg },
   placeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: Spacing.sm },
   placeName: { ...Type.title, color: Colors.text, flex: 1 },

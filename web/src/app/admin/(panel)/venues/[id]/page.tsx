@@ -6,7 +6,7 @@ import { Suspense, type ReactNode } from "react";
 import { requireAdmin } from "@/lib/auth";
 import { venuePhotoUrl } from "@/lib/env";
 import { generatePassword } from "@/lib/password";
-import type { Venue, VenueAccount } from "@/lib/types";
+import { isHangoutCategory, type Venue, type VenueAccount } from "@/lib/types";
 import { updateVenue } from "../actions";
 import { VenueForm } from "../venue-form";
 import { Promotions, type PromotionRow } from "./promotions";
@@ -77,9 +77,17 @@ async function VenueEditor({ params }: { params: PageProps<"/admin/venues/[id]">
 
         <Section
           title="Promotions"
-          description="Discounts and offers are unlocked with the coupon code when 3+ people check in. Events and parties are dated listings. Changes show in the app right away."
+          description={
+            isHangoutCategory(venue.category)
+              ? "Hangout venue (shows on the app's Hangout map). Ticket discounts use a coupon code that any member of a hangout here can use. Free entry, events and parties are listings. Changes show in the app right away."
+              : "Discounts and offers are unlocked with the coupon code when 3+ people check in. Events and parties are dated listings. Changes show in the app right away."
+          }
         >
-          <Promotions venueId={venue.id} promotions={(deals ?? []) as PromotionRow[]} />
+          <Promotions
+            venueId={venue.id}
+            promotions={(deals ?? []) as PromotionRow[]}
+            hangoutVenue={isHangoutCategory(venue.category)}
+          />
         </Section>
 
         <Section

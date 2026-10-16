@@ -32,6 +32,13 @@ export const CATEGORY_EMOJI: Record<VenueCategory, string> = {
   restaurant: '🍽️',
   rooftop: '🌆',
   bar: '🍸',
+  attraction: '⭐',
+  park: '🌳',
+  mall: '🏬',
+  museum: '🏛️',
+  temple: '🛕',
+  market: '🛍️',
+  entertainment: '🎳',
 };
 
 // Siam / central Bangkok, used until the phone's location is known.
@@ -42,6 +49,8 @@ export function VenueMap({
   onPinPress,
   places = [],
   onPlacePress,
+  placeTone = 'orange',
+  onMapPress,
   onBoundsChange,
   userCoords,
   height,
@@ -50,9 +59,13 @@ export function VenueMap({
 }: {
   pins: MapPin[];
   onPinPress: (key: string) => void;
-  // Bangkok food places (OpenStreetMap) drawn as small dots; tapping one calls onPlacePress.
+  // Bangkok places (OpenStreetMap) drawn as small dots; tapping one calls onPlacePress.
   places?: Place[];
   onPlacePress?: (place: Place) => void;
+  // Dot color: orange for food places, violet for hangout places.
+  placeTone?: 'orange' | 'violet';
+  // Tap on the map itself (not on a pin or a dot), e.g. to drop a pin anywhere.
+  onMapPress?: (coords: Coords) => void;
   // Called when the visible area changes (used to load the places in view).
   onBoundsChange?: (bounds: MapBounds) => void;
   userCoords: Coords | null;
@@ -68,6 +81,8 @@ export function VenueMap({
   const { name: themeName } = useTheme();
   const cameraRef = useRef<CameraRef>(null);
   const centeredOnUser = useRef(false);
+  // A tap on a pin can also reach the map; ignore map taps right after a pin tap.
+  const lastPinPress = useRef(0);
 
   // Move to the user once their location arrives (only the first time, so we don't fight their panning).
   useEffect(() => {
@@ -104,7 +119,17 @@ export function VenueMap({
         onRegionDidChange={(event) => {
           const { bounds, zoom } = event.nativeEvent;
           onBoundsChange?.({ west: bounds[0], south: bounds[1], east: bounds[2], north: bounds[3], zoom });
-        }}>
+        }}
+        onPress={
+          onMapPress
+            ? (event) => {
+                const { nativeEvent } = event;
+                if ('features' in nativeEvent && nativeEvent.features.length > 0) return;
+                if (Date.now() - lastPinPress.current < 500) return;
+                onMapPress({ lng: nativeEvent.lngLat[0], lat: nativeEvent.lngLat[1] });
+              }
+            : undefined
+        }>
         <Camera ref={cameraRef} initialViewState={{ center: [start.lng, start.lat], zoom: 13 }} />
         {userCoords && <UserLocation />}
 
@@ -113,6 +138,7 @@ export function VenueMap({
             id="places"
             data={placesGeoJson}
             onPress={(event) => {
+              event.stopPropagation();
               const id = event.nativeEvent.features[0]?.properties?.id;
               const place = places.find((p) => p.id === id);
               if (place) onPlacePress?.(place);
@@ -122,7 +148,7 @@ export function VenueMap({
               type="circle"
               style={{
                 circleRadius: 6,
-                circleColor: Colors.orange,
+                circleColor: placeTone === 'violet' ? Colors.violet : Colors.orange,
                 circleOpacity: 0.9,
                 circleStrokeWidth: 2,
                 circleStrokeColor: Colors.bg,
@@ -132,7 +158,10 @@ export function VenueMap({
         )}
 
         {pins.map((pin) => (
-          <Marker key={pin.key} id={pin.key} lngLat={[pin.lng, pin.lat]} anchor="bottom" onPress={() => onPinPress(pin.key)}>
+          <Marker key={pin.key} id={pin.key} lngLat={[pin.lng, pin.lat]} anchor="bottom" onPress={() => {
+              lastPinPress.current = Date.now();
+              onPinPress(pin.key);
+            }}>
             <PinView pin={pin} />
           </Marker>
         ))}

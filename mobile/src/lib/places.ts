@@ -4,8 +4,10 @@ import type { Language } from '@/i18n';
 import { supabase } from '@/lib/supabase';
 import type { VenueCategory } from '@/lib/venues';
 
-// Bangkok food and drink places from OpenStreetMap (© OpenStreetMap contributors), stored in public.places.
-// Any of them can host a table. Partner venues may be linked to one (venues.place_id).
+// Bangkok places from OpenStreetMap (© OpenStreetMap contributors), stored in public.places. Food and drink places
+// ('food') can host a table; places to hang out ('hangout': temples, parks, malls, markets, museums, attractions, …)
+// show on the Hangout map. Hangouts can be at either. Partner venues may be linked to one (venues.place_id).
+export type PlacePurpose = 'food' | 'hangout';
 
 export type Place = {
   id: string;
@@ -28,13 +30,43 @@ export function placeCategory(kind: string): VenueCategory {
   return 'restaurant';
 }
 
+// OpenStreetMap kind of a hangout place (see the seed migration) → emoji for its card.
+const HANGOUT_KIND_EMOJI: Record<string, string> = {
+  temple: '🛕',
+  park: '🌳',
+  garden: '🌳',
+  nature_reserve: '🌳',
+  market: '🛍️',
+  mall: '🏬',
+  museum: '🏛️',
+  gallery: '🖼️',
+  arts_centre: '🎨',
+  attraction: '⭐',
+  viewpoint: '🌇',
+  monument: '🗿',
+  castle: '🏯',
+  fort: '🏯',
+  palace: '🏯',
+  zoo: '🦒',
+  aquarium: '🐠',
+  theme_park: '🎢',
+  water_park: '🌊',
+  cinema: '🎬',
+  theatre: '🎭',
+};
+
+export function placeEmoji(kind: string): string {
+  return HANGOUT_KIND_EMOJI[kind] ?? '📍';
+}
+
 export type MapBounds = { west: number; south: number; east: number; north: number; zoom: number };
 
-// Below this zoom the whole of Bangkok would be in view, so place dots are hidden.
-export const PLACES_MIN_ZOOM = 14;
+// Below this zoom too much of Bangkok is in view, so place dots are hidden. Hangout places are fewer and further
+// apart, so they show from further out.
+const PLACES_MIN_ZOOM: Record<PlacePurpose, number> = { food: 14, hangout: 12 };
 
 // Places inside the visible map area, refreshed (debounced) as the map moves.
-export function usePlacesInView() {
+export function usePlacesInView(purpose: PlacePurpose = 'food') {
   const [places, setPlaces] = useState<Place[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latest = useRef(0);
@@ -42,7 +74,7 @@ export function usePlacesInView() {
   const onBoundsChange = useCallback((bounds: MapBounds) => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
-      if (bounds.zoom < PLACES_MIN_ZOOM) {
+      if (bounds.zoom < PLACES_MIN_ZOOM[purpose]) {
         setPlaces([]);
         return;
       }
@@ -53,6 +85,7 @@ export function usePlacesInView() {
         p_east: bounds.east,
         p_north: bounds.north,
         p_limit: 400,
+        p_purpose: purpose,
       });
       // Ignore answers to older requests that arrive late.
       if (request !== latest.current) return;
@@ -62,7 +95,7 @@ export function usePlacesInView() {
       }
       setPlaces(data as Place[]);
     }, 350);
-  }, []);
+  }, [purpose]);
 
   useEffect(
     () => () => {

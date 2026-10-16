@@ -4,11 +4,13 @@ import { AppState } from 'react-native';
 
 import { supabase, uniqueChannelName } from '@/lib/supabase';
 
-// "Tables" in the app are `meetups` in the database (TABLE is an SQL keyword).
-// All writes go through database functions that enforce the rules (see supabase/migrations/*_meetups.sql).
+// "Tables" and "hangouts" in the app are `meetups` in the database (TABLE is an SQL keyword), told apart by `kind`.
+// All writes go through database functions that enforce the rules (see supabase/migrations/*_meetups.sql and
+// *_hangouts.sql). Joining, leaving, cancelling and the group chat work the same for both.
+export type MeetupKind = 'table' | 'hangout';
 
-// Where a table is: a partner venue (venue_id) or any Bangkok food place from OpenStreetMap (place_id; place_*
-// filled in from public.places).
+// Where a meetup is: a partner venue (venue_id), a Bangkok place from OpenStreetMap (place_id; place_* filled in
+// from public.places), or, for hangouts only, a spot anywhere on the map (no ids; place_name/lat/lng are the spot).
 export type MeetupPlace = {
   venue_id: string | null;
   place_id: string | null;
@@ -21,8 +23,10 @@ export type MeetupPlace = {
 
 export type OpenMeetup = MeetupPlace & {
   id: string;
+  kind: MeetupKind;
   host_id: string;
   title: string;
+  description: string;
   starts_at: string;
   ends_at: string;
   max_people: number;
@@ -34,8 +38,10 @@ export type MeetupMember = { user_id: string; joined_at: string; display_name: s
 
 export type MeetupDetail = MeetupPlace & {
   id: string;
+  kind: MeetupKind;
   host_id: string;
   title: string;
+  description: string;
   starts_at: string;
   ends_at: string;
   max_people: number;
@@ -44,8 +50,13 @@ export type MeetupDetail = MeetupPlace & {
 };
 
 // Error messages from the database functions are short keys like "meetup_full"; this turns them into the
-// key of a translated message (tables.errors.*).
+// key of a translated message (tables.errors.* or hangouts.errors.*).
 const KNOWN_ERRORS = [
+  'invalid_duration',
+  'title_required',
+  'invalid_place',
+  'outside_bangkok',
+  'spot_name_required',
   'auth_required',
   'not_allowed',
   'venue_unavailable',
@@ -106,9 +117,56 @@ export async function createMeetupAtPlace(input: {
   return result(data as string | null, error);
 }
 
-// The place name for a table that isn't at a partner venue, in the app's language.
+// A hangout at a partner venue, a place (food or hangout place), or a named spot anywhere on the map.
+export type HangoutWhere =
+  | { type: 'venue'; venueId: string }
+  | { type: 'place'; placeId: string }
+  | { type: 'spot'; lat: number; lng: number; name: string };
+
+export async function createHangout(input: {
+  where: HangoutWhere;
+  startsAt: Date;
+  durationMinutes: number;
+  maxPeople: number;
+  title: string;
+  description: string;
+}): Promise<Result<string>> {
+  const { where } = input;
+  const { data, error } = await supabase.rpc('create_hangout', {
+    p_title: input.title,
+    p_description: input.description,
+    p_starts_at: input.startsAt.toISOString(),
+    p_duration_minutes: input.durationMinutes,
+    p_max_people: input.maxPeople,
+    p_venue_id: where.type === 'venue' ? where.venueId : null,
+    p_place_id: where.type === 'place' ? where.placeId : null,
+    p_spot_lat: where.type === 'spot' ? where.lat : null,
+    p_spot_lng: where.type === 'spot' ? where.lng : null,
+    p_spot_name: where.type === 'spot' ? where.name : null,
+  });
+  return result(data as string | null, error);
+}
+
+// The place name for a meetup that isn't at a partner venue (a place or a hangout's spot), in the app's language.
 export function meetupPlaceName(meetup: MeetupPlace, language: 'en' | 'th'): string {
   return (language === 'th' ? meetup.place_name_th : meetup.place_name_en) || meetup.place_name || '—';
+}
+
+// Hangouts at the same venue, place or spot share one map pin.
+export function meetupLocationKey(meetup: MeetupPlace): string {
+  if (meetup.venue_id) return `v:${meetup.venue_id}`;
+  if (meetup.place_id) return `p:${meetup.place_id}`;
+  return `s:${meetup.place_lat?.toFixed(5)},${meetup.place_lng?.toFixed(5)}`;
+}
+
+// Where to draw a meetup: its venue's pin, or its place / spot.
+export function meetupCoords(
+  meetup: MeetupPlace,
+  venueById: Map<string, { lat: number; lng: number }>,
+): { lat: number; lng: number } | null {
+  const venue = meetup.venue_id ? venueById.get(meetup.venue_id) : undefined;
+  if (venue) return { lat: venue.lat, lng: venue.lng };
+  return meetup.place_lat !== null && meetup.place_lng !== null ? { lat: meetup.place_lat, lng: meetup.place_lng } : null;
 }
 
 // Opens the spot in the phone's maps app (Google Maps, etc.) for directions. Free: it's just a link.
@@ -191,6 +249,9 @@ type MeetupRow = Omit<
   'members' | 'place_name' | 'place_name_en' | 'place_name_th' | 'place_lat' | 'place_lng'
 > & {
   place: { name: string; name_en: string | null; name_th: string | null; lat: number; lng: number } | null;
+  spot_name: string | null;
+  spot_lat: number | null;
+  spot_lng: number | null;
   meetup_members: { user_id: string; joined_at: string; profiles: { display_name: string } | null }[];
 };
 
@@ -198,7 +259,8 @@ async function fetchMeetup(id: string): Promise<MeetupDetail | null | 'error'> {
   const { data, error } = await supabase
     .from('meetups')
     .select(
-      'id, venue_id, place_id, place:places(name, name_en, name_th, lat, lng), host_id, title, starts_at, ends_at, max_people, status, ' +
+      'id, kind, venue_id, place_id, place:places(name, name_en, name_th, lat, lng), spot_name, spot_lat, spot_lng, ' +
+        'host_id, title, description, starts_at, ends_at, max_people, status, ' +
         'meetup_members(user_id, joined_at, profiles(display_name))',
     )
     .eq('id', id)
@@ -208,17 +270,17 @@ async function fetchMeetup(id: string): Promise<MeetupDetail | null | 'error'> {
     return 'error';
   }
   if (!data) return null;
-  const { meetup_members, place, ...meetup } = data as unknown as MeetupRow;
+  const { meetup_members, place, spot_name, spot_lat, spot_lng, ...meetup } = data as unknown as MeetupRow;
   const members = meetup_members
     .map((m) => ({ user_id: m.user_id, joined_at: m.joined_at, display_name: m.profiles?.display_name ?? '' }))
     .sort((a, b) => a.joined_at.localeCompare(b.joined_at));
   return {
     ...meetup,
-    place_name: place?.name ?? null,
+    place_name: place?.name ?? spot_name,
     place_name_en: place?.name_en ?? null,
     place_name_th: place?.name_th ?? null,
-    place_lat: place?.lat ?? null,
-    place_lng: place?.lng ?? null,
+    place_lat: place?.lat ?? spot_lat,
+    place_lng: place?.lng ?? spot_lng,
     members,
   };
 }

@@ -44,3 +44,23 @@ export function formatWhen(iso: string, t: TFunction, now = new Date()): string 
   const date = new Date(iso);
   return `${formatDayLabel(bangkokDay(date), t, now)} ${formatClock(bangkokMinutes(date))}`;
 }
+
+// "Today 18:00–21:00", or "Sat 18 22:00 – Sun 19 02:00" when it ends on another day.
+export function formatWhenRange(startIso: string, endIso: string, t: TFunction, now = new Date()): string {
+  const end = new Date(endIso);
+  const sameDay = bangkokDay(new Date(startIso)) === bangkokDay(end);
+  return sameDay
+    ? `${formatWhen(startIso, t, now)}–${formatClock(bangkokMinutes(end))}`
+    : `${formatWhen(startIso, t, now)} – ${formatWhen(endIso, t, now)}`;
+}
+
+// Half-hour start times (minutes since midnight) from 06:00 to 23:30 on a Bangkok day; for today, only times at
+// least 15 minutes from now.
+export function timeSlots(day: BangkokDay, now: Date): number[] {
+  const earliest = day === bangkokDay(now) ? bangkokMinutes(now) + 15 : 0;
+  const slots: number[] = [];
+  for (let minutes = 6 * 60; minutes <= 23 * 60 + 30; minutes += 30) {
+    if (minutes >= earliest) slots.push(minutes);
+  }
+  return slots;
+}

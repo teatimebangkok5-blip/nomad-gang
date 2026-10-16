@@ -6,15 +6,15 @@ This file guides Claude Code when working in this repository.
 Product spec and tech stack below are agreed. Built so far:
 - **Done:** database for venues, deals, coupon codes, venue staff logins and the admin role (`supabase/`), the
   admin panel for managing them (`web/`), and the Android app's welcome/Google sign-in, phone verification, home
-  (**full-screen Google map** of open tables; logo, language, settings and the Discount/Offer/Event/Party buttons float on top over a fade; a
+  (**full-screen map** of open tables and Bangkok food places; logo, language, settings and the Discount/Offer/Event/Party buttons float on top over a fade; a
   swipeable row of table cards, "Create table" and a "List" button float at the bottom; "List" slides up a panel
   with open tables + partner places; tapping a pin filters the cards to that venue), the Create table flow and the
   table screen (join / leave / cancel) (`mobile/`). `VenueMap` takes `fullScreen` + `mapPadding` (measured overlay
-  heights) so Google's logo and centering stay clear of the floating UI.
-  There is no place-type (cafe/restaurant/rooftop/bar) filter any more (removed 2026-10-16 at the founder's request); tapping a Google
-  place or a pin opens a place card (promotions, tables there, "Create table here", Open in Google Maps).
-  Admin: per-venue **Promotions** editor and **Find on Google Maps** (server action `searchGooglePlaces`, needs
-  `GOOGLE_PLACES_API_KEY` in `web/.env.local`).
+  heights) so centering and the map attribution stay clear of the floating UI.
+  There is no place-type (cafe/restaurant/rooftop/bar) filter any more (removed 2026-10-16 at the founder's request); tapping a place
+  dot or a pin opens a place card (promotions, tables there, "Create table here", Open in Maps → the phone's maps
+  app via a `geo:` link). Admin: per-venue **Promotions** editor and **Find the place on the map** (server action
+  `searchPlaces` → RPC `search_places`).
 - **Chat and Travellers** (added 2026-10-16): table group chat for members (`src/app/table-chat/[id].tsx`), a
   **Travellers** screen (top-right button on the map, `src/app/travellers.tsx`) with Nearby (opt-in, people within
   5 km as fuzzy violet dots + list) and Messages (inbox) tabs, and direct messages (`src/app/dm/[userId].tsx`).
@@ -25,9 +25,20 @@ Product spec and tech stack below are agreed. Built so far:
   direction fixed per person per day; distances rounded to 0.5 km; locations older than 2 h are ignored; you must be
   visible to see others. A first DM is a **request** (one message until the receiver replies or accepts); blocking
   hides both ways; reports are readable only by admins. Sending DMs needs a verified phone or an allowed guest.
+- **Hangouts** (added 2026-10-16): groups that meet to do something (park walk, market, museum, event) anywhere in
+  Bangkok. Home has a violet **"Create hangout"** button next to "Create table" (List is now an icon button). It opens
+  `src/app/create-hangout.tsx`: step 1 is a **full-screen Hangout map** (violet dots = OSM hangout places, partner
+  hangout venues with Tickets/Free entry/Event/Party filter buttons, 🙌 pins for open hangouts, **tap anywhere to drop
+  a pin**), step 2 the form (title required, description ≤ 500, meeting-point name for a dropped pin, 14 days of day
+  chips, 30-min slots, length 1–12 h, 2–30 people). Open hangouts also show on home (🙌 pins; one hangout opens
+  directly, several open a card). Hangouts are `meetups` with `kind = 'hangout'`, so `table/[id].tsx` (adapts its
+  wording), join/leave/cancel and the group chat are shared. Create table step 1 is now a full-screen map too.
+  Shared full-screen-map UI: `MapHeader` (`src/components/map-header.tsx`) and `SlideUpPanel`
+  (`src/components/slide-up-panel.tsx`). `VenueMap` also takes `onMapPress` and `placeTone`.
+  Admin: **"Add hangout venue"** (`/admin/venues/new?for=hangout`), venues listed as Food & drink / Hangout, and
+  promotion kinds **Ticket discount** and **Free entry**.
 - **Not started:** check-ins (50 m), QR codes and redemptions, staff QR page, redemption feed and push
-  notifications, Instagram on profiles, tables/users in the admin panel. Hiding non-food businesses on the map
-  needs a Google Cloud **Map ID** with POI filtering (JSON map styles can't tell food from shops).
+  notifications, Instagram on profiles, tables/users in the admin panel. Places missing from OpenStreetMap can be added by the founder (admin insert into `places`; no UI yet).
 - Running on the founder's Redmi as a local release APK, connected to the real Supabase project
   (`zxghiilryqzexzvacbrl`, migrations applied by Supabase's GitHub integration on push to `main`).
 - Google sign-in and phone verification are **not configured yet** (no Google OAuth clients, providers off in
@@ -36,10 +47,8 @@ Product spec and tech stack below are agreed. Built so far:
   sign-ins" on in Supabase) and shows a "Preview mode" notice. Guests may create/join tables only while
   `app_settings.allow_guest_meetups` is true. **Before any build for real users or Google Play: set the switch to
   false and set `allow_guest_meetups = false`.**
-- The Google Maps key (`GOOGLE_MAPS_API_KEY` in `mobile/.env.local`, read by `mobile/app.config.ts`) may still be
-  missing; without it the map area shows a "Map not set up yet" placeholder instead of crashing.
 
-Setup steps (Supabase, Google, SMS, Android development build) are in `README.md`.
+Setup steps (Supabase, Google sign-in, SMS, Android build) are in `README.md`.
 
 ## What TableMeet is
 A social dining app. People who want to eat or drink together (travelers, nomads, locals, solo diners) find each other and
@@ -69,16 +78,29 @@ meet up at a table. It is inspired by NomadTable but is **not a copy**. Don't co
 - The founder makes deals in person with venue owners, who give **exclusive coupon codes / discounts for TableMeet users**.
 - Each partner venue has its own discount, set by the owner (e.g. % off or a fixed deal). Treat the discount as per-venue
   data, not a single global value.
-- **Google's places are on the map** (changed 2026-10-16, founder's decision). The map shows Google's own businesses
-  and people can create a table at **any food or drink place in Bangkok** (restaurant, cafe, bar, noodle/food shop,
-  bakery, …). The app checks a tapped place's Google types (`src/lib/google-places.ts`, Places API (New) with the
-  Android-restricted key) and the Bangkok box; the server re-checks the Bangkok box (`create_meetup_at_place`).
-  Google's terms forbid copying its place database, so we **never import Google places**: we keep only place IDs,
-  plus a table's place name/position for that table.
-- **Partner venues** are the places the founder adds in the admin panel (linked to a Google place via
-  `google_place_id`, found with "Find on Google Maps"). They carry **promotions** of four kinds: **discount** and
+- **No Google Maps or Google Places** (changed 2026-10-17: Google billing needed a prepayment the founder declined).
+  Maps are **MapLibre** (`@maplibre/maplibre-react-native`) with free **OpenFreeMap** tiles (`dark` / `positron`
+  styles, no key, no billing). Places are **OpenStreetMap** data in `public.places`: 9,336 named Bangkok food and
+  drink places (restaurant, cafe, bar, pub, fast food, food court, ice cream, bakery, tea/coffee shop, …), seeded by
+  `supabase/migrations/20261017000002_seed_bangkok_places.sql` (generated from an Overpass query; ODbL, the
+  "© OpenStreetMap contributors" credit must stay visible on the map). Anyone can read places; only admins write.
+  `places.purpose` is `'food'` (those 9,336) or `'hangout'`: 2,810 named places to spend time (temples, parks and
+  gardens, markets, malls, attractions, museums, galleries, monuments, cinemas, theatres, viewpoints, zoos, …), seeded
+  by `20261018000003_seed_bangkok_hangout_places.sql` (Overpass via the `maps.mail.ru` mirror; `overpass-api.de`
+  wasn't reachable). People can create a table at any **food** place (`create_meetup_at_place(place_id, …)`, which
+  rejects hangout places) and a hangout at any place, venue or dropped pin (`create_hangout`). The map loads places
+  for the visible area (`places_in_bounds(…, p_purpose)`, zoom ≥ 14 for food / ≥ 12 for hangout, max 400) via
+  `usePlacesInView(purpose)` in `src/lib/places.ts`.
+- **Partner venues** are the places the founder adds in the admin panel, linked to an OSM place via `venues.place_id`
+  (found with "Find the place on the map"). A linked place's dot is hidden and replaced by the venue's pin, and tables
+  or hangouts created at that place move to the venue. Categories cafe/restaurant/rooftop/bar are **food & drink
+  venues** (food map, tables); attraction/park/mall/museum/temple/market/entertainment are **hangout venues** (Hangout
+  map, hangouts only; `create_meetup` rejects them). They carry **promotions** of six kinds: **discount** and
   **offer** use the coupon (3+ check-ins, max one active per venue); **event** and **party** are dated listings
-  (any number, no coupon). Tables at a Google place that's linked to a live partner venue become venue tables.
+  (any number, no coupon); **ticket** (entry-ticket discount, coupon code, any number) and **free_entry** (no coupon)
+  are ongoing or dated.
+- **Ticket discounts don't need 3 people** (founder's decision, 2026-10-16): any member of a hangout at that venue
+  can use one. Apply this when QR redemption is built; the 3+ rule below stays for discount and offer.
 - **Rule: at least 3 people must be checked in at the venue to unlock a coupon.** Joining the meetup in the app is not
   enough. Groups of 1–2 can still meet but get no discount. Enforce this on the server/backend, not only in the UI.
 
@@ -177,13 +199,13 @@ How the key rules map onto this:
     foreground + 5-min refetch), `useMeetup(id)` (one table with members' `profiles.display_name`),
     `createMeetup/joinMeetup/leaveMeetup/cancelMeetup` return `{ data, error }` where error is a key translated via
     `tables.errors.*`. `src/lib/bangkok-time.ts`: Bangkok (UTC+7, no DST) day/time maths and labels; 24-hour clock.
-  - Screens: `src/app/create-table.tsx` (modal: pick a venue on the map or list, then day chips for 7 days, 30-min
-    slots 06:00–23:30, 3–12 people, optional 80-char title) and `src/app/table/[id].tsx` (members, join/leave; host
-    sees Cancel). Both are registered inside the signed-in guard in `_layout.tsx`.
-  - Maps: `src/components/venue-map.tsx` wraps react-native-maps (Google provider, dark style in
-    `src/constants/map-style.ts`). Marker contents are emoji + text only (native icon views can render blank in
-    Android marker snapshots) and briefly use `tracksViewChanges`. `mapsEnabled` comes from `app.config.ts`
-    (`extra`); without a key it renders a placeholder because Google Maps crashes on Android without one.
+  - Screens: `src/app/create-table.tsx` (modal: pick a place on a full-screen map or from the List panel, then day
+    chips for 7 days, 30-min slots 06:00–23:30 from `timeSlots()` in `bangkok-time.ts`, 3–12 people, optional 80-char
+    title), `src/app/create-hangout.tsx` (see Hangouts above) and `src/app/table/[id].tsx` (a table or hangout:
+    members, join/leave; host sees Cancel). All are registered inside the signed-in guard in `_layout.tsx`.
+  - Maps: `src/components/venue-map.tsx` wraps MapLibre (`Map`, `Camera`, `Marker` for emoji pins,
+    `GeoJSONSource` + circle `Layer` for place dots, `UserLocation`). Props: `pins`, `places`, `onPlacePress`,
+    `onBoundsChange`, `fullScreen`, `mapPadding` (→ `contentInset`). Keep `attribution` on (OSM licence).
   - `src/i18n/`: i18next with `en.ts` (source, typed keys) and `th.ts` (must match). `localized(row, 'name', lang)`
     picks `name_th`/`name_en` columns. The language choice is saved on the phone; the default follows the phone language.
   - `src/components/`: `Button`, `Icon` (expo-symbols: Material names on Android, SF Symbols for iOS; add new icons
@@ -223,7 +245,10 @@ How the key rules map onto this:
   `create_meetup` / `join_meetup` / `leave_meetup` / `cancel_meetup` (security definer, check `auth.uid()`; join
   locks the meetup row with `for update` so the last seat can't be taken twice). Rules: live venue, start between
   now−15 min and now+7 days, 3–12 people, lasts 3 hours, max 3 open tables hosted per person, host leaving =
-  cancel. Callers must be phone-verified, or anonymous while `app_settings.allow_guest_meetups`. Errors are short
+  cancel. Hangouts (`kind = 'hangout'`, `create_hangout`): exactly one of venue / place / spot (`spot_name`,
+  `spot_lat`, `spot_lng`, inside the Bangkok box), title required, 2–30 people, start within 14 days, 30 min–12 h,
+  max 3 open hangouts per host (separate from the 3 tables); `list_open_meetups` returns `kind`, `description` and
+  the spot as `place_name/lat/lng`. Callers must be phone-verified, or anonymous while `app_settings.allow_guest_meetups`. Errors are short
   keys (`meetup_full`, `invalid_time`, …) that the app translates. `profiles` rows are created by a trigger on
   `auth.users` (Google `full_name`, else "Guest XXXX").
 - `venues.lat`/`lng` are the source of truth. A trigger keeps the PostGIS `location` column in sync for distance
@@ -248,7 +273,9 @@ cd mobile && npx expo start                                          # dev serve
 cd mobile && npx expo install <package>                              # always use this, not npm install, for app deps
 ```
 Node is at `C:\Program Files\nodejs`. If `node` isn't found in Bash, run `export PATH="$PATH:/c/Program Files/nodejs"`
-first. Android Studio is installed: `ANDROID_HOME` = `%LOCALAPPDATA%\Android\Sdk`, and the emulator
+first. **Don't start `adb` (or anything long-running) from inside `mobile/android`**: the adb server keeps that
+folder as its working directory, which locks it and makes `expo prebuild --clean` fail with EBUSY. Run adb from
+another folder (`cd /g`), or `adb kill-server` before a clean prebuild. Android Studio is installed: `ANDROID_HOME` = `%LOCALAPPDATA%\Android\Sdk`, and the emulator
 `Medium_Phone_API_37.0` exists. `JAVA_HOME` = `C:\Program Files\Zulu\zulu-17` (JDK 17). Don't use Android Studio's
 bundled JBR (Java 25) for Gradle: its "restricted method" warning makes the native CMake/prefab steps
 (`react-native-worklets`, `react-native-screens`) fail. A local release APK:

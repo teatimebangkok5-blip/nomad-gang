@@ -26,12 +26,19 @@ export default function TableChatScreen() {
 
   const meetup = state.status === 'ready' ? state.meetup : null;
   const venue = meetup?.venue_id ? venues.venues.find((v) => v.id === meetup.venue_id) : undefined;
-  const placeName = venue ? localized(venue, 'name', currentLanguage()) : (meetup?.place_name ?? '');
+  // Hangouts are named by their title, tables by their place.
+  const placeName =
+    meetup?.kind === 'hangout'
+      ? meetup.title
+      : venue
+        ? localized(venue, 'name', currentLanguage())
+        : (meetup?.place_name ?? '');
+  const chatLabel = meetup?.kind === 'hangout' ? t('hangouts.chat') : t('chat.openChat');
   const isMember = Boolean(meetup?.members.some((m) => m.user_id === myId));
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
-      <ScreenHeader title={placeName ? `${t('chat.openChat')} · ${placeName}` : t('chat.openChat')} />
+      <ScreenHeader title={placeName ? `${chatLabel} · ${placeName}` : chatLabel} />
       <ChatView
         messages={failed && !messages ? [] : messages}
         myId={myId}

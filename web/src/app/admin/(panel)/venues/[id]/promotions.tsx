@@ -2,8 +2,23 @@
 
 import { useActionState, useState, useTransition } from "react";
 import { Field, FormMessage, SubmitButton, buttonClass, inputClass } from "@/components/form";
-import { COUPON_KINDS, PROMOTION_KINDS, PROMOTION_LABELS, type Deal, type PromotionKind } from "@/lib/types";
+import {
+  COUPON_KINDS,
+  DATED_KINDS,
+  DISCOUNT_KINDS,
+  OPTIONALLY_DATED_KINDS,
+  PROMOTION_LABELS,
+  type Deal,
+  type PromotionKind,
+} from "@/lib/types";
 import { deletePromotion, savePromotion } from "../actions";
+
+// Food & drink venues mostly use the first group, hangout venues (parks, museums, malls, …) the second.
+const KIND_GROUPS: { label: string; kinds: PromotionKind[] }[] = [
+  { label: "Food & drink", kinds: ["discount", "offer"] },
+  { label: "Hangout places", kinds: ["ticket", "free_entry"] },
+  { label: "Listings", kinds: ["event", "party"] },
+];
 
 export type PromotionRow = Deal & { deal_coupons: { coupon_code: string } | null };
 
@@ -14,7 +29,15 @@ function toBangkokInput(iso: string | null): string {
   return local.toISOString().slice(0, 16);
 }
 
-export function Promotions({ venueId, promotions }: { venueId: string; promotions: PromotionRow[] }) {
+export function Promotions({
+  venueId,
+  promotions,
+  hangoutVenue,
+}: {
+  venueId: string;
+  promotions: PromotionRow[];
+  hangoutVenue: boolean;
+}) {
   return (
     <div className="space-y-4">
       {promotions.map((promotion) => (
@@ -23,21 +46,32 @@ export function Promotions({ venueId, promotions }: { venueId: string; promotion
       <details className="rounded-lg border border-dashed border-ink-300 p-4" open={promotions.length === 0}>
         <summary className="cursor-pointer text-sm font-semibold text-brand-700">Add a promotion</summary>
         <div className="mt-4">
-          <PromotionForm venueId={venueId} />
+          <PromotionForm venueId={venueId} defaultKind={hangoutVenue ? "ticket" : "discount"} />
         </div>
       </details>
     </div>
   );
 }
 
-function PromotionForm({ venueId, promotion }: { venueId: string; promotion?: PromotionRow }) {
+function PromotionForm({
+  venueId,
+  promotion,
+  defaultKind = "discount",
+}: {
+  venueId: string;
+  promotion?: PromotionRow;
+  defaultKind?: PromotionKind;
+}) {
   const [state, formAction, pending] = useActionState(savePromotion.bind(null, venueId), {});
   const errors = state.fieldErrors ?? {};
-  const [kind, setKind] = useState<PromotionKind>(promotion?.kind ?? "discount");
+  const [kind, setKind] = useState<PromotionKind>(promotion?.kind ?? defaultKind);
   const [discountType, setDiscountType] = useState(promotion?.discount_type === "fixed_thb" ? "fixed_thb" : "percent");
   const [deleting, startDelete] = useTransition();
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const hasCoupon = COUPON_KINDS.includes(kind);
+  const hasDiscount = DISCOUNT_KINDS.includes(kind);
+  const datesRequired = DATED_KINDS.includes(kind);
+  const datesOptional = OPTIONALLY_DATED_KINDS.includes(kind);
 
   return (
     <form
@@ -56,21 +90,21 @@ function PromotionForm({ venueId, promotion }: { venueId: string; promotion?: Pr
             onChange={(event) => setKind(event.target.value as PromotionKind)}
             className={inputClass}
           >
-            {PROMOTION_KINDS.map((option) => (
-              <option key={option} value={option}>
-                {PROMOTION_LABELS[option]}
-              </option>
+            {KIND_GROUPS.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.kinds.map((option) => (
+                  <option key={option} value={option}>
+                    {PROMOTION_LABELS[option]}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </Field>
-        <p className="pb-2 text-xs text-ink-500">
-          {hasCoupon
-            ? "Unlocked with the coupon code when 3+ people check in. One active discount or offer per place."
-            : "A dated listing (no coupon). Shows in the app until it ends."}
-        </p>
+        <p className="flex-1 pb-2 text-xs text-ink-500">{kindHelp(kind)}</p>
       </div>
 
-      {kind === "discount" && (
+      {hasDiscount && (
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Discount" name="discount_type" errors={errors.discount_type}>
             <select
@@ -117,7 +151,7 @@ function PromotionForm({ venueId, promotion }: { venueId: string; promotion?: Pr
         </Field>
       </div>
 
-      {hasCoupon ? (
+      {hasCoupon && (
         <Field
           label="Coupon code"
           name="coupon_code"
@@ -132,23 +166,30 @@ function PromotionForm({ venueId, promotion }: { venueId: string; promotion?: Pr
             className={`${inputClass} font-mono`}
           />
         </Field>
-      ) : (
+      )}
+
+      {(datesRequired || datesOptional) && (
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Starts (Bangkok time)" name="starts_at" errors={errors.starts_at}>
+          <Field
+            label={datesRequired ? "Starts (Bangkok time)" : "Starts (Bangkok time, optional)"}
+            name="starts_at"
+            errors={errors.starts_at}
+            hint={datesOptional ? "Leave both dates empty if it's ongoing. Set both for one event." : undefined}
+          >
             <input
               name="starts_at"
               type="datetime-local"
               defaultValue={toBangkokInput(promotion?.starts_at ?? null)}
-              required
+              required={datesRequired}
               className={inputClass}
             />
           </Field>
-          <Field label="Ends (Bangkok time)" name="ends_at" errors={errors.ends_at}>
+          <Field label={datesRequired ? "Ends (Bangkok time)" : "Ends (Bangkok time, optional)"} name="ends_at" errors={errors.ends_at}>
             <input
               name="ends_at"
               type="datetime-local"
               defaultValue={toBangkokInput(promotion?.ends_at ?? null)}
-              required
+              required={datesRequired}
               className={inputClass}
             />
           </Field>
@@ -200,5 +241,24 @@ function titleHint(kind: PromotionKind): string {
       return 'e.g. "Live jazz night"';
     case "party":
       return 'e.g. "Rooftop DJ party"';
+    case "ticket":
+      return 'e.g. "20% off entry tickets" or "฿100 off festival tickets"';
+    case "free_entry":
+      return 'e.g. "Free entry for TableMeet groups"';
+  }
+}
+
+function kindHelp(kind: PromotionKind): string {
+  switch (kind) {
+    case "discount":
+    case "offer":
+      return "Unlocked with the coupon code when 3+ people check in. One active discount or offer per place.";
+    case "ticket":
+      return "A discount on entry tickets, with a coupon code. Any member of a hangout here can use it (no 3-person rule). Ongoing, or set dates for one event.";
+    case "free_entry":
+      return "Shows that entry is free for TableMeet users. No coupon code. Ongoing, or set dates for one event.";
+    case "event":
+    case "party":
+      return "A dated listing (no coupon). Shows in the app until it ends.";
   }
 }

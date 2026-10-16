@@ -11,7 +11,7 @@ import { ScreenHeader } from '@/components/screen-header';
 import { Radius, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { useAuth } from '@/lib/auth';
-import { formatWhen } from '@/lib/bangkok-time';
+import { formatWhen, formatWhenRange } from '@/lib/bangkok-time';
 import {
   cancelMeetup,
   directionsUrl,
@@ -22,10 +22,10 @@ import {
   type MeetupErrorKey,
 } from '@/lib/meetups';
 import { venuePhotoUrl } from '@/lib/supabase';
-import { useVenues } from '@/lib/venues';
+import { PROMOTION_EMOJI, useVenues } from '@/lib/venues';
 import { makeStyles, useColors } from '@/lib/theme';
 
-// One table: where and when, who's coming, and join / leave / cancel.
+// One table or hangout: where and when, who's coming, and join / leave / cancel.
 export default function TableScreen() {
   const styles = useStyles();
   const Colors = useColors();
@@ -82,6 +82,9 @@ export default function TableScreen() {
   const ended = new Date(meetup.ends_at) <= new Date();
   const cancelled = meetup.status === 'cancelled';
   const seatsLeft = Math.max(0, meetup.max_people - meetup.members.length);
+  const isHangout = meetup.kind === 'hangout';
+  const placeLabel = venue ? localized(venue, 'name', language) : meetupPlaceName(meetup, language);
+  const errorText = error ? (isHangout ? t(`hangouts.errors.${error}`) : t(`tables.errors.${error}`)) : null;
 
   function confirm(message: string, actionLabel: string, action: () => void) {
     Alert.alert(message, undefined, [
@@ -104,14 +107,32 @@ export default function TableScreen() {
         ) : null}
 
         <View style={styles.pad}>
-          <Text style={styles.venue}>{venue ? localized(venue, 'name', language) : meetupPlaceName(meetup, language)}</Text>
-          {meetup.title ? <Text style={styles.title}>{meetup.title}</Text> : null}
+          {isHangout ? (
+            <>
+              <Text style={styles.kindTag}>🙌 {t('hangouts.hangout')}</Text>
+              <Text style={styles.venue}>{meetup.title}</Text>
+              {meetup.description ? <Text style={styles.description}>{meetup.description}</Text> : null}
+            </>
+          ) : (
+            <>
+              <Text style={styles.venue}>{placeLabel}</Text>
+              {meetup.title ? <Text style={styles.title}>{meetup.title}</Text> : null}
+            </>
+          )}
 
           <View style={styles.facts}>
             <View style={styles.fact}>
               <Icon name="time" size={18} color={Colors.accent} />
-              <Text style={styles.factText}>{formatWhen(meetup.starts_at, t)}</Text>
+              <Text style={styles.factText}>
+                {isHangout ? formatWhenRange(meetup.starts_at, meetup.ends_at, t) : formatWhen(meetup.starts_at, t)}
+              </Text>
             </View>
+            {isHangout && (
+              <View style={styles.fact}>
+                <Icon name={venue ? venue.category : 'pin'} size={18} color={Colors.accent} />
+                <Text style={styles.factText}>{placeLabel}</Text>
+              </View>
+            )}
             <View style={styles.fact}>
               <Icon name="group" size={18} color={Colors.accent} />
               <Text style={styles.factText}>
@@ -133,18 +154,44 @@ export default function TableScreen() {
             )}
           </View>
 
-          {venue?.deal && (
-            <View style={styles.deal}>
-              <Icon name="deal" size={18} color={Colors.accent} />
-              <View style={styles.dealBody}>
-                <Text style={styles.dealTitle}>{localized(venue.deal, 'title', language)}</Text>
-                <Text style={styles.dealNote}>{t('tables.discountNote')}</Text>
-              </View>
-            </View>
-          )}
+          {isHangout
+            ? venue?.promotions.map((promotion) => (
+                <View key={promotion.id} style={styles.deal}>
+                  <Text style={styles.dealEmoji}>{PROMOTION_EMOJI[promotion.kind]}</Text>
+                  <View style={styles.dealBody}>
+                    <Text style={styles.dealTitle}>{localized(promotion, 'title', language)}</Text>
+                    <Text style={styles.dealNote}>
+                      {promotion.kind === 'ticket'
+                        ? t('hangouts.ticketNote')
+                        : promotion.kind === 'discount' || promotion.kind === 'offer'
+                          ? t('tables.discountNote')
+                          : promotion.starts_at && promotion.ends_at
+                            ? formatWhenRange(promotion.starts_at, promotion.ends_at, t)
+                            : t(`promo.${promotion.kind}`)}
+                    </Text>
+                  </View>
+                </View>
+              ))
+            : venue?.deal && (
+                <View style={styles.deal}>
+                  <Icon name="deal" size={18} color={Colors.accent} />
+                  <View style={styles.dealBody}>
+                    <Text style={styles.dealTitle}>{localized(venue.deal, 'title', language)}</Text>
+                    <Text style={styles.dealNote}>{t('tables.discountNote')}</Text>
+                  </View>
+                </View>
+              )}
 
           {(cancelled || ended) && (
-            <Text style={styles.status}>{cancelled ? t('tables.cancelled') : t('tables.ended')}</Text>
+            <Text style={styles.status}>
+              {isHangout
+                ? cancelled
+                  ? t('hangouts.cancelled')
+                  : t('hangouts.ended')
+                : cancelled
+                  ? t('tables.cancelled')
+                  : t('tables.ended')}
+            </Text>
           )}
 
           <Text style={styles.heading}>{t('tables.whoIsComing')}</Text>
@@ -163,16 +210,16 @@ export default function TableScreen() {
             ))}
           </View>
 
-          {error && (
+          {errorText && (
             <Text accessibilityRole="alert" style={styles.error}>
-              {t(`tables.errors.${error}`)}
+              {errorText}
             </Text>
           )}
 
           {isMember && !cancelled && (
             <View style={styles.actions}>
               <Button
-                title={t('chat.openChat')}
+                title={isHangout ? t('hangouts.chat') : t('chat.openChat')}
                 icon={<Icon name="chat" size={20} color={Colors.onBrand} />}
                 onPress={() => router.push({ pathname: '/table-chat/[id]', params: { id } })}
               />
@@ -183,21 +230,30 @@ export default function TableScreen() {
             <View style={styles.actions}>
               {isHost ? (
                 <Button
-                  title={t('tables.cancelTable')}
+                  title={isHangout ? t('hangouts.cancel') : t('tables.cancelTable')}
                   variant="secondary"
                   loading={busy}
-                  onPress={() => confirm(t('tables.cancelConfirm'), t('tables.cancelTable'), () => run(cancelMeetup))}
+                  onPress={() =>
+                    isHangout
+                      ? confirm(t('hangouts.cancelConfirm'), t('hangouts.cancel'), () => run(cancelMeetup))
+                      : confirm(t('tables.cancelConfirm'), t('tables.cancelTable'), () => run(cancelMeetup))
+                  }
                 />
               ) : isMember ? (
                 <Button
-                  title={t('tables.leave')}
+                  title={isHangout ? t('hangouts.leave') : t('tables.leave')}
                   variant="secondary"
                   loading={busy}
-                  onPress={() => confirm(t('tables.leaveConfirm'), t('tables.leave'), () => run(leaveMeetup))}
+                  onPress={() =>
+                    isHangout
+                      ? confirm(t('hangouts.leaveConfirm'), t('hangouts.leave'), () => run(leaveMeetup))
+                      : confirm(t('tables.leaveConfirm'), t('tables.leave'), () => run(leaveMeetup))
+                  }
                 />
               ) : (
                 <Button
                   title={seatsLeft > 0 ? t('tables.join') : t('tables.full')}
+                  variant={isHangout ? 'violet' : 'primary'}
                   loading={busy}
                   disabled={seatsLeft === 0}
                   onPress={() => run(joinMeetup)}
@@ -221,6 +277,9 @@ const useStyles = makeStyles((Colors) => ({
   pad: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg },
   venue: { ...Type.display, fontSize: 26, lineHeight: 32, color: Colors.text },
   title: { ...Type.body, fontSize: 16, color: Colors.textSecondary, marginTop: Spacing.xs },
+  kindTag: { ...Type.label, color: Colors.textSecondary, marginBottom: Spacing.xs },
+  description: { ...Type.body, color: Colors.textSecondary, marginTop: Spacing.sm },
+  dealEmoji: { fontSize: 18 },
   facts: { marginTop: Spacing.lg, gap: Spacing.sm },
   fact: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   factText: { ...Type.body, color: Colors.text, flex: 1 },

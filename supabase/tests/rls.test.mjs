@@ -564,5 +564,25 @@ check("founder sets a venue's entry", r.rows?.length === 1);
 r = await tryQuery("authenticated", admin, `update public.venues set entry = 'maybe' where id = $1`, [parkVenueId]);
 check("unknown entry value rejected", !!r.error);
 
+// --- Map search (places of that map + Bangkok areas)
+r = await tryQuery("anon", null, `select count(*)::int n from public.areas`);
+check("Bangkok areas seeded and readable by anyone", r.rows?.[0]?.n > 1000);
+r = await tryQuery("authenticated", user, `insert into public.areas (osm_type, osm_id, kind, name, lat, lng) values ('node', 1, 'road', 'Fake Road', 13.7, 100.5)`);
+check("app users can't add areas", !!r.error);
+r = await tryQuery("anon", null, `select result_type, name_en, kind from public.search_map('sukhumvit', 'food') where result_type = 'area'`);
+check("search finds areas and roads (Sukhumvit)", r.rows?.some((row) => row.name_en === "Sukhumvit Road"));
+r = await tryQuery("anon", null, `select result_type, name from public.search_map('manna', 'food') where result_type = 'place'`);
+check("food search finds food places", r.rows?.some((row) => row.name === "Manna"));
+r = await tryQuery("anon", null, `select count(*)::int n from public.search_map('lumphini', 'food') where result_type = 'place' and kind = 'park'`);
+check("food search doesn't return hangout places", r.rows?.[0]?.n === 0);
+r = await tryQuery("anon", null, `select entry, kind from public.search_map('lumphini park', 'hangout') where result_type = 'place'`);
+check("hangout search finds hangout places, with their entry", r.rows?.some((row) => row.kind === "park" && row.entry === "free"));
+r = await tryQuery("anon", null, `select count(*)::int n from public.search_map('สยาม', 'hangout')`);
+check("search works in Thai", r.rows?.[0]?.n > 0);
+r = await tryQuery("anon", null, `select count(*)::int n from public.search_map('%', 'food')`);
+check("% is searched literally, not as a wildcard", r.rows?.[0]?.n === 0);
+r = await tryQuery("anon", null, `select count(*)::int n from public.search_map('a', 'food')`);
+check("one-letter searches return nothing", r.rows?.[0]?.n === 0);
+
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

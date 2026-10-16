@@ -21,12 +21,13 @@ import { Button } from '@/components/button';
 import { Chip } from '@/components/chip';
 import { Icon } from '@/components/icon';
 import { MapHeader } from '@/components/map-header';
+import { MapSearchBar, MapSearchResults } from '@/components/map-search';
 import { MeetupCard } from '@/components/meetup-card';
 import { PromoFilter } from '@/components/promo-filter';
 import { ScreenHeader } from '@/components/screen-header';
 import { SlideUpPanel } from '@/components/slide-up-panel';
 import { VenueCard } from '@/components/venue-card';
-import { CATEGORY_EMOJI, VenueMap, type MapPin } from '@/components/venue-map';
+import { CATEGORY_EMOJI, VenueMap, type MapFocus, type MapPin } from '@/components/venue-map';
 import { Radius, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { useAuth } from '@/lib/auth';
@@ -40,6 +41,7 @@ import {
   type BangkokDay,
 } from '@/lib/bangkok-time';
 import { isSafeLink, openLink, ticketLink } from '@/lib/links';
+import { AREA_ZOOM, PLACE_ZOOM, useMapSearch, type SearchResult } from '@/lib/map-search';
 import { distanceMeters, useCurrentLocation } from '@/lib/location';
 import {
   createHangout,
@@ -118,6 +120,9 @@ export default function CreateHangoutScreen() {
       Boolean(venue?.promotions.some((p) => p.kind === promo)) ||
       Boolean(entry && venue?.entry && entry.includes(venue.entry)));
   const hangoutVenues = venues.venues.filter((venue) => isHangoutVenue(venue) && venueMatches(venue));
+  // Search finds every hangout venue and place, whatever filter button is on.
+  const search = useMapSearch('hangout', venues.venues.filter(isHangoutVenue));
+  const [focus, setFocus] = useState<MapFocus | null>(null);
   const shownVenueIds = new Set(hangoutVenues.map((venue) => venue.id));
   // With a filter on, only hangouts at venues that have that promotion.
   const hangouts = meetups.meetups.filter(
@@ -199,6 +204,21 @@ export default function CreateHangoutScreen() {
   }
 
   // A place linked to a partner venue opens as that venue.
+  // Search result: move the map there and open its card (areas just move the map).
+  function handleSearchPick(result: SearchResult) {
+    search.clear();
+    if (result.type === 'venue') {
+      setSelection({ type: 'venue', venueId: result.venue.id });
+      setFocus({ lat: result.venue.lat, lng: result.venue.lng, zoom: PLACE_ZOOM, seq: Date.now() });
+    } else if (result.type === 'place') {
+      setSelection({ type: 'place', place: result.place });
+      setFocus({ lat: result.place.lat, lng: result.place.lng, zoom: PLACE_ZOOM, seq: Date.now() });
+    } else {
+      setSelection(null);
+      setFocus({ lat: result.area.lat, lng: result.area.lng, zoom: AREA_ZOOM[result.area.kind], seq: Date.now() });
+    }
+  }
+
   function handlePlacePress(place: Place) {
     const venue = venues.venues.find((v) => v.place_id === place.id);
     setSelection(venue ? { type: 'venue', venueId: venue.id } : { type: 'place', place });
@@ -266,9 +286,13 @@ export default function CreateHangoutScreen() {
         onMapPress={(at) => setSelection({ type: 'spot', ...at })}
         onBoundsChange={onBoundsChange}
         mapPadding={{ top: topHeight, right: 0, bottom: bottomHeight, left: 0 }}
+        focus={focus}
       />
 
       <MapHeader title={t('hangouts.mapTitle')} hint={t('hangouts.mapHint')} onHeight={setTopHeight}>
+        <View style={styles.searchRow}>
+          <MapSearchBar value={search.query} onChangeText={search.setQuery} placeholder={t('search.hangoutPlaceholder')} />
+        </View>
         <PromoFilter
           kinds={HANGOUT_PROMOTION_KINDS}
           value={promo}
@@ -326,6 +350,15 @@ export default function CreateHangoutScreen() {
           </View>
         )}
       </View>
+
+      <MapSearchResults
+        visible={search.active}
+        searching={search.searching}
+        results={search.results}
+        top={Math.max(topHeight - Spacing.lg, insets.top + 100)}
+        onPick={handleSearchPick}
+        onClose={search.clear}
+      />
 
       <SlideUpPanel open={listOpen} onClose={() => setListOpen(false)}>
         <ScrollView contentContainerStyle={styles.sheetContent}>
@@ -792,6 +825,7 @@ const useStyles = makeStyles((Colors) => ({
   safe: { flex: 1, backgroundColor: Colors.bg },
   flex: { flex: 1 },
   inset: { marginHorizontal: Spacing.lg },
+  searchRow: { marginBottom: Spacing.sm },
   pressed: { opacity: 0.7 },
   spinner: { marginVertical: Spacing.lg },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, gap: Spacing.md },

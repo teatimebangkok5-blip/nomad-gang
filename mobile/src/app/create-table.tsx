@@ -8,14 +8,16 @@ import { Button } from '@/components/button';
 import { Chip } from '@/components/chip';
 import { Icon } from '@/components/icon';
 import { MapHeader } from '@/components/map-header';
+import { MapSearchBar, MapSearchResults } from '@/components/map-search';
 import { ScreenHeader } from '@/components/screen-header';
 import { SlideUpPanel } from '@/components/slide-up-panel';
 import { VenueCard } from '@/components/venue-card';
-import { CATEGORY_EMOJI, VenueMap } from '@/components/venue-map';
+import { CATEGORY_EMOJI, VenueMap, type MapFocus } from '@/components/venue-map';
 import { Radius, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { bangkokDay, formatClock, formatDayLabel, fromBangkok, timeSlots, type BangkokDay } from '@/lib/bangkok-time';
 import { distanceMeters, useCurrentLocation } from '@/lib/location';
+import { AREA_ZOOM, PLACE_ZOOM, useMapSearch, type SearchResult } from '@/lib/map-search';
 import { createMeetup, createMeetupAtPlace, type MeetupErrorKey } from '@/lib/meetups';
 import { fetchPlace, placeName, usePlacesInView, type Place } from '@/lib/places';
 import { isHangoutVenue, PROMOTION_EMOJI, useVenues } from '@/lib/venues';
@@ -71,6 +73,23 @@ export default function CreateTableScreen() {
     .filter((venue) => !isHangoutVenue(venue))
     .map((venue) => ({ venue, distance: coords ? distanceMeters(coords, venue) : null }))
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
+  const search = useMapSearch('food', places.map(({ venue }) => venue));
+  const [focus, setFocus] = useState<MapFocus | null>(null);
+
+  // Search result: move the map there and pick it (areas just move the map).
+  function handleSearchPick(result: SearchResult) {
+    search.clear();
+    if (result.type === 'venue') {
+      setPicked({ type: 'venue', venueId: result.venue.id });
+      setFocus({ lat: result.venue.lat, lng: result.venue.lng, zoom: PLACE_ZOOM, seq: Date.now() });
+    } else if (result.type === 'place') {
+      setPicked({ type: 'place', place: result.place });
+      setFocus({ lat: result.place.lat, lng: result.place.lng, zoom: PLACE_ZOOM, seq: Date.now() });
+    } else {
+      setFocus({ lat: result.area.lat, lng: result.area.lng, zoom: AREA_ZOOM[result.area.kind], seq: Date.now() });
+    }
+  }
+
   const pickedVenue = picked?.type === 'venue' ? venues.venues.find((venue) => venue.id === picked.venueId) : undefined;
   const chosen = venueId ? venues.venues.find((venue) => venue.id === venueId) : undefined;
   const chosenName = chosen ? localized(chosen, 'name', language) : place ? placeName(place, language) : '';
@@ -126,9 +145,12 @@ export default function CreateTableScreen() {
           onPlacePress={handlePlacePress}
           onBoundsChange={onBoundsChange}
           mapPadding={{ top: topHeight, right: 0, bottom: bottomHeight, left: 0 }}
+          focus={focus}
         />
 
-        <MapHeader title={t('tables.chooseTitle')} hint={t('tables.pickAnyPlace')} onHeight={setTopHeight} />
+        <MapHeader title={t('tables.chooseTitle')} hint={t('tables.pickAnyPlace')} onHeight={setTopHeight}>
+          <MapSearchBar value={search.query} onChangeText={search.setQuery} placeholder={t('search.foodPlaceholder')} />
+        </MapHeader>
 
         <View
           style={[styles.bottom, { paddingBottom: insets.bottom + Spacing.md }]}
@@ -173,6 +195,15 @@ export default function CreateTableScreen() {
             </Pressable>
           </View>
         </View>
+
+        <MapSearchResults
+          visible={search.active}
+          searching={search.searching}
+          results={search.results}
+          top={Math.max(topHeight - Spacing.lg, insets.top + 100)}
+          onPick={handleSearchPick}
+          onClose={search.clear}
+        />
 
         <SlideUpPanel open={listOpen} onClose={() => setListOpen(false)}>
           <ScrollView contentContainerStyle={styles.sheetContent}>

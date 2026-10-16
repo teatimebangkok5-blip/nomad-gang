@@ -10,39 +10,16 @@ import {
 } from '@maplibre/maplibre-react-native';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { StyleSheet, Text, View, type ImageRequireSource } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { Radius } from '@/constants/theme';
 import { currentLanguage } from '@/i18n';
 import type { Coords } from '@/lib/location';
-import { PLACE_ICON_COLORS, placeIcon, placeName, type MapBounds, type Place, type PlaceIcon } from '@/lib/places';
+import { PLACE_ICON_IMAGES } from '@/lib/place-icons';
+import { PLACE_ICON_COLORS, placeIcon, placeName, type MapBounds, type Place } from '@/lib/places';
 import { makeStyles, useColors, useTheme } from '@/lib/theme';
 import type { VenueCategory } from '@/lib/venues';
 
-// Place icons for the map's symbol layer (see PLACE_ICON_COLORS in src/lib/places.ts).
-const PLACE_ICON_IMAGES: Record<PlaceIcon, ImageRequireSource> = {
-  food: require('@/assets/images/map-icons/food.png'),
-  fastfood: require('@/assets/images/map-icons/fastfood.png'),
-  cafe: require('@/assets/images/map-icons/cafe.png'),
-  bakery: require('@/assets/images/map-icons/bakery.png'),
-  icecream: require('@/assets/images/map-icons/icecream.png'),
-  bar: require('@/assets/images/map-icons/bar.png'),
-  pub: require('@/assets/images/map-icons/pub.png'),
-  temple: require('@/assets/images/map-icons/temple.png'),
-  park: require('@/assets/images/map-icons/park.png'),
-  market: require('@/assets/images/map-icons/market.png'),
-  mall: require('@/assets/images/map-icons/mall.png'),
-  museum: require('@/assets/images/map-icons/museum.png'),
-  theatre: require('@/assets/images/map-icons/theatre.png'),
-  cinema: require('@/assets/images/map-icons/cinema.png'),
-  fun: require('@/assets/images/map-icons/fun.png'),
-  zoo: require('@/assets/images/map-icons/zoo.png'),
-  attraction: require('@/assets/images/map-icons/attraction.png'),
-  monument: require('@/assets/images/map-icons/monument.png'),
-  castle: require('@/assets/images/map-icons/castle.png'),
-  viewpoint: require('@/assets/images/map-icons/viewpoint.png'),
-  place: require('@/assets/images/map-icons/place.png'),
-};
 // Prefixed so they can't clash with the map style's own images.
 const MAP_IMAGES = Object.fromEntries(
   Object.entries(PLACE_ICON_IMAGES).map(([key, source]) => [`tm-${key}`, source]),
@@ -98,6 +75,8 @@ export const CATEGORY_EMOJI: Record<VenueCategory, string> = {
   entertainment: '🎳',
 };
 
+export type MapFocus = { lat: number; lng: number; zoom: number; seq: number };
+
 // Siam / central Bangkok, used until the phone's location is known.
 const BANGKOK: Coords = { lat: 13.7466, lng: 100.5393 };
 
@@ -112,6 +91,7 @@ export function VenueMap({
   height,
   fullScreen = false,
   mapPadding,
+  focus,
 }: {
   pins: MapPin[];
   onPinPress: (key: string) => void;
@@ -129,6 +109,8 @@ export function VenueMap({
   fullScreen?: boolean;
   // Space covered by floating UI, so centering and the attribution stay visible.
   mapPadding?: { top: number; right: number; bottom: number; left: number };
+  // Move the camera here (e.g. a search result). Bump `seq` to move again to the same spot.
+  focus?: MapFocus | null;
 }) {
   const styles = useStyles();
   const Colors = useColors();
@@ -148,6 +130,12 @@ export function VenueMap({
     centeredOnUser.current = true;
     cameraRef.current?.easeTo({ center: [userCoords.lng, userCoords.lat], zoom: 15, duration: 600 });
   }, [userCoords]);
+
+  useEffect(() => {
+    if (!focus) return;
+    centeredOnUser.current = true; // don't jump back to the user afterwards
+    cameraRef.current?.easeTo({ center: [focus.lng, focus.lat], zoom: focus.zoom, duration: 700 });
+  }, [focus]);
 
   const placesGeoJson: GeoJSON.FeatureCollection = {
     type: 'FeatureCollection',

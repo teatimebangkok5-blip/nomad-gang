@@ -22,9 +22,11 @@ import { Icon } from '@/components/icon';
 import { LanguageToggle } from '@/components/language-toggle';
 import { Logo } from '@/components/logo';
 import { MeetupCard } from '@/components/meetup-card';
+import { MapSearchBar, MapSearchResults } from '@/components/map-search';
 import { SlideUpPanel } from '@/components/slide-up-panel';
 import { VenueCard } from '@/components/venue-card';
-import { VenueMap, type MapPin } from '@/components/venue-map';
+import { VenueMap, type MapFocus, type MapPin } from '@/components/venue-map';
+import { AREA_ZOOM, PLACE_ZOOM, useMapSearch, type SearchResult } from '@/lib/map-search';
 import { Radius, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { useAuth } from '@/lib/auth';
@@ -84,6 +86,8 @@ export default function HomeScreen() {
   const venueById = new Map(venues.venues.map((venue) => [venue.id, venue]));
   const diningVenues = venues.venues.filter((venue) => !isHangoutVenue(venue));
   const diningVenueIds = new Set(diningVenues.map((venue) => venue.id));
+  const search = useMapSearch('food', diningVenues);
+  const [focus, setFocus] = useState<MapFocus | null>(null);
   const filtersOn = promo !== null;
   const venueMatches = (venue: Venue | undefined) =>
     Boolean(venue) &&
@@ -183,6 +187,21 @@ export default function HomeScreen() {
   }
 
   // Tap on a place dot: a place linked to a partner venue opens as that venue.
+  // Search result: move the map there and open its card (areas just move the map).
+  function handleSearchPick(result: SearchResult) {
+    search.clear();
+    if (result.type === 'venue') {
+      setSelection({ type: 'venue', venueId: result.venue.id });
+      setFocus({ lat: result.venue.lat, lng: result.venue.lng, zoom: PLACE_ZOOM, seq: Date.now() });
+    } else if (result.type === 'place') {
+      setSelection({ type: 'place', place: result.place });
+      setFocus({ lat: result.place.lat, lng: result.place.lng, zoom: PLACE_ZOOM, seq: Date.now() });
+    } else {
+      setSelection(null);
+      setFocus({ lat: result.area.lat, lng: result.area.lng, zoom: AREA_ZOOM[result.area.kind], seq: Date.now() });
+    }
+  }
+
   function handlePlacePress(place: Place) {
     const venue = venues.venues.find((v) => v.place_id === place.id);
     setSelection(venue ? { type: 'venue', venueId: venue.id } : { type: 'place', place });
@@ -229,6 +248,7 @@ export default function HomeScreen() {
         onPlacePress={handlePlacePress}
         onBoundsChange={onBoundsChange}
         mapPadding={{ top: topHeight, right: 0, bottom: bottomHeight, left: 0 }}
+        focus={focus}
       />
 
       {/* Top: logo, language, chips. A fade keeps it readable over the map. */}
@@ -261,6 +281,10 @@ export default function HomeScreen() {
               <Icon name="settings" size={20} color={Colors.textSecondary} />
             </Pressable>
           </View>
+        </View>
+
+        <View style={styles.search}>
+          <MapSearchBar value={search.query} onChangeText={search.setQuery} placeholder={t('search.foodPlaceholder')} />
         </View>
 
         {skipLogin && (
@@ -361,6 +385,15 @@ export default function HomeScreen() {
           </Pressable>
         </View>
       </View>
+
+      <MapSearchResults
+        visible={search.active}
+        searching={search.searching}
+        results={search.results}
+        top={Math.max(topHeight - Spacing.lg, insets.top + 100)}
+        onPick={handleSearchPick}
+        onClose={search.clear}
+      />
 
       <SlideUpPanel open={listOpen} onClose={() => setListOpen(false)}>
         <ListPanel
@@ -625,6 +658,7 @@ const useStyles = makeStyles((Colors) => ({
     alignSelf: 'flex-start',
     overflow: 'hidden',
   },
+  search: { marginTop: Spacing.md },
   chips: { marginTop: Spacing.md, gap: Spacing.sm },
   tip: { ...Type.small, color: Colors.glow, marginTop: Spacing.xs },
   placeCard: {

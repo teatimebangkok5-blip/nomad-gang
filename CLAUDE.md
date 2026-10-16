@@ -55,6 +55,13 @@ Product spec and tech stack below are agreed. Built so far:
   (founder's decision: unconfirmed places are left out of both buttons). `free_thai` shows under **Free entry in Thai** and **Tickets in English** (`entryFilter()` in
   `src/lib/places.ts`); `places_in_bounds(…, p_entry)` filters on the server. Venues: founder sets Entry in the admin
   panel, else the linked place's. Event / Party buttons work as before. The place card shows the entry line.
+- **Map search** (added 2026-10-16): a search bar on every map (home, Create table, Hangout map) finds that map's
+  partner venues (matched in the app), places (food or hangout) and Bangkok **areas** (`public.areas`: 69 districts,
+  344 subdistricts, 879 neighbourhoods, 358 main roads from OSM, seeded by `*_seed_bangkok_areas.sql`; a road sits at
+  its segment nearest Siam) via RPC `search_map(query, purpose)`. Picking a result moves the camera (`VenueMap` prop
+  `focus`) and opens the place's card; areas only move the map. UI: `src/components/map-search.tsx` (`MapSearchBar` in
+  the header, `MapSearchResults` rendered at the screen's top level because Android ignores touches outside a parent's
+  bounds), hook `useMapSearch` in `src/lib/map-search.ts`. Place icons for the map and results: `src/lib/place-icons.ts`.
 - **Not started:** check-ins (50 m), QR codes and redemptions, staff QR page, redemption feed and push
   notifications, Instagram on profiles, tables/users in the admin panel. Places missing from OpenStreetMap can be added by the founder (admin insert into `places`; no UI yet).
 - Running on the founder's Redmi as a local release APK, connected to the real Supabase project

@@ -28,6 +28,7 @@ const KIND_EMOJI: Record<AppNotification['kind'], string> = {
   dm_request: '✉️',
   follow: '➕',
   promotion: '🏷️',
+  reward: '🎁',
 };
 
 // Notifications: new tables and hangouts, people joining yours, messages, new followers and new venue deals and
@@ -145,6 +146,9 @@ function openNotification(item: AppNotification) {
     case 'follow':
       if (item.actor_id) router.push({ pathname: '/profile/[userId]', params: { userId: item.actor_id } });
       return;
+    case 'reward':
+      router.push('/rewards');
+      return;
     case 'promotion':
       if (!item.venue_id) return;
       if (item.venue_category && (HANGOUT_CATEGORIES as readonly string[]).includes(item.venue_category)) {
@@ -182,6 +186,8 @@ function notificationText(item: AppNotification, t: TFunction, language: Languag
       return { title: t('notifications.dmRequest', { name }), detail: item.body };
     case 'follow':
       return { title: t('notifications.follow', { name }), detail: null };
+    case 'reward':
+      return { title: t('notifications.reward'), detail: meetupLabel || null };
     case 'promotion': {
       const venue = place ?? '';
       const key =

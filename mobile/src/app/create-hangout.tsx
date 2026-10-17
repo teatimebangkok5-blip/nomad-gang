@@ -60,6 +60,7 @@ import {
   type MeetupErrorKey,
   type OpenMeetup,
 } from '@/lib/meetups';
+import { areaAt, setMeetupArea } from '@/lib/rewards';
 import { entryFilter, placeEmoji, placeName, usePlacesInView, type Place, type PlaceEntry } from '@/lib/places';
 import {
   HANGOUT_PROMOTION_KINDS,
@@ -626,6 +627,9 @@ function HangoutForm({ chosen, onChange }: { chosen: Chosen; onChange: () => voi
   const at = chosen.type === 'venue' ? chosen.venue : chosen.type === 'place' ? chosen.place : chosen;
   const isSpot = chosen.type === 'spot' || (chosen.type === 'place' && Boolean(chosen.place.world));
   const [zone] = useState(() => (isSpot ? zoneAt(at.lat, at.lng) : 'Asia/Bangkok'));
+  // The city / country, for the host's travel deals (Bangkok is set by the server).
+  const outsideBangkok = !(at.lat >= 13.45 && at.lat <= 14.1 && at.lng >= 100.25 && at.lng <= 100.95);
+  const [area] = useState(() => (isSpot && outsideBangkok ? areaAt(at.lat, at.lng) : Promise.resolve(null)));
   const [now] = useState(() => new Date());
   const today = bangkokDay(now, zone);
   const days = Array.from({ length: DAYS_AHEAD }, (_, i) => today + i);
@@ -682,6 +686,8 @@ function HangoutForm({ chosen, onChange }: { chosen: Chosen; onChange: () => voi
       setError(result.error);
       return;
     }
+    const found = await area;
+    if (found) await setMeetupArea(result.data, found);
     router.replace({ pathname: '/table/[id]', params: { id: result.data } });
   }
 

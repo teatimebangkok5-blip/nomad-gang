@@ -9,6 +9,7 @@ import { GlossyFill } from '@/components/glossy';
 import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { PlanTimeline } from '@/components/plan-timeline';
+import { RewardCard } from '@/components/reward-card';
 import { PlanMap } from '@/components/plan-view';
 import { ScreenHeader } from '@/components/screen-header';
 import { Radius, RaisedSmall, Spacing, Type } from '@/constants/theme';
@@ -27,6 +28,7 @@ import {
 } from '@/lib/meetups';
 import { profilePhotoUrl } from '@/lib/photos';
 import { usePlanForMeetup } from '@/lib/plans';
+import { REWARD_MIN_PEOPLE, useRewards } from '@/lib/rewards';
 import { useMyFeedback } from '@/lib/profiles';
 import { venuePhotoUrl } from '@/lib/supabase';
 import { PROMOTION_EMOJI, useVenues } from '@/lib/venues';
@@ -246,6 +248,21 @@ export default function TableScreen() {
             </Text>
           )}
 
+          {/* Host reward: travel deals for this city once it ends (not cancelled) with 4+ people. */}
+          {isHost && !cancelled && (
+            ended && meetup.members.length >= REWARD_MIN_PEOPLE ? (
+              <View style={styles.reward}>
+                <HostReward meetupId={id} />
+              </View>
+            ) : (
+              <Text style={styles.rewardHint}>
+                {ended
+                  ? t('rewards.notThisTime', { count: REWARD_MIN_PEOPLE })
+                  : t('rewards.hostBonus', { count: REWARD_MIN_PEOPLE })}
+              </Text>
+            )
+          )}
+
           <Text style={styles.heading}>{canRate ? t('feedback.title') : t('tables.whoIsComing')}</Text>
           {canRate && <Text style={styles.feedbackBody}>{t('feedback.body')}</Text>}
           <View style={styles.members}>
@@ -366,7 +383,26 @@ export default function TableScreen() {
   );
 }
 
+// The host's travel deals for this table / hangout (from my_rewards).
+function HostReward({ meetupId }: { meetupId: string }) {
+  const Colors = useColors();
+  const { rewards, reload } = useRewards();
+  const reward = rewards?.find((r) => r.meetup_id === meetupId);
+  if (rewards === null) return <ActivityIndicator color={Colors.accent} />;
+  return reward ? <RewardCard reward={reward} onChanged={reload} /> : null;
+}
+
 const useStyles = makeStyles((Colors) => ({
+  reward: { marginTop: Spacing.lg },
+  rewardHint: {
+    ...Type.small,
+    color: Colors.glow,
+    backgroundColor: Colors.orangeTint,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    marginTop: Spacing.lg,
+    overflow: 'hidden',
+  },
   safe: { flex: 1, backgroundColor: Colors.bg },
   content: { paddingBottom: Spacing.xxl * 2 },
   spinner: { marginTop: Spacing.xxl * 2 },

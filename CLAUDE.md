@@ -150,6 +150,20 @@ Product spec and tech stack below are agreed. Built so far:
   owner role passes to the longest member when the owner leaves; the last one out deletes the group; new members
   see messages from when they joined; blocked senders are hidden. The bell no longer lists chat / private messages
   (message requests stay). Data: `src/lib/messages.ts`.
+- **Travel deals = host reward** (added 2026-10-17, `*_travel_deals.sql`; founder: no affiliate programs yet, Awin
+  account exists for later). When a table / hangout ends, not cancelled, with **at least 4 people**, **only its host**
+  unlocks travel deals for that city: `my_rewards()` returns the host's qualifying meetups with up to 8 active deals
+  (city within `radius_km`, then country, then everywhere). Deals are `travel_deals` (admins only; brand,
+  category activity/hotel/flight/cruise/other, title/details EN+TH, coupon code and/or https link, scope, dates)
+  added in the admin panel at **/admin/travel-deals** (city found on the map with Photon when saved). Users never
+  read the table directly. "Didn't work?" → `report_travel_deal` (hidden for the reporter at once, for everyone at 3
+  reports until the founder clears them). The app also shows "Find more deals in {city}" buttons to official
+  search pages (Klook, GetYourGuide, Agoda, Booking.com, Google Flights; `cityDealLinks()` in `src/lib/rewards.ts`;
+  swap for Awin affiliate links later). `meetups.city` / `country_code`: Bangkok by trigger; for spots outside
+  Bangkok the app looks them up with Photon reverse (`areaAt`) and saves them with `set_meetup_area` (host, once).
+  UI: `RewardCard` (`src/components/reward-card.tsx`, copy code via expo-clipboard) on the table screen for the host,
+  "My rewards" (`src/app/rewards.tsx`, from Settings and a 🎁 `reward` bell notification); hosts see a "Host bonus"
+  hint before it ends.
 - **Login without SMS for now** (founder's decision 2026-10-16): `app_settings.require_phone_verification` (default
   false) and `EXPO_PUBLIC_REQUIRE_PHONE` (default false) let Google accounts in without the phone check; turn both on
   once SMS is set up. With `EXPO_PUBLIC_SKIP_LOGIN=false`, a leftover anonymous guest session is signed out on start.

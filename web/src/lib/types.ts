@@ -121,3 +121,38 @@ export function describeDiscount(deal: Pick<Deal, "discount_type" | "discount_va
   if (deal.discount_type === "fixed_thb") return `฿${deal.discount_value} off`;
   return deal.title_en;
 }
+
+// Travel deals: host rewards after a table / hangout ends with 4+ people (supabase/migrations/*_travel_deals.sql).
+export const TRAVEL_DEAL_CATEGORIES = ["activity", "hotel", "flight", "cruise", "other"] as const;
+export type TravelDealCategory = (typeof TRAVEL_DEAL_CATEGORIES)[number];
+export const TRAVEL_DEAL_CATEGORY_LABELS: Record<TravelDealCategory, string> = {
+  activity: "Activities & tours",
+  hotel: "Hotels",
+  flight: "Flights",
+  cruise: "Cruises & boats",
+  other: "Other travel",
+};
+export const TRAVEL_DEAL_SCOPES = ["city", "country", "world"] as const;
+export type TravelDealScope = (typeof TRAVEL_DEAL_SCOPES)[number];
+
+export type TravelDeal = {
+  id: string;
+  brand: string;
+  category: TravelDealCategory;
+  title_en: string;
+  title_th: string;
+  details_en: string;
+  details_th: string;
+  code: string | null;
+  url: string | null;
+  scope: TravelDealScope;
+  city_name: string | null;
+  lat: number | null;
+  lng: number | null;
+  radius_km: number;
+  country_code: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  is_active: boolean;
+  created_at: string;
+};

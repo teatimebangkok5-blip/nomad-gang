@@ -59,6 +59,7 @@ function RootNavigator() {
           <Stack.Screen name="plan/[id]" />
           <Stack.Screen name="notifications" />
           <Stack.Screen name="messages" />
+          <Stack.Screen name="rewards" />
           <Stack.Screen name="new-group" />
           <Stack.Screen name="group/[id]" />
           <Stack.Screen name="group-info/[id]" />

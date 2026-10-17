@@ -17,7 +17,8 @@ export type NotificationKind =
   | 'direct_message'
   | 'dm_request'
   | 'follow'
-  | 'promotion';
+  | 'promotion'
+  | 'reward';
 
 export type AppNotification = {
   id: string;

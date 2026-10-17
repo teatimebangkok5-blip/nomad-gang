@@ -931,5 +931,89 @@ check("read state isn't readable directly", !!r.error);
 r = await tryQuery("anon", null, `select * from public.my_chats()`);
 check("signed-out visitors have no Messages", !!r.error || r.rows.length === 0);
 
+// --- Travel deals: host reward after a table / hangout ends with 4+ people
+r = await tryQuery("service_role", null, `select count(*)::int n from public.meetups where city is distinct from 'Bangkok' and (spot_lat is null or public.in_bangkok(spot_lat, spot_lng))`);
+check("Bangkok tables and hangouts are in Bangkok", r.rows?.[0]?.n === 0);
+const host = unverified;
+r = await hangout(host, { lat: 48.8606, lng: 2.3376, spotName: "Louvre", zone: "Europe/Paris", size: 6, title: "Louvre walk" });
+check("host creates a Paris hangout", !r.error);
+const parisWalk = r.rows?.[0]?.id;
+await tryQuery("authenticated", user, `select public.set_meetup_area($1, 'Hacked', 'XX')`, [parisWalk]);
+await tryQuery("authenticated", host, `select public.set_meetup_area($1, '  Paris ', 'fr')`, [parisWalk]);
+r = await tryQuery("service_role", null, `select city, country_code from public.meetups where id = $1`, [parisWalk]);
+check("only the host sets the city and country", r.rows?.[0]?.city === "Paris" && r.rows[0].country_code === "FR");
+await tryQuery("authenticated", host, `select public.set_meetup_area($1, 'Lyon', 'FR')`, [parisWalk]);
+r = await tryQuery("service_role", null, `select city from public.meetups where id = $1`, [parisWalk]);
+check("the city is set once", r.rows?.[0]?.city === "Paris");
+
+const addDeal = (values) =>
+  tryQuery("authenticated", admin,
+    `insert into public.travel_deals (brand, category, title_en, title_th, code, url, scope, city_name, lat, lng, country_code, ends_at, is_active)
+     values ($1, $2, $3, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) returning id`,
+    [values.brand ?? "Klook", values.category ?? "activity", values.title, values.code ?? null, values.url ?? null, values.scope,
+      values.city ?? null, values.lat ?? null, values.lng ?? null, values.country ?? null, values.endsAt ?? null, values.active ?? true]);
+r = await addDeal({ title: "Seine cruise 10% off", code: "SEINE10", scope: "city", city: "Paris", lat: 48.8566, lng: 2.3522 });
+check("admin adds a city deal", !r.error);
+const parisDeal = r.rows?.[0]?.id;
+r = await addDeal({ title: "France hotels", url: "https://example.com/fr", scope: "country", country: "FR", category: "hotel" });
+const franceDeal = r.rows?.[0]?.id;
+r = await addDeal({ title: "Flights sale", code: "FLY5", scope: "world", category: "flight" });
+const worldDeal = r.rows?.[0]?.id;
+r = await addDeal({ title: "Bangkok tuk-tuk", code: "TUK", scope: "city", city: "Bangkok", lat: 13.75, lng: 100.5 });
+const bangkokDeal = r.rows?.[0]?.id;
+r = await addDeal({ title: "Old deal", code: "OLD", scope: "world", endsAt: inHours(-1) });
+const expiredDeal = r.rows?.[0]?.id;
+r = await addDeal({ title: "Paused", code: "OFF", scope: "world", active: false });
+const pausedDeal = r.rows?.[0]?.id;
+r = await addDeal({ title: "No code or link", scope: "world" });
+check("a deal needs a code or a link", !!r.error);
+r = await addDeal({ title: "Bad link", url: "http://example.com", scope: "world" });
+check("deal links must be https", !!r.error);
+r = await addDeal({ title: "City without a point", code: "X", scope: "city", city: "Rome" });
+check("a city deal needs its place", !!r.error);
+r = await tryQuery("authenticated", user, `select count(*)::int n from public.travel_deals`);
+check("app users can't read the deals list", !!r.error || r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", user, `insert into public.travel_deals (brand, category, title_en, title_th, code, scope) values ('x', 'other', 'x', 'x', 'x', 'world')`);
+check("app users can't add deals", !!r.error);
+
+const rewards = async (who) => (await tryQuery("authenticated", who, `select * from public.my_rewards()`)).rows ?? [];
+for (const who of [user, g0, g2]) await tryQuery("authenticated", who, `select public.join_meetup($1)`, [parisWalk]);
+await db.exec(`update public.meetups set starts_at = now() - interval '3 hours', ends_at = now() - interval '1 hour' where id = '${parisWalk}'`);
+let reward = (await rewards(host)).find((x) => x.meetup_id === parisWalk);
+const dealIds = (reward?.deals ?? []).map((d) => d.id);
+check("host unlocks deals after it ends with 4 people", reward?.member_count === 4 && reward.city === "Paris");
+check("city, country and world deals, city first", dealIds[0] === parisDeal && dealIds.includes(franceDeal) && dealIds.includes(worldDeal));
+check("no deals from other cities or countries", !dealIds.includes(bangkokDeal));
+check("no expired or paused deals", !dealIds.includes(expiredDeal) && !dealIds.includes(pausedDeal));
+check("the code comes with the deal", reward?.deals?.[0]?.code === "SEINE10");
+check("members who aren't the host get no reward", !(await rewards(user)).some((x) => x.meetup_id === parisWalk));
+r = await tryQuery("authenticated", host, `select count(*)::int n from public.my_notifications(100) where kind = 'reward' and meetup_id = $1`, [parisWalk]);
+check("the host is notified of the reward", r.rows?.[0]?.n === 1);
+
+r = await hangout(host, { lat: 48.86, lng: 2.34, spotName: "Small group", zone: "Europe/Paris", size: 6 });
+const smallWalk = r.rows?.[0]?.id;
+for (const who of [user, g0]) await tryQuery("authenticated", who, `select public.join_meetup($1)`, [smallWalk]);
+await db.exec(`update public.meetups set starts_at = now() - interval '3 hours', ends_at = now() - interval '1 hour' where id = '${smallWalk}'`);
+check("fewer than 4 people: no reward", !(await rewards(host)).some((x) => x.meetup_id === smallWalk));
+r = await hangout(host, { lat: 48.86, lng: 2.34, spotName: "Cancelled one", zone: "Europe/Paris", size: 6 });
+const cancelledWalk = r.rows?.[0]?.id;
+for (const who of [user, g0, g2]) await tryQuery("authenticated", who, `select public.join_meetup($1)`, [cancelledWalk]);
+await tryQuery("authenticated", host, `select public.cancel_meetup($1)`, [cancelledWalk]);
+await db.exec(`update public.meetups set starts_at = now() - interval '3 hours', ends_at = now() - interval '1 hour' where id = '${cancelledWalk}'`);
+check("cancelled: no reward", !(await rewards(host)).some((x) => x.meetup_id === cancelledWalk));
+
+r = await tryQuery("authenticated", user, `select public.report_travel_deal($1)`, [parisDeal]);
+check("only hosts with a reward can report a deal", /not_allowed/.test(r.error ?? ""));
+r = await tryQuery("authenticated", host, `select public.report_travel_deal($1)`, [worldDeal]);
+check("report a deal that didn't work", !r.error);
+reward = (await rewards(host)).find((x) => x.meetup_id === parisWalk);
+check("a deal I reported is hidden for me", !(reward?.deals ?? []).some((d) => d.id === worldDeal));
+r = await tryQuery("authenticated", admin, `select count(*)::int n from public.travel_deal_reports where deal_id = $1`, [worldDeal]);
+check("the founder sees the reports", r.rows?.[0]?.n === 1);
+r = await tryQuery("authenticated", host, `select * from public.travel_deal_reports`);
+check("users can't read reports", !!r.error || r.rows.length === 0);
+r = await tryQuery("anon", null, `select * from public.my_rewards()`);
+check("signed-out visitors have no rewards", !!r.error || r.rows.length === 0);
+
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

@@ -22,8 +22,17 @@ const CATEGORY_EMOJI: Record<TravelDealCategory, string> = {
 };
 
 // The host's reward for a table / hangout that ended with 4+ people: the founder's coupons for that city, country
-// or everywhere, then "Find deals in {city}" buttons to official deal pages.
-export function RewardCard({ reward, onChanged }: { reward: Reward; onChanged: () => void }) {
+// or everywhere, then "Find deals in {city}" buttons to official deal pages. `example`: the sample card on My rewards
+// (marked as an example; reporting does nothing).
+export function RewardCard({
+  reward,
+  onChanged,
+  example = false,
+}: {
+  reward: Reward;
+  onChanged: () => void;
+  example?: boolean;
+}) {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
@@ -40,6 +49,7 @@ export function RewardCard({ reward, onChanged }: { reward: Reward; onChanged: (
         <Shine onColor />
         <Text style={styles.headerEmoji}>🎁</Text>
         <View style={styles.flex}>
+          {example && <Text style={styles.exampleTag}>{t('rewards.exampleTag')}</Text>}
           <Text style={styles.headerTitle}>{t('rewards.unlocked', { city: city || t('rewards.thisCity') })}</Text>
           <Text style={styles.headerBody}>{t('rewards.why', { count: reward.member_count })}</Text>
         </View>
@@ -47,7 +57,7 @@ export function RewardCard({ reward, onChanged }: { reward: Reward; onChanged: (
 
       <View style={styles.body}>
         {reward.deals.length > 0 ? (
-          reward.deals.map((deal) => <DealRow key={deal.id} deal={deal} onReported={onChanged} />)
+          reward.deals.map((deal) => <DealRow key={deal.id} deal={deal} example={example} onReported={onChanged} />)
         ) : (
           <Text style={styles.muted}>{t('rewards.noCoupons', { city: city || t('rewards.thisCity') })}</Text>
         )}
@@ -84,7 +94,7 @@ export function RewardCard({ reward, onChanged }: { reward: Reward; onChanged: (
   );
 }
 
-function DealRow({ deal, onReported }: { deal: TravelDeal; onReported: () => void }) {
+function DealRow({ deal, example, onReported }: { deal: TravelDeal; example: boolean; onReported: () => void }) {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
@@ -99,6 +109,10 @@ function DealRow({ deal, onReported }: { deal: TravelDeal; onReported: () => voi
   }
 
   function report() {
+    if (example) {
+      Alert.alert(t('rewards.exampleReport'));
+      return;
+    }
     Alert.alert(t('rewards.reportTitle'), t('rewards.reportBody'), [
       { text: t('common.cancel'), style: 'cancel' },
       {
@@ -183,6 +197,18 @@ const useStyles = makeStyles((Colors) => ({
   },
   header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.md, overflow: 'hidden' },
   headerEmoji: { fontSize: 34 },
+  exampleTag: {
+    alignSelf: 'flex-start',
+    ...Type.small,
+    fontSize: 11,
+    fontWeight: '800',
+    color: Colors.onBrand,
+    backgroundColor: 'rgba(255, 255, 255, 0.35)',
+    paddingHorizontal: Spacing.sm,
+    borderRadius: Radius.pill,
+    overflow: 'hidden',
+    marginBottom: 2,
+  },
   headerTitle: { ...Type.heading, color: Colors.onBrand, fontWeight: '800' },
   headerBody: { ...Type.small, color: Colors.onBrand },
   body: { padding: Spacing.md, gap: Spacing.md },

@@ -49,6 +49,7 @@ export default function GroupChatScreen() {
         myId={myId}
         showNames
         canSend={Boolean(info)}
+        chat={info ? { kind: 'group', id } : null}
         emptyText={group === null ? t('messages.notInGroup') : failed ? t('chat.loadFailed') : undefined}
         onSend={(body) => (myId ? sendGroupMessage(id, myId, body) : Promise.resolve('auth_required'))}
       />

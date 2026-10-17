@@ -100,6 +100,9 @@ export default function DirectChatScreen() {
         myId={myId}
         showNames={false}
         banner={banner}
+        // Photos, voice notes and location only once the request has been accepted.
+        chat={thread?.status === 'accepted' ? { kind: 'dm', id: thread.id } : null}
+        attachHint={thread?.status === 'accepted' ? undefined : t('chat.attachAfterAccept')}
         canSend={!outgoingPending && !declinedMine}
         onSend={async (body) => {
           const result = await sendDirectMessage(userId, body);

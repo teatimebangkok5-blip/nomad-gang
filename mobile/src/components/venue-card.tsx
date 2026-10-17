@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { Pressable, Text, View } from 'react-native';
 
@@ -89,7 +90,7 @@ export function VenueCard({
   );
 }
 
-function formatDistance(meters: number, t: ReturnType<typeof useTranslation>['t']): string {
+function formatDistance(meters: number, t: TFunction): string {
   if (meters < 1000) {
     return t('home.distanceMeters', { count: Math.max(10, Math.round(meters / 10) * 10) });
   }

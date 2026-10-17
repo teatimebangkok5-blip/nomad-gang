@@ -170,8 +170,17 @@ function ChatRow({
             .filter(Boolean)
             .join(' · ');
 
-  const preview = chat.last_body
-    ? `${chat.last_sender_id === myId ? t('travellers.youPrefix') : chat.chat_kind !== 'dm' && chat.last_sender_name ? `${chat.last_sender_name}: ` : ''}${chat.last_body}`
+  // Photos, voice notes and live locations have no text; name them instead.
+  const lastText =
+    chat.last_kind === 'photo'
+      ? t('messages.lastPhoto')
+      : chat.last_kind === 'voice'
+        ? t('messages.lastVoice')
+        : chat.last_kind === 'location'
+          ? t('messages.lastLocation')
+          : chat.last_body;
+  const preview = lastText
+    ? `${chat.last_sender_id === myId ? t('travellers.youPrefix') : chat.chat_kind !== 'dm' && chat.last_sender_name ? `${chat.last_sender_name}: ` : ''}${lastText}`
     : t('messages.noMessagesYet');
 
   return (

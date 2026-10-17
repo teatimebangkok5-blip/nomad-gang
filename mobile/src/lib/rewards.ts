@@ -121,3 +121,63 @@ export async function setMeetupArea(meetupId: string, area: { city: string | nul
   });
   if (error) console.warn('Saving the hangout area failed', error.message);
 }
+
+// A sample reward (My rewards → "See an example"), so people can see what hosting 4+ people unlocks. Clearly marked
+// as an example in the app; its codes aren't real and "Didn't work?" does nothing.
+export const EXAMPLE_REWARD: Reward = {
+  meetup_id: 'example',
+  meetup_kind: 'hangout',
+  title: 'Sunset walk at Lumphini Park',
+  place_name: 'Lumphini Park',
+  place_name_en: 'Lumphini Park',
+  place_name_th: 'สวนลุมพินี',
+  venue_name_en: null,
+  venue_name_th: null,
+  city: 'Bangkok',
+  country_code: 'TH',
+  lat: 13.7314,
+  lng: 100.5414,
+  ended_at: new Date().toISOString(),
+  member_count: 5,
+  deals: [
+    {
+      id: 'example-1',
+      brand: 'Klook',
+      category: 'cruise',
+      title_en: '10% off Chao Phraya dinner cruises',
+      title_th: 'ลด 10% ล่องเรือดินเนอร์เจ้าพระยา',
+      details_en: 'Example coupon: book any dinner cruise in Bangkok.',
+      details_th: 'ตัวอย่างคูปอง: จองล่องเรือดินเนอร์ในกรุงเทพฯ',
+      code: 'EXAMPLE10',
+      url: 'https://www.klook.com/search/?query=Bangkok%20dinner%20cruise',
+      ends_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      scope: 'city',
+    },
+    {
+      id: 'example-2',
+      brand: 'Agoda',
+      category: 'hotel',
+      title_en: 'Up to 15% off hotels in Thailand',
+      title_th: 'ลดสูงสุด 15% โรงแรมทั่วไทย',
+      details_en: 'Example deal: opens the official deals page.',
+      details_th: 'ตัวอย่างดีล: เปิดหน้าดีลอย่างเป็นทางการ',
+      code: null,
+      url: 'https://www.agoda.com/search?textToSearch=Bangkok',
+      ends_at: null,
+      scope: 'country',
+    },
+    {
+      id: 'example-3',
+      brand: 'Trip.com',
+      category: 'flight',
+      title_en: '฿200 off your next flight',
+      title_th: 'ลด ฿200 เที่ยวบินถัดไป',
+      details_en: 'Example coupon for any city.',
+      details_th: 'ตัวอย่างคูปองใช้ได้ทุกเมือง',
+      code: 'TRIPEXAMPLE',
+      url: null,
+      ends_at: null,
+      scope: 'world',
+    },
+  ],
+};

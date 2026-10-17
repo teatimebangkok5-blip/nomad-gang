@@ -255,11 +255,14 @@ export default function TableScreen() {
                 <HostReward meetupId={id} />
               </View>
             ) : (
-              <Text style={styles.rewardHint}>
-                {ended
-                  ? t('rewards.notThisTime', { count: REWARD_MIN_PEOPLE })
-                  : t('rewards.hostBonus', { count: REWARD_MIN_PEOPLE })}
-              </Text>
+              <Pressable accessibilityRole="button" onPress={() => router.push('/rewards')}>
+                <Text style={styles.rewardHint}>
+                  {ended
+                    ? t('rewards.notThisTime', { count: REWARD_MIN_PEOPLE })
+                    : t('rewards.hostBonus', { count: REWARD_MIN_PEOPLE })}{' '}
+                  <Text style={styles.rewardLink}>{t('rewards.seeExample')}</Text>
+                </Text>
+              </Pressable>
             )
           )}
 
@@ -394,6 +397,7 @@ function HostReward({ meetupId }: { meetupId: string }) {
 
 const useStyles = makeStyles((Colors) => ({
   reward: { marginTop: Spacing.lg },
+  rewardLink: { fontWeight: '800', textDecorationLine: 'underline' },
   rewardHint: {
     ...Type.small,
     color: Colors.glow,

@@ -164,6 +164,42 @@ Product spec and tech stack below are agreed. Built so far:
   UI: `RewardCard` (`src/components/reward-card.tsx`, copy code via expo-clipboard) on the table screen for the host,
   "My rewards" (`src/app/rewards.tsx`, from Settings and a 🎁 `reward` bell notification); hosts see a "Host bonus"
   hint before it ends.
+- **Profile details, first-time questions, trips, favourites** (added 2026-10-17, `*_profile_details.sql`).
+  **First-time questions** (`src/app/onboarding.tsx`, guard in `_layout.tsx` via `OnboardingProvider` in
+  `src/lib/onboarding.tsx`): name + **birthday, required, 18+** (founder), then From country, languages, profession,
+  travel style, interests (max 15), Instagram, each skippable; saved at the end with `save_my_profile(…)` (errors
+  `too_young`, `birth_date_required`, …). Done = a birthday is saved; existing users are asked on their next start. The
+  birthday is private (`profile_private`, no API access); profiles show only the age. About columns on `profiles`
+  (`home_country` ISO code, `languages` ISO 639 or `other`, `profession`, `travel_style`, `interests` = keys translated
+  in `about.professions/styles/interestNames`, `world_clocks` IANA zones ≤ 6 via `set_my_world_clocks`,
+  `visited_countries` via `set_my_visited_countries`), with check constraints because profiles can still be updated
+  directly. Option lists: `src/lib/profile-options.ts`; countries + languages with English/Thai names are generated
+  into `src/lib/countries.ts` by `mobile/scripts/gen-countries.mjs` (Node CLDR data). **Profile page** redesigned:
+  name + age, "From 🇮🇳 India", stat boxes World % (visited / 195), Upcoming trips, Countries, **Friends** (mutual
+  follows, replaces Followers / Following; tap → `src/app/friends/[userId].tsx`, RPC `user_friends`), Met up,
+  👍 / 👎; own profile: Edit (→ `src/app/edit-profile.tsx`), Story (9:16 share image, `src/components/story-card.tsx`,
+  react-native-view-shot + expo-sharing), Favorites, Settings, View public profile (`?preview=1`); tabs About /
+  Travel / Trips / Events (`src/components/profile-tabs.tsx`, world clocks `src/components/world-clocks.tsx`).
+  **Trips** (`trips`, readable except across a block, `save_trip` / `delete_trip`, max 50; city from Photon in
+  `src/app/trip-form.tsx`). **Events** = `profile_meetups(user)` (open, not cancelled; upcoming + ended).
+  **Favourites** (`favorite_places`, private, a place or a partner venue): heart on the place cards of home and the
+  Hangout map (`FavoriteButton`), list in `src/app/favorites.tsx` (Create table / Create hangout there — create-hangout
+  now also takes `placeId` — or Open in Maps). Shared form pieces: `src/components/profile-fields.tsx` (chips, search
+  picker, `@expo/ui` date picker dialog) and `profile-form.tsx`.
+- **Chat photos, voice notes, live location** (added 2026-10-17, `*_chat_media.sql`): a **+** button in every chat's
+  composer (table / hangout, private, group) → Take photo, Photo from gallery, Voice note (expo-audio, ≤ 2 min, m4a),
+  Share live location (15 min / 1 h / 8 h). Message tables have `kind` (text/photo/voice/location), `media_path`,
+  `duration_ms`, `lat/lng`, `live_until`, `location_updated_at`; direct inserts stay text-only, the rest goes through
+  `send_chat_attachment`. Files: private `chat-media` bucket at `<chat kind>/<chat id>/<sender id>/<file>`, opened with
+  signed links; storage policies use `chat_file_access(name, write)`. Private chats: attachments only once the
+  request is accepted. **Live location only updates while the app is open** (founder: no background location, so no
+  Play declaration): `useLiveLocationSharing` in the root layout (`src/lib/live-location.ts`) watches the position
+  and calls `update_live_location`; `stop_live_location`, `my_live_locations`. Full-screen map:
+  `src/app/live-location.tsx`. Other people's messages show their **profile picture** (tap → profile). Bubbles:
+  `src/components/chat-bubbles.tsx`; upload / signed links: `src/lib/chat-media.ts`. `my_chats` returns `last_kind`
+  so the inbox says "📷 Photo" / "🎤 Voice message" / "📍 Live location". `app.json` now allows camera and
+  microphone (image-picker + expo-audio plugins, background audio off); prebuild `--clean` was run (debug key SHA-1
+  unchanged).
 - **Login without SMS for now** (founder's decision 2026-10-16): `app_settings.require_phone_verification` (default
   false) and `EXPO_PUBLIC_REQUIRE_PHONE` (default false) let Google accounts in without the phone check; turn both on
   once SMS is set up. With `EXPO_PUBLIC_SKIP_LOGIN=false`, a leftover anonymous guest session is signed out on start.

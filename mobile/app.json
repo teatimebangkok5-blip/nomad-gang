@@ -45,9 +45,17 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "TableMeet uses your photos so you can choose a profile picture and your best photos.",
-          "cameraPermission": false,
-          "microphonePermission": false
+          "photosPermission": "TableMeet uses your photos so you can choose a profile picture and share photos in chats.",
+          "cameraPermission": "TableMeet uses your camera so you can take photos to share in chats.",
+          "microphonePermission": "TableMeet uses your microphone to record voice messages in chats."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "TableMeet uses your microphone to record voice messages in chats.",
+          "enableBackgroundPlayback": false,
+          "enableBackgroundRecording": false
         }
       ]
     ],

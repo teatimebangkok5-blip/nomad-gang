@@ -2,7 +2,7 @@ import type { PostgrestError } from '@supabase/supabase-js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
-import type { ChatErrorKey, ChatMessage } from '@/lib/chat';
+import { MESSAGE_COLUMNS, toMessages, type ChatErrorKey, type ChatMessage, type MessageKind, type MessageRow } from '@/lib/chat';
 import { supabase, uniqueChannelName } from '@/lib/supabase';
 
 // Messages (the button next to List on home): one inbox for private chats, group chats and table / hangout chats,
@@ -35,6 +35,8 @@ export type ChatSummary = {
   member_count: number;
   owner_id: string | null;
   last_body: string | null;
+  // Photo, voice note or live location: the inbox names it instead of showing the (empty) body.
+  last_kind: MessageKind | null;
   last_sender_id: string | null;
   last_sender_name: string | null;
   last_at: string;
@@ -256,9 +258,7 @@ export function useGroup(groupId: string) {
   return { group, reload: load };
 }
 
-type MessageRow = { id: string; sender_id: string; body: string; created_at: string; profiles: { display_name: string } | null };
-
-// Group messages newest first (for an inverted list), live.
+// Group messages newest first (for an inverted list), live (new messages and moving live locations).
 export function useGroupChat(groupId: string) {
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -266,7 +266,7 @@ export function useGroupChat(groupId: string) {
   const load = useCallback(() => {
     supabase
       .from('chat_group_messages')
-      .select('id, sender_id, body, created_at, profiles(display_name)')
+      .select(MESSAGE_COLUMNS)
       .eq('group_id', groupId)
       .order('created_at', { ascending: false })
       .limit(200)
@@ -274,15 +274,7 @@ export function useGroupChat(groupId: string) {
         if (error) console.warn('Loading group chat failed', error.message);
         setFailed(Boolean(error));
         if (!error) {
-          setMessages(
-            ((data ?? []) as unknown as MessageRow[]).map((row) => ({
-              id: row.id,
-              sender_id: row.sender_id,
-              sender_name: row.profiles?.display_name ?? '',
-              body: row.body,
-              created_at: row.created_at,
-            })),
-          );
+          setMessages(toMessages((data ?? []) as unknown as MessageRow[]));
         }
       });
   }, [groupId]);
@@ -293,7 +285,7 @@ export function useGroupChat(groupId: string) {
       .channel(uniqueChannelName(`group-chat-${groupId}`))
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'chat_group_messages', filter: `group_id=eq.${groupId}` },
+        { event: '*', schema: 'public', table: 'chat_group_messages', filter: `group_id=eq.${groupId}` },
         load,
       )
       .subscribe();

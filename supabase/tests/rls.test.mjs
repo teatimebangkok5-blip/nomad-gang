@@ -1015,5 +1015,150 @@ check("users can't read reports", !!r.error || r.rows.length === 0);
 r = await tryQuery("anon", null, `select * from public.my_rewards()`);
 check("signed-out visitors have no rewards", !!r.error || r.rows.length === 0);
 
+// --- Profile details: first-time questions (18+), About, world clocks, countries, trips, friends, favourites, events
+const saveProfile = (who, birth, extra = {}) =>
+  tryQuery("authenticated", who,
+    `select public.save_my_profile($1, $2, $3::date, $4, $5::text[], $6, $7, $8::text[])`,
+    [extra.name ?? "Somchai", extra.instagram ?? null, birth, extra.country ?? "IN", extra.languages ?? ["en", "hi"],
+     extra.profession ?? "marketing", extra.style ?? "digital_nomad", extra.interests ?? ["food", "coffee"]]);
+r = await tryQuery("authenticated", user, `select onboarded from public.my_profile_details()`);
+check("first-time questions not done yet", r.rows?.[0]?.onboarded === false);
+r = await saveProfile(user, null);
+check("a birthday is required", /birth_date_required/.test(r.error ?? ""));
+const today = new Date();
+const seventeen = `${today.getFullYear() - 17}-01-01`;
+r = await saveProfile(user, seventeen);
+check("under-18s can't continue", /too_young/.test(r.error ?? ""));
+r = await saveProfile(user, "2999-01-01");
+check("birthdays in the future are rejected", /invalid_birth_date/.test(r.error ?? ""));
+r = await saveProfile(user, "1997-05-04", { country: "India" });
+check("countries must be ISO codes", /invalid_country/.test(r.error ?? ""));
+r = await saveProfile(user, "1997-05-04", { interests: ["Food!"] });
+check("interest keys are checked", /invalid_details/.test(r.error ?? ""));
+r = await saveProfile(user, "1997-05-04", { name: " Somchai J ", instagram: "@somchai.j", languages: ["EN", "hi", "en"] });
+check("save the first-time answers", !r.error);
+r = await tryQuery("authenticated", user, `select * from public.my_profile_details()`);
+check("my details come back, onboarded", r.rows?.[0]?.onboarded === true && r.rows[0].display_name === "Somchai J" && r.rows[0].instagram === "somchai.j" && r.rows[0].languages.join() === "en,hi");
+r = await tryQuery("authenticated", user, `select * from public.profile_private`);
+check("birthdays aren't readable directly", !!r.error);
+r = await tryQuery("authenticated", user, `update public.profiles set languages = '{"Not a code"}' where id = $1`, [user]);
+check("direct profile updates are still checked", !!r.error);
+r = await tryQuery("authenticated", user, `select public.set_my_world_clocks('{"Mars/Olympus"}')`);
+check("world clocks must be real time zones", /invalid_time_zone/.test(r.error ?? ""));
+r = await tryQuery("authenticated", user, `select public.set_my_world_clocks($1::text[])`, [["Asia/Tokyo", "Asia/Tokyo", "Europe/London", "Asia/Kolkata", "America/New_York", "Europe/Paris", "Australia/Sydney", "Asia/Dubai"]]);
+check("at most 6 world clocks", /too_many_clocks/.test(r.error ?? ""));
+r = await tryQuery("authenticated", user, `select public.set_my_world_clocks($1::text[])`, [["Asia/Tokyo", "Asia/Tokyo", "Europe/London"]]);
+check("save world clocks (repeats dropped)", !r.error);
+r = await tryQuery("authenticated", user, `select public.set_my_visited_countries($1::text[])`, [["th", "JP", "jp", "FR"]]);
+check("save countries visited", !r.error);
+r = await tryQuery("authenticated", user, `select public.set_my_visited_countries($1::text[])`, [["Japan"]]);
+check("visited countries must be ISO codes", /invalid_country/.test(r.error ?? ""));
+
+const trip = (who, id, city, starts, ends) =>
+  tryQuery("authenticated", who, `select public.save_trip($1, $2, 'JP', 35.68, 139.69, $3::date, $4::date, null) as id`, [id, city, starts, ends]);
+const isoDay = (days) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+r = await trip(user, null, "Tokyo", isoDay(10), isoDay(20));
+check("add a trip", !r.error);
+const tripId = r.rows?.[0]?.id;
+r = await trip(user, null, "Osaka", isoDay(-40), isoDay(-30));
+check("add a past trip", !r.error);
+r = await trip(user, null, "Kyoto", isoDay(20), isoDay(10));
+check("a trip can't end before it starts", /invalid_trip/.test(r.error ?? ""));
+r = await trip(g1, tripId, "Hijacked", isoDay(1), isoDay(2));
+check("can't change someone else's trip", /not_found/.test(r.error ?? ""));
+r = await tryQuery("authenticated", user, `insert into public.trips (user_id, city, starts_on, ends_on) values ($1, 'x', current_date, current_date)`, [user]);
+check("trips only change through save_trip", !!r.error);
+r = await tryQuery("authenticated", g1, `select count(*)::int n from public.trips where user_id = $1`, [user]);
+check("others see my trips", r.rows?.[0]?.n === 2);
+r = await tryQuery("authenticated", g0, `select count(*)::int n from public.trips where user_id = $1`, [user]);
+check("blocked people don't see my trips", r.rows?.[0]?.n === 0);
+
+r = await tryQuery("authenticated", g1, `select * from public.get_profile($1)`, [user]);
+let prof = r.rows?.[0];
+check("profile shows age, country, languages, About and travel details",
+  prof?.age >= 28 && prof.home_country === "IN" && prof.profession === "marketing" && prof.travel_style === "digital_nomad"
+  && prof.interests.join() === "food,coffee" && prof.world_clocks.join() === "Asia/Tokyo,Europe/London"
+  && prof.visited_countries.join() === "FR,JP,TH" && prof.upcoming_trips === 1);
+check("the birthday itself is never returned", prof && !("birth_date" in prof));
+check("friends = mutual follows", prof?.friends === 1);
+r = await tryQuery("authenticated", g1, `select id from public.user_friends($1)`, [user]);
+check("list someone's friends", r.rows?.length === 1 && r.rows[0].id === g2);
+r = await tryQuery("authenticated", g0, `select count(*)::int n from public.user_friends($1)`, [user]);
+check("no friends list across a block", r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", g1, `select * from public.profile_meetups($1)`, [user]);
+check("events: tables and hangouts they went to", r.rows?.some((m) => m.id === parisWalk && m.upcoming === false));
+r = await tryQuery("authenticated", user, `select public.delete_trip($1)`, [tripId]);
+check("delete my trip", !r.error);
+
+r = await tryQuery("authenticated", user, `insert into public.favorite_places (user_id, place_id) values ($1, $2)`, [user, lumphiniId]);
+check("save a favourite place", !r.error);
+const favVenueId = (await tryQuery("service_role", null, `select id from public.venues limit 1`)).rows?.[0]?.id;
+r = await tryQuery("authenticated", user, `insert into public.favorite_places (user_id, venue_id) values ($1, $2)`, [user, favVenueId]);
+check("save a favourite venue", !r.error);
+r = await tryQuery("authenticated", user, `insert into public.favorite_places (user_id, place_id) values ($1, $2)`, [user, lumphiniId]);
+check("a place is saved once", !!r.error);
+r = await tryQuery("authenticated", g1, `select count(*)::int n from public.favorite_places`);
+check("favourites are private", r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", g1, `insert into public.favorite_places (user_id, place_id) values ($1, $2)`, [user, lumphiniId]);
+check("can't save favourites for someone else", !!r.error);
+r = await tryQuery("authenticated", user, `delete from public.favorite_places where place_id = $1`, [lumphiniId]);
+check("remove a favourite", !r.error);
+
+// --- Chat photos, voice notes and live location
+const upload = (who, name, mime = "image/jpeg") =>
+  tryQuery("authenticated", who, `insert into storage.objects (bucket_id, name) values ('chat-media', $1) returning name`, [name]);
+const attach = (who, chatKind, chatId, kind, path, extra = {}) =>
+  tryQuery("authenticated", who, `select public.send_chat_attachment($1, $2, $3, $4, $5, $6, $7, $8) as id`,
+    [chatKind, chatId, kind, path, extra.duration ?? null, extra.lat ?? null, extra.lng ?? null, extra.minutes ?? null]);
+const photoPath = `meetup/${parisWalk}/${user}/p1.jpg`;
+r = await tryQuery("authenticated", user, `insert into public.meetup_messages (meetup_id, sender_id, kind, media_path) values ($1, $2, 'photo', $3)`, [parisWalk, user, photoPath]);
+check("photos can't be inserted directly", !!r.error);
+r = await upload(user, photoPath);
+check("members upload a chat photo to their own folder", !r.error);
+r = await upload(g1, `meetup/${parisWalk}/${g1}/p2.jpg`);
+check("non-members can't upload to a chat", !!r.error);
+r = await upload(user, `meetup/${parisWalk}/${g0}/p3.jpg`);
+check("can't upload into someone else's folder", !!r.error);
+r = await attach(user, "meetup", parisWalk, "photo", `meetup/${parisWalk}/${user}/missing.jpg`);
+check("a photo must be uploaded first", /invalid_attachment/.test(r.error ?? ""));
+r = await attach(user, "meetup", parisWalk, "photo", photoPath);
+check("send a photo", !r.error);
+r = await tryQuery("authenticated", g0, `select kind, media_path from public.meetup_messages where meetup_id = $1 and kind = 'photo'`, [parisWalk]);
+check("members see the photo message", r.rows?.[0]?.media_path === photoPath);
+r = await tryQuery("authenticated", g0, `select count(*)::int n from storage.objects where bucket_id = 'chat-media' and name = $1`, [photoPath]);
+check("members can open the photo", r.rows?.[0]?.n === 1);
+r = await tryQuery("authenticated", g1, `select count(*)::int n from storage.objects where bucket_id = 'chat-media' and name = $1`, [photoPath]);
+check("outsiders can't open the photo", r.rows?.[0]?.n === 0);
+
+r = await attach(user, "meetup", parisWalk, "location", null, { lat: 13.75, lng: 100.5, minutes: 7 });
+check("live location only for 15 min, 1 h or 8 h", /invalid_attachment/.test(r.error ?? ""));
+r = await attach(user, "meetup", parisWalk, "location", null, { lat: 13.75, lng: 100.5, minutes: 60 });
+check("share live location", !r.error);
+const liveId = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", user, `select * from public.my_live_locations()`);
+check("my running live locations", r.rows?.length === 1 && r.rows[0].message_id === liveId);
+r = await tryQuery("authenticated", user, `select public.update_live_location('meetup', $1, 13.76, 100.51) as ok`, [liveId]);
+check("the sender moves their live location", r.rows?.[0]?.ok === true);
+r = await tryQuery("authenticated", g0, `select public.update_live_location('meetup', $1, 0, 0) as ok`, [liveId]);
+check("nobody else can move it", r.rows?.[0]?.ok === false);
+r = await tryQuery("authenticated", g0, `select lat from public.meetup_messages where id = $1`, [liveId]);
+check("members see the latest position", r.rows?.[0]?.lat === 13.76);
+r = await tryQuery("authenticated", user, `select public.stop_live_location('meetup', $1)`, [liveId]);
+r = await tryQuery("authenticated", user, `select public.update_live_location('meetup', $1, 13.77, 100.52) as ok`, [liveId]);
+check("a stopped live location can't move", !r.error && r.rows?.[0]?.ok === false);
+
+const voicePath = `dm/${g2ThreadId}/${user}/v1.m4a`;
+r = await upload(user, voicePath, "audio/mp4");
+check("upload a voice note in an accepted private chat", !r.error);
+r = await attach(user, "dm", g2ThreadId, "voice", voicePath, { duration: 4200 });
+check("send a voice note", !r.error);
+r = await upload(g1, `dm/${reqId}/${g1}/x.jpg`);
+check("no uploads in a request that wasn't accepted", !!r.error);
+r = await attach(g1, "dm", reqId, "location", null, { lat: 13.75, lng: 100.5, minutes: 15 });
+check("no attachments in a request that wasn't accepted", /request_pending/.test(r.error ?? ""));
+inbox = await chats(user);
+row = inbox.find((c) => c.chat_id === g2ThreadId);
+check("the inbox knows the last message was a voice note", row?.last_kind === "voice");
+
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

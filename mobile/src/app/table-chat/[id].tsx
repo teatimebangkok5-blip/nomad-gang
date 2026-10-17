@@ -47,6 +47,7 @@ export default function TableChatScreen() {
         myId={myId}
         showNames
         canSend={isMember}
+        chat={isMember ? { kind: 'meetup', id } : null}
         emptyText={failed ? t('chat.loadFailed') : undefined}
         banner={
           meetup && !isMember ? <Text style={styles.notice}>{t('tables.errors.not_allowed')}</Text> : undefined

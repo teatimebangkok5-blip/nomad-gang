@@ -6,12 +6,24 @@ import { supabase, uniqueChannelName } from '@/lib/supabase';
 // Table chat (meetup_messages), direct messages (direct_threads / direct_messages), block and report.
 // The rules live in the database (supabase/migrations/*_chat_and_travellers.sql).
 
+export type MessageKind = 'text' | 'photo' | 'voice' | 'location';
+
 export type ChatMessage = {
   id: string;
   sender_id: string;
   sender_name: string;
+  sender_avatar: string | null;
   body: string;
   created_at: string;
+  kind: MessageKind;
+  // Photo / voice note: the file in the private chat-media bucket.
+  media_path: string | null;
+  duration_ms: number | null;
+  // Live location: the latest position and until when it is shared.
+  lat: number | null;
+  lng: number | null;
+  live_until: string | null;
+  location_updated_at: string | null;
 };
 
 const CHAT_ERRORS = [
@@ -24,24 +36,29 @@ const CHAT_ERRORS = [
   'request_pending',
   'request_declined',
   'not_found',
+  'invalid_attachment',
 ] as const;
 export type ChatErrorKey = (typeof CHAT_ERRORS)[number] | 'generic';
 
-function chatError(error: Pick<PostgrestError, 'message'> | null): ChatErrorKey | null {
+export function chatError(error: Pick<PostgrestError, 'message'> | null): ChatErrorKey | null {
   if (!error) return null;
   console.warn('Chat request failed', error.message);
   return CHAT_ERRORS.find((key) => error.message.includes(key)) ?? 'generic';
 }
 
-type MessageRow = { id: string; sender_id: string; body: string; created_at: string; profiles: { display_name: string } | null };
+// The columns every chat (table, private, group) selects for its messages.
+export const MESSAGE_COLUMNS =
+  'id, sender_id, body, created_at, kind, media_path, duration_ms, lat, lng, live_until, location_updated_at, profiles(display_name, avatar_path)';
 
-function toMessages(rows: MessageRow[]): ChatMessage[] {
-  return rows.map((row) => ({
-    id: row.id,
-    sender_id: row.sender_id,
-    sender_name: row.profiles?.display_name ?? '',
-    body: row.body,
-    created_at: row.created_at,
+export type MessageRow = Omit<ChatMessage, 'sender_name' | 'sender_avatar'> & {
+  profiles: { display_name: string; avatar_path: string | null } | null;
+};
+
+export function toMessages(rows: MessageRow[]): ChatMessage[] {
+  return rows.map(({ profiles, ...row }) => ({
+    ...row,
+    sender_name: profiles?.display_name ?? '',
+    sender_avatar: profiles?.avatar_path ?? null,
   }));
 }
 
@@ -52,7 +69,7 @@ function toMessages(rows: MessageRow[]): ChatMessage[] {
 async function fetchTableMessages(meetupId: string): Promise<ChatMessage[] | null> {
   const { data, error } = await supabase
     .from('meetup_messages')
-    .select('id, sender_id, body, created_at, profiles(display_name)')
+    .select(MESSAGE_COLUMNS)
     .eq('meetup_id', meetupId)
     .order('created_at', { ascending: false })
     .limit(200);
@@ -63,7 +80,7 @@ async function fetchTableMessages(meetupId: string): Promise<ChatMessage[] | nul
   return toMessages(data as unknown as MessageRow[]);
 }
 
-// Messages newest first (for an inverted list). Live-updates when anyone in the table posts.
+// Messages newest first (for an inverted list). Live-updates when anyone in the table posts or a live location moves.
 export function useTableChat(meetupId: string) {
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -83,7 +100,7 @@ export function useTableChat(meetupId: string) {
       .channel(uniqueChannelName(`table-chat-${meetupId}`))
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'meetup_messages', filter: `meetup_id=eq.${meetupId}` },
+        { event: '*', schema: 'public', table: 'meetup_messages', filter: `meetup_id=eq.${meetupId}` },
         () => load(),
       )
       .subscribe();
@@ -120,7 +137,7 @@ async function fetchDirect(otherId: string, myId: string) {
   if (thread) {
     const { data } = await supabase
       .from('direct_messages')
-      .select('id, sender_id, body, created_at, profiles(display_name)')
+      .select(MESSAGE_COLUMNS)
       .eq('thread_id', thread.id)
       .order('created_at', { ascending: false })
       .limit(200);
@@ -152,7 +169,7 @@ export function useDirectChat(otherId: string, myId: string | undefined) {
       channel
         .on(
           'postgres_changes',
-          { event: 'INSERT', schema: 'public', table: 'direct_messages', filter: `thread_id=eq.${threadId}` },
+          { event: '*', schema: 'public', table: 'direct_messages', filter: `thread_id=eq.${threadId}` },
           () => load(),
         )
         .on(

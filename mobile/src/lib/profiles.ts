@@ -4,8 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { supabase } from '@/lib/supabase';
 
-// Profiles (name, Instagram, counts), follows (one-way, like Instagram) and 👍 / 👎 feedback after a table or
-// hangout. Rules live in the database (supabase/migrations/*_profiles_follows_feedback.sql).
+// Profiles (name, Instagram, About, travel details, counts), follows (one-way, like Instagram; mutual = friends) and
+// 👍 / 👎 feedback after a table or hangout. Rules live in the database
+// (supabase/migrations/*_profiles_follows_feedback.sql, *_profile_details.sql).
 
 export type Profile = {
   id: string;
@@ -15,12 +16,22 @@ export type Profile = {
   photo_paths: string[];
   followers: number;
   following: number;
+  friends: number;
   tables: number;
   hangouts: number;
   thumbs_up: number;
   thumbs_down: number;
   i_follow: boolean;
   follows_me: boolean;
+  age: number | null;
+  home_country: string | null;
+  languages: string[];
+  profession: string | null;
+  travel_style: string | null;
+  interests: string[];
+  world_clocks: string[];
+  visited_countries: string[];
+  upcoming_trips: number;
 };
 
 const KNOWN_ERRORS = [
@@ -37,10 +48,19 @@ const KNOWN_ERRORS = [
   'invalid_vote',
   'invalid_photo',
   'too_many_photos',
+  'birth_date_required',
+  'invalid_birth_date',
+  'too_young',
+  'invalid_country',
+  'invalid_details',
+  'invalid_time_zone',
+  'too_many_clocks',
+  'invalid_trip',
+  'too_many_trips',
 ] as const;
 export type ProfileErrorKey = (typeof KNOWN_ERRORS)[number] | 'generic';
 
-function errorKey(error: PostgrestError | null): ProfileErrorKey | null {
+export function profileErrorKey(error: Pick<PostgrestError, 'message'> | null): ProfileErrorKey | null {
   if (!error) return null;
   console.warn('Profile request failed', error.message);
   return KNOWN_ERRORS.find((key) => error.message.includes(key)) ?? 'generic';
@@ -75,6 +95,7 @@ export function instagramUrl(handle: string): string {
 
 type ProfileState = { status: 'loading' } | { status: 'ready'; profile: Profile } | { status: 'missing' } | { status: 'error' };
 
+// One profile. Reloads when the screen comes back into focus (after editing, adding a trip, …).
 export function useProfile(userId: string) {
   const [state, setState] = useState<ProfileState>({ status: 'loading' });
 
@@ -85,7 +106,7 @@ export function useProfile(userId: string) {
         .then(({ data, error }) => {
           if (error) {
             console.warn('Loading profile failed', error.message);
-            setState({ status: 'error' });
+            setState((prev) => (prev.status === 'ready' ? prev : { status: 'error' }));
             return;
           }
           const row = (data as Profile[])[0];
@@ -94,26 +115,113 @@ export function useProfile(userId: string) {
     [userId],
   );
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   return { state, reload: load };
 }
 
 export async function followUser(userId: string): Promise<ProfileErrorKey | null> {
   const { error } = await supabase.rpc('follow_user', { p_user_id: userId });
-  return errorKey(error);
+  return profileErrorKey(error);
 }
 
 export async function unfollowUser(userId: string): Promise<ProfileErrorKey | null> {
   const { error } = await supabase.rpc('unfollow_user', { p_user_id: userId });
-  return errorKey(error);
+  return profileErrorKey(error);
 }
 
-export async function updateMyProfile(displayName: string, instagram: string): Promise<ProfileErrorKey | null> {
-  const { error } = await supabase.rpc('update_my_profile', { p_display_name: displayName, p_instagram: instagram });
-  return errorKey(error);
+// What the first-time questions and Edit profile ask.
+export type ProfileDetails = {
+  display_name: string;
+  instagram: string | null;
+  birth_date: string | null;
+  home_country: string | null;
+  languages: string[];
+  profession: string | null;
+  travel_style: string | null;
+  interests: string[];
+  onboarded: boolean;
+};
+
+export async function fetchMyDetails(): Promise<ProfileDetails | null | 'error'> {
+  const { data, error } = await supabase.rpc('my_profile_details');
+  if (error) {
+    console.warn('Loading my details failed', error.message);
+    return 'error';
+  }
+  return ((data ?? []) as ProfileDetails[])[0] ?? null;
+}
+
+export async function saveMyProfile(details: Omit<ProfileDetails, 'onboarded'>): Promise<ProfileErrorKey | null> {
+  const { error } = await supabase.rpc('save_my_profile', {
+    p_display_name: details.display_name,
+    p_instagram: details.instagram ?? '',
+    p_birth_date: details.birth_date,
+    p_home_country: details.home_country,
+    p_languages: details.languages,
+    p_profession: details.profession,
+    p_travel_style: details.travel_style,
+    p_interests: details.interests,
+  });
+  return profileErrorKey(error);
+}
+
+export async function saveWorldClocks(zones: string[]): Promise<ProfileErrorKey | null> {
+  const { error } = await supabase.rpc('set_my_world_clocks', { p_zones: zones });
+  return profileErrorKey(error);
+}
+
+export async function saveVisitedCountries(codes: string[]): Promise<ProfileErrorKey | null> {
+  const { error } = await supabase.rpc('set_my_visited_countries', { p_codes: codes });
+  return profileErrorKey(error);
+}
+
+export type FriendRow = { id: string; display_name: string; avatar_path: string | null; home_country: string | null };
+
+// Someone's friends (people who follow each other).
+export function useFriendsOf(userId: string) {
+  const [friends, setFriends] = useState<FriendRow[] | null | 'error'>(null);
+  useEffect(() => {
+    supabase.rpc('user_friends', { p_user_id: userId }).then(({ data, error }) => {
+      if (error) console.warn('Loading friends failed', error.message);
+      setFriends(error ? 'error' : ((data ?? []) as FriendRow[]));
+    });
+  }, [userId]);
+  return friends;
+}
+
+export type ProfileMeetup = {
+  id: string;
+  kind: 'table' | 'hangout';
+  title: string | null;
+  place_name: string | null;
+  place_name_en: string | null;
+  place_name_th: string | null;
+  venue_name_en: string | null;
+  venue_name_th: string | null;
+  starts_at: string;
+  ends_at: string;
+  time_zone: string | null;
+  member_count: number;
+  is_host: boolean;
+  upcoming: boolean;
+};
+
+// The tables and hangouts someone is going to or went to (Events tab).
+export function useProfileMeetups(userId: string, enabled: boolean) {
+  const [meetups, setMeetups] = useState<ProfileMeetup[] | null | 'error'>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    supabase.rpc('profile_meetups', { p_user_id: userId }).then(({ data, error }) => {
+      if (error) console.warn('Loading events failed', error.message);
+      setMeetups(error ? 'error' : ((data ?? []) as ProfileMeetup[]));
+    });
+  }, [userId, enabled]);
+  return meetups;
 }
 
 // The people the caller follows (for Follow buttons in lists such as Travellers nearby).
@@ -175,7 +283,7 @@ export function useMyFeedback(meetupId: string, enabled: boolean) {
     async (toUser: string, vote: Vote) => {
       const next = votes.get(toUser) === vote ? 0 : vote;
       const { error } = await supabase.rpc('give_feedback', { p_meetup_id: meetupId, p_to_user: toUser, p_vote: next });
-      const key = errorKey(error);
+      const key = profileErrorKey(error);
       if (!key) {
         setVotes((prev) => {
           const updated = new Map(prev);

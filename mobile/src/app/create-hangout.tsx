@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { FavoriteButton } from '@/components/favorite-button';
 import { GlossyFill } from '@/components/glossy';
 import { Button } from '@/components/button';
 import { Chip } from '@/components/chip';
@@ -61,7 +62,8 @@ import {
   type OpenMeetup,
 } from '@/lib/meetups';
 import { areaAt, setMeetupArea } from '@/lib/rewards';
-import { entryFilter, placeEmoji, placeName, usePlacesInView, type Place, type PlaceEntry } from '@/lib/places';
+import type { FavoriteTarget } from '@/lib/favorites';
+import { entryFilter, fetchPlace, placeEmoji, placeName, usePlacesInView, type Place, type PlaceEntry } from '@/lib/places';
 import {
   HANGOUT_PROMOTION_KINDS,
   isHangoutVenue,
@@ -112,8 +114,9 @@ export default function CreateHangoutScreen() {
   // Tickets / Free entry also filter the map's places by entry (Event / Party only filter partner venues).
   const entry = promo === 'ticket' || promo === 'free_entry' ? entryFilter(promo, language) : null;
   const { places: mapPlaces, dots: placeDots, dotsMinZoom, onBoundsChange } = usePlacesInView('hangout', entry);
-  // Opened for a venue (e.g. from a notification about its deal): its card shows first and the map moves there.
-  const params = useLocalSearchParams<{ venueId?: string }>();
+  // Opened for a venue (e.g. from a notification about its deal) or a place (from Favorites): its card shows first and
+  // the map moves there.
+  const params = useLocalSearchParams<{ venueId?: string; placeId?: string }>();
   const [selection, setSelection] = useState<Selection | null>(params.venueId ? { type: 'venue', venueId: params.venueId } : null);
   const [chosen, setChosen] = useState<Chosen | null>(null);
   const [listOpen, setListOpen] = useState(false);
@@ -134,6 +137,14 @@ export default function CreateHangoutScreen() {
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const paramVenue = params.venueId ? venueById.get(params.venueId) : undefined;
   const paramFocus: MapFocus | null = paramVenue ? { lat: paramVenue.lat, lng: paramVenue.lng, zoom: PLACE_ZOOM, seq: 0 } : null;
+  useEffect(() => {
+    if (!params.placeId) return;
+    fetchPlace(params.placeId).then((found) => {
+      if (!found) return;
+      setSelection({ type: 'place', place: found });
+      setFocus({ lat: found.lat, lng: found.lng, zoom: PLACE_ZOOM, seq: Date.now() });
+    });
+  }, [params.placeId]);
   const shownVenueIds = new Set(hangoutVenues.map((venue) => venue.id));
   // With a filter on, only hangouts at venues that have that promotion.
   const hangouts = meetups.meetups.filter(
@@ -473,6 +484,13 @@ function SelectionCard({
   const tickets = venue ? ticketLink(venue) : null;
   const website = !tickets && selection.type === 'place' && isSafeLink(selection.place.website) ? selection.place.website : null;
   const entry: PlaceEntry | null | undefined = venue ? venue.entry : selection.type === 'place' ? selection.place.entry : null;
+  // Partner venues and Bangkok places can be saved (world places from the map tiles aren't stored).
+  const favorite: FavoriteTarget | null =
+    selection.type === 'venue' && venue
+      ? { venueId: venue.id }
+      : selection.type === 'place' && !selection.place.world
+        ? { placeId: selection.place.id }
+        : null;
 
   return (
     <View style={[styles.placeCard, styles.inset]}>
@@ -481,6 +499,7 @@ function SelectionCard({
         <Text style={styles.placeName} numberOfLines={2}>
           {name}
         </Text>
+        {favorite && <FavoriteButton target={favorite} size={36} />}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('common.back')}

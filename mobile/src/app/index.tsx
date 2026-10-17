@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { FavoriteButton } from '@/components/favorite-button';
 import { GlossyFill, Shine } from '@/components/glossy';
 import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
@@ -33,6 +34,7 @@ import { Radius, Raised, RaisedSmall, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { formatWhen } from '@/lib/bangkok-time';
+import type { FavoriteTarget } from '@/lib/favorites';
 import { distanceMeters, useCurrentLocation } from '@/lib/location';
 import {
   directionsUrl,
@@ -536,6 +538,12 @@ function PlaceCard({
           ? { lat: first.place_lat, lng: first.place_lng, name }
           : null;
 
+  const favorite: FavoriteTarget | null = venue
+    ? { venueId: venue.id }
+    : selection.type === 'place' && !selection.place.world
+      ? { placeId: selection.place.id }
+      : null;
+
   return (
     <View style={styles.placeCard}>
       <GlossyFill />
@@ -543,6 +551,7 @@ function PlaceCard({
         <Text style={styles.placeName} numberOfLines={2}>
           {name}
         </Text>
+        {favorite && <FavoriteButton target={favorite} size={36} />}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('common.back')}

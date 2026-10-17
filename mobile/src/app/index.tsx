@@ -83,7 +83,7 @@ export default function HomeScreen() {
   ).length;
   const location = useCurrentLocation();
   const [selection, setSelection] = useState<Selection | null>(null);
-  const { places: mapPlaces, onBoundsChange } = usePlacesInView();
+  const { places: mapPlaces, dots: placeDots, dotsMinZoom, onBoundsChange } = usePlacesInView();
   const [joiningId, setJoiningId] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
   const [topHeight, setTopHeight] = useState(0);
@@ -255,6 +255,8 @@ export default function HomeScreen() {
         userCoords={coords}
         onPinPress={handlePinPress}
         places={mapPlaces}
+        placeDots={placeDots}
+        dotsMinZoom={dotsMinZoom}
         onPlacePress={handlePlacePress}
         onBoundsChange={onBoundsChange}
         mapPadding={{ top: topHeight, right: 0, bottom: bottomHeight, left: 0 }}

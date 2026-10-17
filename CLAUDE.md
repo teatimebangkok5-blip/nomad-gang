@@ -313,7 +313,8 @@ How the key rules map onto this:
     `src/lib/places.ts`, images in `assets/images/map-icons/` (120 px **3D** glossy balls with a shadow and the white
     Material icon, Apache 2.0, drawn by a System.Drawing script; shown at `PLACE_ICON_SIZE` 0.32 ≈ 32 dp) registered
     with `Images`. Pins (`PinView`) are 50 dp 3D balls: gradient, shine, white rim, elevation shadow, ground shadow.
-    Zoomed out (below `ICON_ZOOM` 15) places are **small dots in their icon color**; from zoom 15 they show icon +
+    Zoomed out places are **small dots in their icon color** (from `DOTS_MIN_ZOOM` food 12 / hangout 11, all of a
+    purpose loaded once via RPC `place_dots` as `[id, kind, lat, lng]`, names fetched on tap); from `ICON_ZOOM` 15 icon +
     name. Overlapping icons hide until zoomed in (MapLibre collision); names hide first. Labels use `Noto Sans Bold` (must
     be a font OpenFreeMap serves; it has Thai). Pins with a `label` (partner venues) get their name beside them too.
     Props: `pins`, `places`, `onPlacePress`, `onMapPress`, `onBoundsChange`, `fullScreen`, `mapPadding`

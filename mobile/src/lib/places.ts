@@ -221,27 +221,67 @@ export function worldPlaceFromTile(feature: GeoJSON.Feature): Place | null {
 
 export type MapBounds = { west: number; south: number; east: number; north: number; zoom: number };
 
-// Below this zoom too much of Bangkok is in view, so place dots are hidden. Hangout places are fewer and further
-// apart, so they show from further out.
-const PLACES_MIN_ZOOM: Record<PlacePurpose, number> = { food: 14, hangout: 12 };
-// With the Tickets / Free entry filter on there are far fewer places, so they show from further out.
-const FILTERED_MIN_ZOOM = 11;
+// Zoomed out, places are small dots in their icon color; from ICON_ZOOM they show their icon and name.
+export const ICON_ZOOM = 15;
+// Dots show from this zoom: about all of central Bangkok in view (founder, 2026-10-17). Hangout places are fewer and
+// further apart, so they show from further out.
+export const DOTS_MIN_ZOOM: Record<PlacePurpose, number> = { food: 12, hangout: 11 };
 
-// Places inside the visible map area, refreshed (debounced) as the map moves or the entry filter changes.
-// `entry` limits them to places with that entry (Tickets / Free entry buttons); null shows all.
+// A place as a dot: no names (they load when zoomed in, or when the dot is tapped).
+export type PlaceDot = { id: string; kind: string; lat: number; lng: number };
+
+// Every place's dot, loaded once per purpose + entry filter for the whole app session (place_dots returns them all
+// as one compact array; places rarely change).
+const dotsCache = new Map<string, Promise<PlaceDot[]>>();
+
+function loadDots(purpose: PlacePurpose, entryKey: string): Promise<PlaceDot[]> {
+  const key = `${purpose}|${entryKey}`;
+  let promise = dotsCache.get(key);
+  if (!promise) {
+    promise = Promise.resolve(
+      supabase.rpc('place_dots', { p_purpose: purpose, p_entry: entryKey ? entryKey.split(',') : null }),
+    ).then(({ data, error }) => {
+      if (error) {
+        dotsCache.delete(key); // try again next time
+        console.warn('Loading place dots failed', error.message);
+        return [];
+      }
+      return ((data ?? []) as [string, string, number, number][]).map(([id, kind, lat, lng]) => ({ id, kind, lat, lng }));
+    });
+    dotsCache.set(key, promise);
+  }
+  return promise;
+}
+
+// Places for the map: every place as a dot (zoomed out), and the places inside the visible area with their names
+// (from ICON_ZOOM - 0.5), refreshed (debounced) as the map moves or the entry filter changes. `entry` limits both to
+// places with that entry (Tickets / Free entry buttons); null shows all.
 export function usePlacesInView(purpose: PlacePurpose = 'food', entry: PlaceEntry[] | null = null) {
   const [places, setPlaces] = useState<Place[]>([]);
+  const [dots, setDots] = useState<{ key: string; dots: PlaceDot[] } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latest = useRef(0);
   const lastBounds = useRef<MapBounds | null>(null);
   const entryKey = entry ? entry.join(',') : '';
+  const dotsKey = `${purpose}|${entryKey}`;
+
+  useEffect(() => {
+    let current = true;
+    loadDots(purpose, entryKey).then((loaded) => {
+      if (current) setDots({ key: `${purpose}|${entryKey}`, dots: loaded });
+    });
+    return () => {
+      current = false;
+    };
+  }, [purpose, entryKey]);
 
   const schedule = useCallback(
     (bounds: MapBounds) => {
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(async () => {
         const filter = entryKey ? entryKey.split(',') : null;
-        if (bounds.zoom < (filter ? FILTERED_MIN_ZOOM : PLACES_MIN_ZOOM[purpose])) {
+        if (bounds.zoom < ICON_ZOOM - 0.5) {
+          ++latest.current;
           setPlaces([]);
           return;
         }
@@ -287,7 +327,12 @@ export function usePlacesInView(purpose: PlacePurpose = 'food', entry: PlaceEntr
     [],
   );
 
-  return { places, onBoundsChange };
+  return {
+    places,
+    dots: dots && dots.key === dotsKey ? dots.dots : [],
+    dotsMinZoom: DOTS_MIN_ZOOM[purpose],
+    onBoundsChange,
+  };
 }
 
 export async function fetchPlace(id: string): Promise<Place | null> {

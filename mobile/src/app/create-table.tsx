@@ -51,7 +51,7 @@ export default function CreateTableScreen() {
   const [picked, setPicked] = useState<Picked | null>(null);
   const [venueId, setVenueId] = useState<string | null>(params.venueId ?? null);
   const [place, setPlace] = useState<Place | null>(null);
-  const { places: mapPlaces, onBoundsChange } = usePlacesInView();
+  const { places: mapPlaces, dots: placeDots, dotsMinZoom, onBoundsChange } = usePlacesInView();
 
   // Opened from "Create table here" on a place: load it.
   useEffect(() => {
@@ -147,6 +147,8 @@ export default function CreateTableScreen() {
           }))}
           onPinPress={(id) => setPicked({ type: 'venue', venueId: id })}
           places={mapPlaces}
+          placeDots={placeDots}
+          dotsMinZoom={dotsMinZoom}
           onPlacePress={handlePlacePress}
           onBoundsChange={onBoundsChange}
           mapPadding={{ top: topHeight, right: 0, bottom: bottomHeight, left: 0 }}

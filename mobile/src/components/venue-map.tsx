@@ -20,6 +20,8 @@ import { currentLanguage } from '@/i18n';
 import type { Coords } from '@/lib/location';
 import { PLACE_ICON_IMAGES } from '@/lib/place-icons';
 import {
+  fetchPlace,
+  ICON_ZOOM,
   PLACE_ICON_COLORS,
   placeIcon,
   placeName,
@@ -29,6 +31,7 @@ import {
   worldPlaceFromTile,
   type MapBounds,
   type Place,
+  type PlaceDot,
 } from '@/lib/places';
 import { makeStyles, useColors, useTheme } from '@/lib/theme';
 import type { VenueCategory } from '@/lib/venues';
@@ -53,9 +56,6 @@ function lighten(hex: string, amount: number): string {
   };
   return `rgb(${channel(16)}, ${channel(8)}, ${channel(0)})`;
 }
-
-// Zoomed out, places are small dots in their icon color; from this zoom on they show their icon and name.
-const ICON_ZOOM = 15;
 
 // The world places layer (Hangout map) reads OpenFreeMap's vector tiles directly: OpenStreetMap's "poi" layer,
 // filtered to places to hang out. Bangkok is left out there: its places come from the database (public.places).
@@ -134,6 +134,8 @@ export function VenueMap({
   onPinPress,
   places = [],
   onPlacePress,
+  placeDots = [],
+  dotsMinZoom = 12,
   worldPlaces = false,
   onMapPress,
   onBoundsChange,
@@ -151,6 +153,9 @@ export function VenueMap({
   // Bangkok places (OpenStreetMap) drawn as colored icons with their names; tapping one calls onPlacePress.
   places?: Place[];
   onPlacePress?: (place: Place) => void;
+  // Every place as a small dot in its icon color, shown from `dotsMinZoom` until the icons take over (ICON_ZOOM).
+  placeDots?: PlaceDot[];
+  dotsMinZoom?: number;
   // Hangout map: also draw world places from the map tiles (outside Bangkok); tapping one calls onPlacePress with a
   // Place that has `world: true`.
   worldPlaces?: boolean;
@@ -236,10 +241,25 @@ export function VenueMap({
         icon: `tm-${placeIcon(place.kind)}`,
         name: placeName(place, language),
         color: labelColor(PLACE_ICON_COLORS[placeIcon(place.kind)]),
-        dot: PLACE_ICON_COLORS[placeIcon(place.kind)],
       },
     })),
   };
+
+  // Zoomed-out dots (no names; a tapped dot loads its place).
+  const dotsGeoJson: GeoJSON.FeatureCollection = {
+    type: 'FeatureCollection',
+    features: placeDots.map((dot) => ({
+      type: 'Feature',
+      id: dot.id,
+      geometry: { type: 'Point', coordinates: [dot.lng, dot.lat] },
+      properties: { id: dot.id, color: PLACE_ICON_COLORS[placeIcon(dot.kind)] },
+    })),
+  };
+
+  async function handleDotPress(id: string) {
+    const place = places.find((p) => p.id === id) ?? (await fetchPlace(id));
+    if (place) onPlacePress?.(place);
+  }
 
   // Names beside the pins (partner venues), drawn by the map under the pin views.
   const pinLabelsGeoJson: GeoJSON.FeatureCollection = {
@@ -362,6 +382,19 @@ export function VenueMap({
           </GeoJSONSource>
         )}
 
+        {placeDots.length > 0 && (
+          <GeoJSONSource
+            id="place-dots"
+            data={dotsGeoJson}
+            onPress={(event) => {
+              event.stopPropagation();
+              const id = event.nativeEvent.features[0]?.properties?.id;
+              if (typeof id === 'string') handleDotPress(id).catch(() => {});
+            }}>
+            <Layer id="place-dots-circle" type="circle" minzoom={dotsMinZoom} maxzoom={ICON_ZOOM} style={dotStyle(['get', 'color'])} />
+          </GeoJSONSource>
+        )}
+
         {places.length > 0 && (
           <GeoJSONSource
             id="places"
@@ -372,7 +405,6 @@ export function VenueMap({
               const place = places.find((p) => p.id === id);
               if (place) onPlacePress?.(place);
             }}>
-            <Layer id="places-dots" type="circle" maxzoom={ICON_ZOOM} style={dotStyle(['get', 'dot'])} />
             {/* Icons that would overlap are hidden until the map is zoomed in; names hide first. */}
             <Layer
               id="places-icons"

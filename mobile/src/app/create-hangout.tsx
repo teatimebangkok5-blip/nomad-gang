@@ -110,7 +110,7 @@ export default function CreateHangoutScreen() {
   const [promo, setPromo] = useState<PromotionKind | null>(null);
   // Tickets / Free entry also filter the map's places by entry (Event / Party only filter partner venues).
   const entry = promo === 'ticket' || promo === 'free_entry' ? entryFilter(promo, language) : null;
-  const { places: mapPlaces, onBoundsChange } = usePlacesInView('hangout', entry);
+  const { places: mapPlaces, dots: placeDots, dotsMinZoom, onBoundsChange } = usePlacesInView('hangout', entry);
   // Opened for a venue (e.g. from a notification about its deal): its card shows first and the map moves there.
   const params = useLocalSearchParams<{ venueId?: string }>();
   const [selection, setSelection] = useState<Selection | null>(params.venueId ? { type: 'venue', venueId: params.venueId } : null);
@@ -298,6 +298,8 @@ export default function CreateHangoutScreen() {
         userCoords={coords}
         onPinPress={handlePinPress}
         places={mapPlaces}
+        placeDots={placeDots}
+        dotsMinZoom={dotsMinZoom}
         onPlacePress={handlePlacePress}
         worldPlaces={entry === null}
         onMapPress={(at) => setSelection({ type: 'spot', ...at })}

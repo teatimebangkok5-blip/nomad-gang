@@ -421,6 +421,10 @@ r = await tryQuery("authenticated", user, `select count(*)::int n from public.pl
 check("food map doesn't show hangout places", r.rows?.[0]?.n === 0);
 r = await tryQuery("authenticated", user, `select count(*)::int n from public.places_in_bounds(100.535, 13.725, 100.548, 13.736, 400, 'hangout') where id = $1`, [lumphiniId]);
 check("hangout map shows hangout places", r.rows?.[0]?.n === 1);
+r = await tryQuery("anon", null, `select public.place_dots('hangout') as dots`);
+check("hangout dots include the place as [id, kind, lat, lng]", (r.rows?.[0]?.dots ?? []).some((d) => d[0] === lumphiniId && d.length === 4 && typeof d[2] === "number"));
+r = await tryQuery("anon", null, `select public.place_dots('food') as dots`);
+check("food dots leave out hangout places", Array.isArray(r.rows?.[0]?.dots) && !r.rows[0].dots.some((d) => d[0] === lumphiniId));
 r = await tryQuery("authenticated", user, `select count(*)::int n from public.places_in_bounds(100.0, 13.0, 101.0, 14.5, 1000, 'hangout') where id = $1`, [placeId]);
 check("hangout map doesn't show food places", r.rows?.[0]?.n === 0);
 r = await tryQuery("authenticated", user, `select public.create_meetup_at_place($1, $2, 4)`, [lumphiniId, inHours(2)]);

@@ -30,11 +30,13 @@ import { Radius, Spacing, Type } from '@/constants/theme';
 import { bangkokMinutes, deviceZone, formatClock } from '@/lib/bangkok-time';
 import type { ChatErrorKey, ChatMessage } from '@/lib/chat';
 import {
+  editMessage,
   LIVE_DURATIONS,
   MAX_VOICE_MS,
   sendPhoto,
   sendVoiceNote,
   startLiveLocation,
+  unsendMessage,
   type ChatRef,
   type LiveMinutes,
   type PhotoSource,
@@ -45,7 +47,7 @@ const AVATAR = 32;
 
 // Message list (newest at the bottom) and a composer with a + button for photos (camera or gallery), voice notes and
 // live location. Used by table / hangout chats, private chats and group chats. Other people's messages show their
-// profile picture; tapping it opens their profile.
+// profile picture; tapping it opens their profile. Press and hold one of your own messages to edit (text) or unsend it.
 export function ChatView({
   messages,
   myId,
@@ -62,9 +64,9 @@ export function ChatView({
   // Show the sender's name above other people's messages (group chats).
   showNames: boolean;
   onSend: (body: string) => Promise<ChatErrorKey | null>;
-  // The chat, for photos / voice notes / location. Null: the + button is hidden (or shows `attachHint`).
+  // The chat, for photos / voice notes / location. Null: the + button explains `attachHint` instead.
   chat: ChatRef | null;
-  // Why attachments aren't possible yet (e.g. a private chat request that hasn't been accepted).
+  // Why attachments aren't possible yet (a private chat that hasn't started).
   attachHint?: string;
   banner?: ReactNode;
   canSend?: boolean;
@@ -80,16 +82,65 @@ export function ChatView({
   const [menuOpen, setMenuOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [attaching, setAttaching] = useState(false);
+  // The message being edited (its text is in the composer).
+  const [editing, setEditing] = useState<ChatMessage | null>(null);
 
   async function send() {
     const body = draft.trim();
     if (!body || sending) return;
     setSending(true);
     setError(null);
-    const result = await onSend(body);
+    const result = editing && chat ? await editMessage(chat.kind, editing.id, body) : await onSend(body);
     setSending(false);
-    if (result) setError(result);
-    else setDraft('');
+    if (result) {
+      setError(result);
+      return;
+    }
+    setDraft('');
+    setEditing(null);
+  }
+
+  function cancelEdit() {
+    setEditing(null);
+    setDraft('');
+  }
+
+  // Press and hold my own message: Edit (text only) or Unsend.
+  function messageMenu(message: ChatMessage) {
+    if (!chat) return;
+    const unsend = () =>
+      Alert.alert(t('chat.unsendConfirm'), t('chat.unsendBody'), [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('chat.unsend'),
+          style: 'destructive',
+          onPress: async () => {
+            const result = await unsendMessage(chat.kind, message.id);
+            if (result) setError(result);
+            if (editing?.id === message.id) cancelEdit();
+          },
+        },
+      ]);
+    Alert.alert(
+      t('chat.messageOptions'),
+      undefined,
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        ...(message.kind === 'text'
+          ? [
+              {
+                text: t('chat.edit'),
+                onPress: () => {
+                  setEditing(message);
+                  setDraft(message.body);
+                },
+              },
+            ]
+          : []),
+        { text: t('chat.unsend'), style: 'destructive' as const, onPress: unsend },
+      ],
+      { cancelable: true },
+    );
   }
 
   async function attach(work: () => Promise<ChatErrorKey | 'cancelled' | 'permission' | null>, deniedText: string) {
@@ -134,7 +185,13 @@ export function ChatView({
     setRecording(true);
   }
 
-  const attachEnabled = Boolean(chat && myId && canSend);
+  // The + button is in every chat the person can write in.
+  const attachShown = Boolean(myId && canSend);
+
+  function openMenu() {
+    if (chat) setMenuOpen(true);
+    else if (attachHint) Alert.alert(attachHint);
+  }
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -169,7 +226,12 @@ export function ChatView({
                   ))}
                 <View style={[styles.column, mine ? styles.columnMine : styles.columnTheirs]}>
                   {showNames && !mine && firstOfRun && <Text style={styles.name}>{item.sender_name}</Text>}
-                  <MessageContent message={item} mine={mine} chat={chat} />
+                  <MessageContent
+                    message={item}
+                    mine={mine}
+                    chat={chat}
+                    onLongPress={mine && chat && item.kind !== 'unsent' ? () => messageMenu(item) : undefined}
+                  />
                 </View>
               </View>
             );
@@ -182,7 +244,6 @@ export function ChatView({
           {t(`chat.errors.${error}`)}
         </Text>
       )}
-      {!chat && attachHint && canSend && <Text style={styles.attachHint}>{attachHint}</Text>}
 
       {recording && chat && myId ? (
         <VoiceRecorder
@@ -193,13 +254,28 @@ export function ChatView({
           }}
         />
       ) : (
+        <View>
+          {editing && (
+            <View style={styles.editBar}>
+              <Icon name="edit" size={18} color={Colors.accent} />
+              <View style={styles.editText}>
+                <Text style={styles.editTitle}>{t('chat.editing')}</Text>
+                <Text style={styles.editPreview} numberOfLines={1}>
+                  {editing.body}
+                </Text>
+              </View>
+              <Pressable accessibilityRole="button" accessibilityLabel={t('common.cancel')} hitSlop={8} onPress={cancelEdit}>
+                <Icon name="close" size={20} color={Colors.textMuted} />
+              </Pressable>
+            </View>
+          )}
         <View style={styles.composer}>
-          {attachEnabled && (
+          {attachShown && !editing && (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('chat.attach')}
               disabled={attaching}
-              onPress={() => setMenuOpen(true)}
+              onPress={openMenu}
               style={({ pressed }) => [styles.plus, pressed && styles.pressed]}>
               {attaching ? <ActivityIndicator color={Colors.accent} /> : <Icon name="plus" size={26} color={Colors.accent} />}
             </Pressable>
@@ -225,9 +301,10 @@ export function ChatView({
             {sending ? (
               <ActivityIndicator color={Colors.onBrand} />
             ) : (
-              <Icon name="send" size={20} color={canSend && draft.trim() ? Colors.onBrand : Colors.textMuted} />
+              <Icon name={editing ? 'check' : 'send'} size={20} color={canSend && draft.trim() ? Colors.onBrand : Colors.textMuted} />
             )}
           </Pressable>
+        </View>
         </View>
       )}
 
@@ -250,18 +327,38 @@ export function ChatView({
   );
 }
 
-function MessageContent({ message, mine, chat }: { message: ChatMessage; mine: boolean; chat: ChatRef | null }) {
+function MessageContent({
+  message,
+  mine,
+  chat,
+  onLongPress,
+}: {
+  message: ChatMessage;
+  mine: boolean;
+  chat: ChatRef | null;
+  onLongPress?: () => void;
+}) {
   const styles = useStyles();
-  if (message.kind === 'photo') return <PhotoBubble message={message} mine={mine} />;
-  if (message.kind === 'voice') return <VoiceBubble message={message} mine={mine} />;
-  if (message.kind === 'location' && chat) return <LocationBubble message={message} mine={mine} chatKind={chat.kind} />;
+  const { t } = useTranslation();
+  const time = formatClock(bangkokMinutes(new Date(message.created_at), deviceZone()));
+  if (message.kind === 'photo') return <PhotoBubble message={message} mine={mine} onLongPress={onLongPress} />;
+  if (message.kind === 'voice') return <VoiceBubble message={message} mine={mine} onLongPress={onLongPress} />;
+  if (message.kind === 'location' && chat) {
+    return <LocationBubble message={message} mine={mine} chatKind={chat.kind} onLongPress={onLongPress} />;
+  }
+  if (message.kind === 'unsent') {
+    return (
+      <View style={[styles.bubble, styles.bubbleUnsent]}>
+        <Text style={styles.unsent}>🚫 {mine ? t('chat.youUnsent') : t('chat.unsentMessage')}</Text>
+        <Text style={styles.time}>{time}</Text>
+      </View>
+    );
+  }
   return (
-    <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}>
+    <Pressable onLongPress={onLongPress} style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}>
       <Text style={[styles.body, mine && styles.bodyMine]}>{message.body}</Text>
-      <Text style={[styles.time, mine && styles.timeMine]}>
-        {formatClock(bangkokMinutes(new Date(message.created_at), deviceZone()))}
-      </Text>
-    </View>
+      <Text style={[styles.time, mine && styles.timeMine]}>{message.edited_at ? `${t('chat.edited')} · ${time}` : time}</Text>
+    </Pressable>
   );
 }
 
@@ -381,6 +478,21 @@ const useStyles = makeStyles((Colors) => ({
   bubble: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.lg },
   bubbleMine: { backgroundColor: Colors.orange, borderBottomRightRadius: Radius.sm },
   bubbleTheirs: { backgroundColor: Colors.surfaceRaised, borderBottomLeftRadius: Radius.sm },
+  bubbleUnsent: { borderWidth: 1, borderColor: Colors.border, borderStyle: 'dashed' },
+  unsent: { ...Type.small, fontStyle: 'italic', color: Colors.textMuted },
+  editBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    backgroundColor: Colors.surface,
+  },
+  editText: { flex: 1 },
+  editTitle: { ...Type.label, color: Colors.accent },
+  editPreview: { ...Type.small, color: Colors.textSecondary },
   body: { ...Type.body, color: Colors.text },
   bodyMine: { color: Colors.onBrand },
   time: { fontSize: 11, lineHeight: 14, color: Colors.textMuted, alignSelf: 'flex-end', marginTop: 2 },
@@ -393,7 +505,6 @@ const useStyles = makeStyles((Colors) => ({
     padding: Spacing.sm,
     borderRadius: Radius.sm,
   },
-  attachHint: { ...Type.small, color: Colors.textMuted, textAlign: 'center', paddingHorizontal: Spacing.lg },
   composer: {
     flexDirection: 'row',
     alignItems: 'flex-end',

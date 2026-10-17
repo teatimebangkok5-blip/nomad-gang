@@ -73,6 +73,9 @@ const ICONS = {
   cake: { android: 'cake', ios: 'birthday.cake.fill' },
   liveLocation: { android: 'share_location', ios: 'location.circle.fill' },
   chevronRight: { android: 'chevron_right', ios: 'chevron.right' },
+  pushPin: { android: 'push_pin', ios: 'pin.fill' },
+  archive: { android: 'archive', ios: 'archivebox.fill' },
+  unarchive: { android: 'unarchive', ios: 'archivebox' },
 } satisfies Record<string, { android: AndroidName; ios: IosName }>;
 
 export type IconName = keyof typeof ICONS;

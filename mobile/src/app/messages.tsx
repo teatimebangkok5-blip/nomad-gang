@@ -1,27 +1,29 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, Text, View } from 'react-native';
+import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ChatAvatar } from '@/components/chat-avatar';
 import { Chip } from '@/components/chip';
 import { GlossyFill } from '@/components/glossy';
-import { Icon } from '@/components/icon';
+import { Icon, type IconName } from '@/components/icon';
 import { ScreenHeader } from '@/components/screen-header';
 import { Radius, Raised, RaisedSmall, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, type Language } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { bangkokDay, bangkokMinutes, deviceZone, formatClock, formatDayLabel } from '@/lib/bangkok-time';
-import { leaveChat, useChats, type ChatKind, type ChatSummary } from '@/lib/messages';
+import { leaveChat, setChatFlag, useChats, type ChatKind, type ChatSummary } from '@/lib/messages';
 import { makeStyles, useColors } from '@/lib/theme';
 import type { TFunction } from 'i18next';
 
-type Filter = 'all' | ChatKind;
-const FILTERS: Filter[] = ['all', 'dm', 'group', 'meetup'];
+type Filter = 'all' | ChatKind | 'archived';
+const FILTERS: Filter[] = ['all', 'dm', 'group', 'meetup', 'archived'];
 
 // All my chats in one list: private chats, group chats, and table / hangout chats (also after they end, until I
-// leave them). Newest first, with unread counts. Press and hold a chat to delete or leave it.
+// leave them). Pinned first, then newest, with unread counts. Swipe a chat right to delete or leave it, left to pin or
+// archive it (archived chats are only under Archived); press and hold also deletes / leaves.
 export default function MessagesScreen() {
   const styles = useStyles();
   const Colors = useColors();
@@ -32,7 +34,14 @@ export default function MessagesScreen() {
   const { chats, reload } = useChats(Boolean(session));
   const [filter, setFilter] = useState<Filter>('all');
 
-  const shown = (chats ?? []).filter((chat) => filter === 'all' || chat.chat_kind === filter);
+  const shown = (chats ?? []).filter((chat) =>
+    filter === 'archived' ? chat.archived : !chat.archived && (filter === 'all' || chat.chat_kind === filter),
+  );
+
+  async function flag(chat: ChatSummary, what: 'pin' | 'archive') {
+    await setChatFlag(chat.chat_kind, chat.chat_id, what, what === 'pin' ? !chat.pinned : !chat.archived);
+    reload();
+  }
 
   function open(chat: ChatSummary) {
     if (chat.chat_kind === 'dm' && chat.other_id) {
@@ -100,20 +109,83 @@ export default function MessagesScreen() {
           data={shown}
           keyExtractor={(chat) => `${chat.chat_kind}:${chat.chat_id}`}
           contentContainerStyle={styles.list}
-          ListHeaderComponent={shown.length > 0 ? <Text style={styles.hint}>{t('messages.holdHint')}</Text> : null}
+          ListHeaderComponent={shown.length > 0 ? <Text style={styles.hint}>{t('messages.swipeHint')}</Text> : null}
           ListEmptyComponent={
             <View style={styles.emptyCard}>
               <GlossyFill />
-              <Text style={styles.emptyTitle}>{t('messages.emptyTitle')}</Text>
-              <Text style={styles.muted}>{t('messages.emptyBody')}</Text>
+              <Text style={styles.emptyTitle}>{filter === 'archived' ? t('messages.archivedEmpty') : t('messages.emptyTitle')}</Text>
+              <Text style={styles.muted}>{filter === 'archived' ? t('messages.archivedEmptyBody') : t('messages.emptyBody')}</Text>
             </View>
           }
           renderItem={({ item }) => (
-            <ChatRow chat={item} myId={myId} onPress={() => open(item)} onLongPress={() => confirmLeave(item)} />
+            <ReanimatedSwipeable
+              friction={2}
+              leftThreshold={40}
+              rightThreshold={40}
+              overshootLeft={false}
+              overshootRight={false}
+              renderLeftActions={(_progress, _translation, swipe) => (
+                <SwipeActions>
+                  <SwipeAction
+                    icon={item.chat_kind === 'dm' ? 'delete' : 'logout'}
+                    label={item.chat_kind === 'dm' ? t('messages.delete') : t('messages.leave')}
+                    color={Colors.danger}
+                    onPress={() => {
+                      swipe.close();
+                      confirmLeave(item);
+                    }}
+                  />
+                </SwipeActions>
+              )}
+              renderRightActions={(_progress, _translation, swipe) => (
+                <SwipeActions>
+                  <SwipeAction
+                    icon="pushPin"
+                    label={item.pinned ? t('messages.unpin') : t('messages.pin')}
+                    color={Colors.orange}
+                    onPress={() => close(swipe, () => flag(item, 'pin'))}
+                  />
+                  <SwipeAction
+                    icon={item.archived ? 'unarchive' : 'archive'}
+                    label={item.archived ? t('messages.unarchive') : t('messages.archive')}
+                    color={Colors.violet}
+                    onPress={() => close(swipe, () => flag(item, 'archive'))}
+                  />
+                </SwipeActions>
+              )}>
+              <ChatRow chat={item} myId={myId} onPress={() => open(item)} onLongPress={() => confirmLeave(item)} />
+            </ReanimatedSwipeable>
           )}
         />
       )}
     </SafeAreaView>
+  );
+}
+
+function close(swipe: SwipeableMethods, then: () => void) {
+  swipe.close();
+  then();
+}
+
+function SwipeActions({ children }: { children: ReactNode }) {
+  const styles = useStyles();
+  return <View style={styles.swipeActions}>{children}</View>;
+}
+
+function SwipeAction({ icon, label, color, onPress }: { icon: IconName; label: string; color: string; onPress: () => void }) {
+  const styles = useStyles();
+  const Colors = useColors();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => [styles.swipeAction, { backgroundColor: color }, pressed && styles.pressed]}>
+      <Icon name={icon} size={22} color={Colors.white} />
+      <Text style={styles.swipeLabel} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -149,6 +221,7 @@ function ChatRow({
   onLongPress: () => void;
 }) {
   const styles = useStyles();
+  const Colors = useColors();
   const { t } = useTranslation();
   const language = currentLanguage();
   const title = chatTitle(chat, t, language);
@@ -178,7 +251,9 @@ function ChatRow({
         ? t('messages.lastVoice')
         : chat.last_kind === 'location'
           ? t('messages.lastLocation')
-          : chat.last_body;
+          : chat.last_kind === 'unsent'
+            ? t('messages.lastUnsent')
+            : chat.last_body;
   const preview = lastText
     ? `${chat.last_sender_id === myId ? t('travellers.youPrefix') : chat.chat_kind !== 'dm' && chat.last_sender_name ? `${chat.last_sender_name}: ` : ''}${lastText}`
     : t('messages.noMessagesYet');
@@ -187,7 +262,7 @@ function ChatRow({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={unread ? `${title}, ${t('messages.unreadA11y', { count: chat.unread_count })}` : title}
-      accessibilityHint={t('messages.holdHint')}
+      accessibilityHint={t('messages.swipeHint')}
       onPress={onPress}
       onLongPress={onLongPress}
       style={({ pressed }) => [styles.row, unread && styles.rowUnread, pressed && styles.pressed]}>
@@ -202,7 +277,10 @@ function ChatRow({
           <Text style={[styles.rowTitle, unread && styles.bold]} numberOfLines={1}>
             {title}
           </Text>
-          <Text style={[styles.time, unread && styles.timeUnread]}>{formatTime(chat.last_at, t)}</Text>
+          <View style={styles.timeRow}>
+            {chat.pinned && <Icon name="pushPin" size={14} color={Colors.accent} />}
+            <Text style={[styles.time, unread && styles.timeUnread]}>{formatTime(chat.last_at, t)}</Text>
+          </View>
         </View>
         <View style={styles.rowTop}>
           <Text style={[styles.preview, unread && styles.previewUnread]} numberOfLines={1}>
@@ -271,6 +349,16 @@ const useStyles = makeStyles((Colors) => ({
   rowTitle: { ...Type.heading, fontSize: 16, color: Colors.text, flexShrink: 1 },
   bold: { fontWeight: '800' },
   time: { ...Type.small, fontSize: 12, color: Colors.textMuted },
+  timeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  swipeActions: { flexDirection: 'row', gap: Spacing.xs, paddingHorizontal: Spacing.xs },
+  swipeAction: {
+    width: 76,
+    borderRadius: Radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  swipeLabel: { ...Type.small, fontSize: 12, fontWeight: '700', color: Colors.white },
   timeUnread: { color: Colors.accent, fontWeight: '700' },
   preview: { ...Type.small, color: Colors.textSecondary, flex: 1 },
   previewUnread: { color: Colors.text, fontWeight: '600' },

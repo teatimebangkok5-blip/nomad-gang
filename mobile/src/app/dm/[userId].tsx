@@ -100,9 +100,10 @@ export default function DirectChatScreen() {
         myId={myId}
         showNames={false}
         banner={banner}
-        // Photos, voice notes and location only once the request has been accepted.
-        chat={thread?.status === 'accepted' ? { kind: 'dm', id: thread.id } : null}
-        attachHint={thread?.status === 'accepted' ? undefined : t('chat.attachAfterAccept')}
+        // A new chat starts with a text message (that's where the "nearby" check happens); after that the + button
+        // works, also for replying to a request.
+        chat={thread ? { kind: 'dm', id: thread.id } : null}
+        attachHint={t('chat.attachFirstMessage')}
         canSend={!outgoingPending && !declinedMine}
         onSend={async (body) => {
           const result = await sendDirectMessage(userId, body);

@@ -199,7 +199,15 @@ Product spec and tech stack below are agreed. Built so far:
   `src/components/chat-bubbles.tsx`; upload / signed links: `src/lib/chat-media.ts`. `my_chats` returns `last_kind`
   so the inbox says "📷 Photo" / "🎤 Voice message" / "📍 Live location". `app.json` now allows camera and
   microphone (image-picker + expo-audio plugins, background audio off); prebuild `--clean` was run (debug key SHA-1
-  unchanged).
+  unchanged). The + button shows in **every** chat (`*_dm_attachments_on_reply.sql`): in a private chat the receiver of
+  a request can reply with an attachment (accepts it); a brand-new private chat starts with text (tapping + explains).
+- **Edit / unsend, pin / archive** (added 2026-10-17, `*_edit_unsend_pin_archive.sql`): press and hold your own
+  message → Edit (text; shows "edited", `edit_chat_message`) or Unsend (any kind → kind `unsent`, shown as "Message
+  unsent"; `unsend_chat_message` returns the file path and the app deletes the file). Messages list
+  (`src/app/messages.tsx`, `ReanimatedSwipeable`; the root layout is wrapped in `GestureHandlerRootView`): swipe right
+  → Delete (private) / Leave (group, table / hangout); swipe left → Pin / Archive (`set_chat_flag(kind, id, 'pin' |
+  'archive', on)`, stored in `chat_state.pinned_at / archived_at`). `my_chats` returns `pinned` (listed first) and
+  `archived` (only under the Archived filter, not counted in the home badge).
 - **Login without SMS for now** (founder's decision 2026-10-16): `app_settings.require_phone_verification` (default
   false) and `EXPO_PUBLIC_REQUIRE_PHONE` (default false) let Google accounts in without the phone check; turn both on
   once SMS is set up. With `EXPO_PUBLIC_SKIP_LOGIN=false`, a leftover anonymous guest session is signed out on start.

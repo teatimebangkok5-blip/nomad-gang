@@ -25,7 +25,9 @@ function duration(ms: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
-export function PhotoBubble({ message, mine }: { message: ChatMessage; mine: boolean }) {
+type BubbleProps = { message: ChatMessage; mine: boolean; onLongPress?: () => void };
+
+export function PhotoBubble({ message, mine, onLongPress }: BubbleProps) {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
@@ -38,8 +40,8 @@ export function PhotoBubble({ message, mine }: { message: ChatMessage; mine: boo
       <Pressable
         accessibilityRole="imagebutton"
         accessibilityLabel={t('chat.openPhoto')}
-        disabled={!source}
-        onPress={() => setOpen(true)}
+        onPress={() => source && setOpen(true)}
+        onLongPress={onLongPress}
         style={[styles.photo, mine ? styles.photoMine : styles.photoTheirs]}>
         {source ? (
           <Image source={source} style={styles.photoImage} contentFit="cover" transition={150} />
@@ -59,7 +61,7 @@ export function PhotoBubble({ message, mine }: { message: ChatMessage; mine: boo
   );
 }
 
-export function VoiceBubble({ message, mine }: { message: ChatMessage; mine: boolean }) {
+export function VoiceBubble({ message, mine, onLongPress }: BubbleProps) {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
@@ -85,7 +87,7 @@ export function VoiceBubble({ message, mine }: { message: ChatMessage; mine: boo
   }
 
   return (
-    <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs, styles.voice]}>
+    <Pressable onLongPress={onLongPress} style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs, styles.voice]}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={status.playing ? t('chat.pause') : t('chat.play')}
@@ -109,11 +111,11 @@ export function VoiceBubble({ message, mine }: { message: ChatMessage; mine: boo
           <Text style={[styles.meta, mine && styles.metaMine]}>{clock(message.created_at)}</Text>
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
-export function LocationBubble({ message, mine, chatKind }: { message: ChatMessage; mine: boolean; chatKind: ChatKind }) {
+export function LocationBubble({ message, mine, chatKind, onLongPress }: BubbleProps & { chatKind: ChatKind }) {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
@@ -145,6 +147,7 @@ export function LocationBubble({ message, mine, chatKind }: { message: ChatMessa
       accessibilityRole="button"
       accessibilityLabel={t('chat.liveLocationTitle')}
       onPress={() => router.push({ pathname: '/live-location', params: { kind: chatKind, messageId: message.id } })}
+      onLongPress={onLongPress}
       style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs, styles.location]}>
       <View style={styles.locationTop}>
         <View style={[styles.locationIcon, live && styles.locationIconLive]}>

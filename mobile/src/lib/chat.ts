@@ -6,7 +6,8 @@ import { supabase, uniqueChannelName } from '@/lib/supabase';
 // Table chat (meetup_messages), direct messages (direct_threads / direct_messages), block and report.
 // The rules live in the database (supabase/migrations/*_chat_and_travellers.sql).
 
-export type MessageKind = 'text' | 'photo' | 'voice' | 'location';
+// 'unsent': the sender took it back (shown as "Message unsent").
+export type MessageKind = 'text' | 'photo' | 'voice' | 'location' | 'unsent';
 
 export type ChatMessage = {
   id: string;
@@ -24,6 +25,8 @@ export type ChatMessage = {
   lng: number | null;
   live_until: string | null;
   location_updated_at: string | null;
+  // Set when the sender edited the text.
+  edited_at: string | null;
 };
 
 const CHAT_ERRORS = [
@@ -48,7 +51,7 @@ export function chatError(error: Pick<PostgrestError, 'message'> | null): ChatEr
 
 // The columns every chat (table, private, group) selects for its messages.
 export const MESSAGE_COLUMNS =
-  'id, sender_id, body, created_at, kind, media_path, duration_ms, lat, lng, live_until, location_updated_at, profiles(display_name, avatar_path)';
+  'id, sender_id, body, created_at, kind, media_path, duration_ms, lat, lng, live_until, location_updated_at, edited_at, profiles(display_name, avatar_path)';
 
 export type MessageRow = Omit<ChatMessage, 'sender_name' | 'sender_avatar'> & {
   profiles: { display_name: string; avatar_path: string | null } | null;

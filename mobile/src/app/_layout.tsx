@@ -4,6 +4,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthProvider, requirePhoneVerification, useAuth } from '@/lib/auth';
 import { useLiveLocationSharing } from '@/lib/live-location';
@@ -14,14 +15,17 @@ import { ThemeProvider, useTheme } from '@/lib/theme';
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  // The gesture root lets rows be swiped (Messages).
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <OnboardingProvider>
-          <RootNavigator />
-        </OnboardingProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <AuthProvider>
+          <OnboardingProvider>
+            <RootNavigator />
+          </OnboardingProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
 

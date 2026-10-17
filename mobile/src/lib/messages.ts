@@ -41,6 +41,9 @@ export type ChatSummary = {
   last_sender_name: string | null;
   last_at: string;
   unread_count: number;
+  // My own pin / archive (pinned chats are listed first; archived ones only under Archived).
+  pinned: boolean;
+  archived: boolean;
 };
 
 const GROUP_ERRORS = [
@@ -114,8 +117,8 @@ export function useChats(enabled: boolean) {
     };
   }, [enabled, load]);
 
-  // The badge: chats with something new.
-  const unreadChats = (chats ?? []).filter((chat) => chat.unread_count > 0).length;
+  // The badge: chats with something new (archived chats don't count).
+  const unreadChats = (chats ?? []).filter((chat) => chat.unread_count > 0 && !chat.archived).length;
   return { chats, unreadChats, reload: load };
 }
 
@@ -146,6 +149,14 @@ export function useMarkChatRead(kind: ChatKind, chatId: string | null | undefine
       markChatRead(kind, chatId);
     };
   }, [kind, chatId]);
+}
+
+// Pin or archive a chat (for me only).
+export async function setChatFlag(kind: ChatKind, chatId: string, what: 'pin' | 'archive', on: boolean) {
+  const { error } = await supabase.rpc('set_chat_flag', { p_kind: kind, p_chat_id: chatId, p_what: what, p_on: on });
+  if (error) console.warn('Saving chat flag failed', error.message);
+  readListeners.forEach((listener) => listener());
+  return !error;
 }
 
 // Delete a private chat (for me), leave an ended table / hangout chat, or leave a group.

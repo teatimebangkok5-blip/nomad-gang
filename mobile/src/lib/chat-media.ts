@@ -129,6 +129,25 @@ export async function startLiveLocation(ref: ChatRef, minutes: LiveMinutes): Pro
   }
 }
 
+// Edit the text of one of my messages.
+export async function editMessage(kind: ChatKind, messageId: string, body: string): Promise<ChatErrorKey | null> {
+  const { error } = await supabase.rpc('edit_chat_message', { p_chat_kind: kind, p_message_id: messageId, p_body: body });
+  return chatError(error);
+}
+
+// Take back one of my messages; a photo's or voice note's file is deleted too.
+export async function unsendMessage(kind: ChatKind, messageId: string): Promise<ChatErrorKey | null> {
+  const { data, error } = await supabase.rpc('unsend_chat_message', { p_chat_kind: kind, p_message_id: messageId });
+  if (!error && typeof data === 'string' && data) {
+    supabase.storage
+      .from(BUCKET)
+      .remove([data])
+      .then(({ error: removeError }) => removeError && console.warn('Removing chat file failed', removeError.message));
+  }
+  if (!error) liveSharesChanged();
+  return chatError(error);
+}
+
 export async function stopLiveLocation(kind: ChatKind, messageId: string): Promise<ChatErrorKey | null> {
   const { error } = await supabase.rpc('stop_live_location', { p_chat_kind: kind, p_message_id: messageId });
   liveSharesChanged();

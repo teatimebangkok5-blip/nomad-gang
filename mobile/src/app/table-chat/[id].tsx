@@ -9,11 +9,13 @@ import { Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { sendTableMessage, useTableChat } from '@/lib/chat';
+import { useMarkChatRead } from '@/lib/messages';
 import { useMeetup } from '@/lib/meetups';
 import { makeStyles } from '@/lib/theme';
 import { useVenues } from '@/lib/venues';
 
-// Group chat for the people who joined a table. Only members can read or post (enforced by the database).
+// Group chat for the people who joined a table or hangout. Only members can read or post (enforced by the database),
+// also after it ends or is cancelled, until they leave the chat in Messages.
 export default function TableChatScreen() {
   const styles = useStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -35,6 +37,7 @@ export default function TableChatScreen() {
         : (meetup?.place_name ?? '');
   const chatLabel = meetup?.kind === 'hangout' ? t('hangouts.chat') : t('chat.openChat');
   const isMember = Boolean(meetup?.members.some((m) => m.user_id === myId));
+  useMarkChatRead('meetup', isMember ? id : null, messages?.length ?? 0);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>

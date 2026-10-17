@@ -308,7 +308,7 @@ export default function TableScreen() {
             </Text>
           )}
 
-          {isMember && !cancelled && (
+          {isMember && (
             <View style={styles.actions}>
               <Button
                 title={isHangout ? t('hangouts.chat') : t('chat.openChat')}

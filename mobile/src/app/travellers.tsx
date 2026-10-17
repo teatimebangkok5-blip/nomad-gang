@@ -11,67 +11,23 @@ import { ScreenHeader } from '@/components/screen-header';
 import { VenueMap } from '@/components/venue-map';
 import { Radius, Raised, Spacing, Type } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
-import { formatDayLabel, bangkokDay, bangkokMinutes, deviceZone, formatClock } from '@/lib/bangkok-time';
-import { useThreads, type ThreadSummary } from '@/lib/chat';
 import { useCurrentLocation } from '@/lib/location';
 import { useFollowing } from '@/lib/profiles';
 import { makeStyles, useColors } from '@/lib/theme';
 import { useDiscoverable, useNearbyTravellers, type Traveller } from '@/lib/travellers';
 
-type Tab = 'nearby' | 'messages';
-
-// Travellers: people within 5 km who chose to be visible (fuzzy dots + list), and the message inbox.
+// Travellers: people within 5 km who chose to be visible (fuzzy dots + list). Messages are on home's Messages button.
 export default function TravellersScreen() {
   const styles = useStyles();
   const { t } = useTranslation();
   const { session } = useAuth();
   const myId = session?.user.id;
-  const [tab, setTab] = useState<Tab>('nearby');
-  const { threads } = useThreads(Boolean(myId));
-  const incoming = (threads ?? []).filter((th) => th.status === 'pending' && th.requested_by !== myId).length;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
       <ScreenHeader title={t('travellers.title')} />
-      <View style={styles.tabs}>
-        <TabButton label={t('travellers.nearby')} selected={tab === 'nearby'} onPress={() => setTab('nearby')} />
-        <TabButton
-          label={t('travellers.messages')}
-          badge={incoming}
-          selected={tab === 'messages'}
-          onPress={() => setTab('messages')}
-        />
-      </View>
-      {tab === 'nearby' ? <NearbyTab myId={myId} /> : <MessagesTab threads={threads} myId={myId} />}
+      <NearbyTab myId={myId} />
     </SafeAreaView>
-  );
-}
-
-function TabButton({
-  label,
-  selected,
-  badge = 0,
-  onPress,
-}: {
-  label: string;
-  selected: boolean;
-  badge?: number;
-  onPress: () => void;
-}) {
-  const styles = useStyles();
-  return (
-    <Pressable
-      accessibilityRole="tab"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={[styles.tab, selected && styles.tabSelected]}>
-      <Text style={[styles.tabLabel, selected && styles.tabLabelSelected]}>{label}</Text>
-      {badge > 0 && (
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{badge}</Text>
-        </View>
-      )}
-    </Pressable>
   );
 }
 
@@ -200,64 +156,6 @@ function NearbyTab({ myId }: { myId: string | undefined }) {
               <Icon name="chat" size={18} color={Colors.onBrand} />
             </Pressable>
           </View>
-        );
-      }}
-    />
-  );
-}
-
-function MessagesTab({ threads, myId }: { threads: ThreadSummary[] | null; myId: string | undefined }) {
-  const styles = useStyles();
-  const Colors = useColors();
-  const { t } = useTranslation();
-
-  if (threads === null) {
-    return <ActivityIndicator color={Colors.accent} style={styles.spinner} />;
-  }
-
-  return (
-    <FlatList
-      data={threads}
-      keyExtractor={(thread) => thread.thread_id}
-      contentContainerStyle={styles.pad}
-      ListEmptyComponent={
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>{t('travellers.noMessages')}</Text>
-          <Text style={styles.muted}>{t('travellers.noMessagesBody')}</Text>
-        </View>
-      }
-      renderItem={({ item }) => {
-        const incoming = item.status === 'pending' && item.requested_by !== myId;
-        const waiting = item.status === 'pending' && item.requested_by === myId;
-        const when = new Date(item.last_message_at);
-        return (
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push({ pathname: '/dm/[userId]', params: { userId: item.other_id } })}
-            style={({ pressed }) => [styles.person, pressed && styles.pressed]}>
-            <Avatar name={item.other_name} />
-            <View style={styles.personBody}>
-              <View style={styles.threadTop}>
-                <Text style={styles.personName} numberOfLines={1}>
-                  {item.other_name}
-                </Text>
-                <Text style={styles.time}>
-                  {bangkokDay(when, deviceZone()) === bangkokDay(new Date(), deviceZone())
-                    ? formatClock(bangkokMinutes(when, deviceZone()))
-                    : formatDayLabel(bangkokDay(when, deviceZone()), t, undefined, deviceZone())}
-                </Text>
-              </View>
-              <Text style={styles.muted} numberOfLines={1}>
-                {item.last_sender === myId ? t('travellers.youPrefix') : ''}
-                {item.last_body}
-              </Text>
-              {(incoming || waiting) && (
-                <Text style={[styles.status, incoming && styles.statusIncoming]}>
-                  {incoming ? t('travellers.request') : t('travellers.waiting')}
-                </Text>
-              )}
-            </View>
-          </Pressable>
         );
       }}
     />

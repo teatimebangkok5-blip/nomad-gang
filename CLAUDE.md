@@ -136,6 +136,20 @@ Product spec and tech stack below are agreed. Built so far:
   tables / hangouts within 50 km of me (or central Bangkok); the map pins all of them. `my_notifications(limit, lat,
   lng)`: new tables / hangouts only within 50 km of that point (Bangkok box without one). Day planner, partner venues,
   promotions and areas are still Bangkok-only.
+- **Messages + group chats** (added 2026-10-17, `*_messages_and_groups.sql`): a Messages button (chat icon, pink
+  badge = chats with unread messages) next to List on home → `src/app/messages.tsx`: one inbox (RPC `my_chats()`) of
+  private chats, group chats and table / hangout chats, filter chips, press-and-hold to delete / leave. Travellers is
+  now Nearby only. Read / hidden state per person and chat in `chat_state` (no API access; `mark_chat_read`,
+  `leave_chat`; `useMarkChatRead` in every chat screen). Rules: table / hangout chats stay after the meetup ends or
+  is cancelled (members can still write) until the member leaves the chat, which is only allowed once it has ended
+  (`meetup_not_ended`); then they can't read or write it (`in_meetup_chat`). "Delete chat" on a private chat hides
+  it for me only; a new message brings it back with only the newer messages (RLS on `direct_messages`).
+  **Group chats** (`chat_groups`, `chat_group_members`, `chat_group_messages`; `src/app/new-group.tsx`,
+  `group/[id].tsx`, `group-info/[id].tsx`): name + emoji, up to 100 people, **friends only** (mutual follows,
+  `my_friends()` / `are_friends`), any member adds their own friends, only the owner removes people and renames; the
+  owner role passes to the longest member when the owner leaves; the last one out deletes the group; new members
+  see messages from when they joined; blocked senders are hidden. The bell no longer lists chat / private messages
+  (message requests stay). Data: `src/lib/messages.ts`.
 - **Login without SMS for now** (founder's decision 2026-10-16): `app_settings.require_phone_verification` (default
   false) and `EXPO_PUBLIC_REQUIRE_PHONE` (default false) let Google accounts in without the phone check; turn both on
   once SMS is set up. With `EXPO_PUBLIC_SKIP_LOGIN=false`, a leftover anonymous guest session is signed out on start.

@@ -32,7 +32,6 @@ import { AREA_ZOOM, PLACE_ZOOM, useMapSearch, type SearchResult } from '@/lib/ma
 import { Radius, Raised, RaisedSmall, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { useAuth } from '@/lib/auth';
-import { useThreads } from '@/lib/chat';
 import { formatWhen } from '@/lib/bangkok-time';
 import { distanceMeters, useCurrentLocation } from '@/lib/location';
 import {
@@ -49,6 +48,7 @@ import { skipLogin } from '@/lib/preview';
 import { isHangoutVenue, PROMOTION_EMOJI, useVenues, type Venue } from '@/lib/venues';
 import { profilePhotoUrl } from '@/lib/photos';
 import { usePlansForMeetups, type DayPlan } from '@/lib/plans';
+import { useChats } from '@/lib/messages';
 import { useNotifications } from '@/lib/notifications';
 import { useMyName } from '@/lib/profiles';
 import { makeStyles, useColors } from '@/lib/theme';
@@ -77,10 +77,8 @@ export default function HomeScreen() {
   const { session } = useAuth();
   const venues = useVenues();
   const meetups = useOpenMeetups(Boolean(session));
-  const { threads } = useThreads(Boolean(session));
-  const incomingRequests = (threads ?? []).filter(
-    (thread) => thread.status === 'pending' && thread.requested_by !== session?.user.id,
-  ).length;
+  // Chats with unread messages (private, group, table and hangout chats; message requests too).
+  const { unreadChats } = useChats(Boolean(session));
   const location = useCurrentLocation();
   const [selection, setSelection] = useState<Selection | null>(null);
   const { places: mapPlaces, dots: placeDots, dotsMinZoom, onBoundsChange } = usePlacesInView();
@@ -304,7 +302,6 @@ export default function HomeScreen() {
               style={({ pressed }) => [styles.roundButton, pressed && styles.roundButtonPressed]}>
               <GlossyFill />
               <Icon name="travellers" size={20} color={Colors.accent} />
-              {incomingRequests > 0 && <View style={styles.dot} />}
             </Pressable>
             {/* The badge sits outside the button, which clips its contents to the circle. */}
             <View>
@@ -455,6 +452,24 @@ export default function HomeScreen() {
             <GlossyFill />
             <Icon name="list" size={22} color={Colors.text} />
           </Pressable>
+          {/* Messages: every chat in one place. The badge sits outside the button, which clips its contents. */}
+          <View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                unreadChats > 0 ? t('messages.openUnread', { count: unreadChats }) : t('messages.open')
+              }
+              onPress={() => router.push('/messages')}
+              style={({ pressed }) => [styles.listButton, pressed && styles.roundButtonPressed]}>
+              <GlossyFill />
+              <Icon name="chat" size={22} color={Colors.accent} />
+            </Pressable>
+            {unreadChats > 0 && (
+              <View style={styles.countBadge} pointerEvents="none">
+                <Text style={styles.countBadgeText}>{unreadChats > 9 ? '9+' : unreadChats}</Text>
+              </View>
+            )}
+          </View>
         </View>
       </View>
 

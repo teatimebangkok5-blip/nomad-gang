@@ -1,6 +1,5 @@
 import type { PostgrestError } from '@supabase/supabase-js';
 import { useCallback, useEffect, useState } from 'react';
-import { AppState } from 'react-native';
 
 import { supabase, uniqueChannelName } from '@/lib/supabase';
 
@@ -108,52 +107,6 @@ export async function sendTableMessage(meetupId: string, senderId: string, body:
 // ---------------------------------------------------------------------------
 
 export type ThreadStatus = 'pending' | 'accepted' | 'declined';
-
-export type ThreadSummary = {
-  thread_id: string;
-  other_id: string;
-  other_name: string;
-  status: ThreadStatus;
-  requested_by: string;
-  last_body: string | null;
-  last_sender: string | null;
-  last_message_at: string;
-};
-
-async function fetchThreads(): Promise<ThreadSummary[] | null> {
-  const { data, error } = await supabase.rpc('list_my_threads');
-  if (error) {
-    console.warn('Loading conversations failed', error.message);
-    return null;
-  }
-  return data as ThreadSummary[];
-}
-
-// The inbox. Live-updates on new messages and request changes.
-export function useThreads(enabled: boolean) {
-  const [threads, setThreads] = useState<ThreadSummary[] | null>(null);
-
-  const load = useCallback(() => fetchThreads().then((rows) => rows && setThreads(rows)), []);
-
-  useEffect(() => {
-    if (!enabled) return;
-    load();
-    const appState = AppState.addEventListener('change', (next) => {
-      if (next === 'active') load();
-    });
-    const channel = supabase
-      .channel(uniqueChannelName('inbox'))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'direct_threads' }, () => load())
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'direct_messages' }, () => load())
-      .subscribe();
-    return () => {
-      appState.remove();
-      supabase.removeChannel(channel);
-    };
-  }, [enabled, load]);
-
-  return { threads, reload: load };
-}
 
 export type DirectThread = { id: string; status: ThreadStatus; requested_by: string };
 

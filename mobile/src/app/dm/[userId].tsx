@@ -11,6 +11,7 @@ import { ScreenHeader } from '@/components/screen-header';
 import { Radius, Spacing, Type } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
 import { respondToRequest, sendDirectMessage, useDirectChat, type ChatErrorKey } from '@/lib/chat';
+import { useMarkChatRead } from '@/lib/messages';
 import { openSafetyMenu } from '@/lib/safety-menu';
 import { makeStyles, useColors } from '@/lib/theme';
 
@@ -27,6 +28,7 @@ export default function DirectChatScreen() {
   const [error, setError] = useState<ChatErrorKey | null>(null);
 
   const thread = state?.thread ?? null;
+  useMarkChatRead('dm', thread?.id, state?.messages.length ?? 0);
   const name = state?.otherName ?? '';
   const incomingRequest = thread?.status === 'pending' && thread.requested_by !== myId;
   const outgoingPending = thread?.status === 'pending' && thread.requested_by === myId;

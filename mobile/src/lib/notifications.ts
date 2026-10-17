@@ -2,6 +2,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 
+import type { Coords } from '@/lib/location';
 import { supabase, uniqueChannelName } from '@/lib/supabase';
 import type { PromotionKind, VenueCategory } from '@/lib/venues';
 
@@ -51,13 +52,17 @@ const REFRESH_MS = 2 * 60 * 1000;
 
 // The list and the unread count. Reloads when the screen using it comes into focus, when the app returns to the
 // foreground, every 2 minutes, and (a moment after) when something new happens that could be a notification.
-export function useNotifications(enabled: boolean) {
+// `near`: my position, so new tables / hangouts are the ones near me (hangouts can be anywhere in the world); without
+// it the server uses Bangkok. Rounded to about 1 km so small moves don't reload the list.
+export function useNotifications(enabled: boolean, near: Coords | null = null) {
   const [state, setState] = useState<State>({ status: 'loading' });
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nearKey = near ? `${near.lat.toFixed(2)},${near.lng.toFixed(2)}` : '';
 
   const load = useCallback(() => {
     if (!enabled) return;
-    supabase.rpc('my_notifications', { p_limit: 60 }).then(({ data, error }) => {
+    const [lat, lng] = nearKey ? nearKey.split(',').map(Number) : [null, null];
+    supabase.rpc('my_notifications', { p_limit: 60, p_lat: lat, p_lng: lng }).then(({ data, error }) => {
       if (error) {
         console.warn('Loading notifications failed', error.message);
         setState((prev) => (prev.status === 'ready' ? prev : { status: 'error' }));
@@ -65,7 +70,7 @@ export function useNotifications(enabled: boolean) {
       }
       setState({ status: 'ready', items: (data ?? []) as AppNotification[] });
     });
-  }, [enabled]);
+  }, [enabled, nearKey]);
 
   useFocusEffect(load);
 

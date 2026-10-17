@@ -39,9 +39,9 @@ export function MeetupCard({
       <GlossyFill />
       <View style={[styles.when, hangout && styles.whenHangout]}>
         <Text style={[styles.day, hangout && styles.dayHangout]} numberOfLines={1}>
-          {formatDayLabel(bangkokDay(start), t)}
+          {formatDayLabel(bangkokDay(start, meetup.time_zone), t, undefined, meetup.time_zone)}
         </Text>
-        <Text style={styles.time}>{formatClock(bangkokMinutes(start))}</Text>
+        <Text style={styles.time}>{formatClock(bangkokMinutes(start, meetup.time_zone))}</Text>
       </View>
 
       <View style={styles.body}>

@@ -7,6 +7,7 @@ import type { VenueCategory } from '@/lib/venues';
 // Bangkok places from OpenStreetMap (© OpenStreetMap contributors), stored in public.places. Food and drink places
 // ('food') can host a table; places to hang out ('hangout': temples, parks, malls, markets, museums, attractions, …)
 // show on the Hangout map. Hangouts can be at either. Partner venues may be linked to one (venues.place_id).
+// Outside Bangkok the Hangout map shows world places from the map tiles instead (see WORLD_SUBCLASS_KIND).
 export type PlacePurpose = 'food' | 'hangout';
 
 export type Place = {
@@ -21,6 +22,8 @@ export type Place = {
   website?: string | null;
   // Hangout places: whether entry needs a ticket (null = not confirmed).
   entry?: PlaceEntry | null;
+  // A place from the world map tiles (not in public.places): a hangout there is created as a named spot.
+  world?: boolean;
 };
 
 // 'free_thai': free for Thai citizens, foreigners pay (e.g. Wat Pho, Grand Palace).
@@ -67,6 +70,11 @@ const HANGOUT_KIND_EMOJI: Record<string, string> = {
   water_park: '🌊',
   cinema: '🎬',
   theatre: '🎭',
+  escape_game: '🔐',
+  bowling_alley: '🎳',
+  ice_rink: '⛸️',
+  miniature_golf: '⛳',
+  amusement_arcade: '🕹️',
 };
 
 export function placeEmoji(kind: string): string {
@@ -146,6 +154,69 @@ const KIND_ICON: Record<string, PlaceIcon> = {
 
 export function placeIcon(kind: string): PlaceIcon {
   return KIND_ICON[kind] ?? 'place';
+}
+
+// World places: outside Bangkok the Hangout map draws places straight from the OpenFreeMap vector tiles
+// (OpenStreetMap, layer "poi"), so nothing is stored for them. These tile subclasses are shown, mapped to the app's
+// place kinds (founder's choice: sights & culture, parks & nature, shopping & markets, fun & entertainment).
+export const WORLD_SUBCLASS_KIND: Record<string, string> = {
+  // Sights & culture
+  attraction: 'attraction',
+  viewpoint: 'viewpoint',
+  monument: 'monument',
+  memorial: 'monument',
+  castle: 'castle',
+  palace: 'castle',
+  fort: 'castle',
+  ruins: 'monument',
+  museum: 'museum',
+  gallery: 'gallery',
+  arts_centre: 'arts_centre',
+  // Parks & nature
+  park: 'park',
+  garden: 'garden',
+  nature_reserve: 'nature_reserve',
+  // Shopping & markets
+  mall: 'mall',
+  department_store: 'mall',
+  marketplace: 'market',
+  // Fun & entertainment
+  zoo: 'zoo',
+  aquarium: 'aquarium',
+  theme_park: 'theme_park',
+  water_park: 'water_park',
+  cinema: 'cinema',
+  theatre: 'theatre',
+  escape_game: 'escape_game',
+  bowling_alley: 'bowling_alley',
+  ice_rink: 'ice_rink',
+  miniature_golf: 'miniature_golf',
+  amusement_arcade: 'amusement_arcade',
+};
+
+// Religious places (temples, churches, mosques, …) only when well known: their name is written in at least
+// WORLD_FAMOUS_MIN of these languages in OpenStreetMap (famous ones have dozens; neighbourhood ones 0–4).
+export const WORLD_FAMOUS_LANGUAGES = ['en', 'de', 'fr', 'es', 'it', 'ru', 'ja', 'zh', 'ko', 'ar', 'pt', 'pl', 'uk', 'nl'];
+export const WORLD_FAMOUS_MIN = 8;
+
+// A world place tapped on the map (from the tiles): shown on the place card, and a hangout there is a spot with its
+// name and pin.
+export function worldPlaceFromTile(feature: GeoJSON.Feature): Place | null {
+  const p = feature.properties ?? {};
+  const name = typeof p.name === 'string' ? p.name.trim() : '';
+  if (!name || feature.geometry?.type !== 'Point') return null;
+  const [lng, lat] = feature.geometry.coordinates;
+  const kind = p.class === 'place_of_worship' ? 'temple' : WORLD_SUBCLASS_KIND[String(p.subclass)] ?? 'attraction';
+  return {
+    id: `world:${feature.id ?? `${lat.toFixed(5)},${lng.toFixed(5)}`}`,
+    name,
+    name_en: typeof p['name:en'] === 'string' ? p['name:en'] : null,
+    name_th: typeof p['name:th'] === 'string' ? p['name:th'] : null,
+    kind,
+    lat,
+    lng,
+    world: true,
+  };
 }
 
 export type MapBounds = { west: number; south: number; east: number; north: number; zoom: number };

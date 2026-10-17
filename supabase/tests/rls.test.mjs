@@ -429,9 +429,10 @@ check("tables can't be created at a hangout place", /venue_unavailable/.test(r.e
 const hangout = (who, a) =>
   tryQuery("authenticated", who,
     `select public.create_hangout(p_title => $1, p_description => $2, p_starts_at => $3, p_duration_minutes => $4,
-       p_max_people => $5, p_venue_id => $6, p_place_id => $7, p_spot_lat => $8, p_spot_lng => $9, p_spot_name => $10) as id`,
+       p_max_people => $5, p_venue_id => $6, p_place_id => $7, p_spot_lat => $8, p_spot_lng => $9, p_spot_name => $10,
+       p_time_zone => $11) as id`,
     [a.title ?? "Sunset walk", a.description ?? "", a.startsAt ?? inHours(2), a.duration ?? 120, a.size ?? 2,
-      a.venueId ?? null, a.placeId ?? null, a.lat ?? null, a.lng ?? null, a.spotName ?? null]);
+      a.venueId ?? null, a.placeId ?? null, a.lat ?? null, a.lng ?? null, a.spotName ?? null, a.zone ?? null]);
 
 r = await hangout(user, { placeId: lumphiniId, description: "  Bring water  " });
 check("hangout at a hangout place", !r.error);
@@ -444,8 +445,27 @@ check("hangout at any spot on the map, 30 people, 12 hours", !r.error);
 const spotHangoutId = r.rows?.[0]?.id;
 r = await tryQuery("authenticated", g1, `select place_id, place_name, place_lat, joined from public.list_open_meetups() where id = $1`, [spotHangoutId]);
 check("spot hangout listed with the spot's name and pin", r.rows?.[0]?.place_id === null && r.rows[0].place_name === "Siam BTS exit 1" && r.rows[0].place_lat === 13.7466 && r.rows[0].joined === false);
+r = await tryQuery("authenticated", user, `select time_zone from public.list_open_meetups() where id = $1`, [spotHangoutId]);
+check("a Bangkok spot without a zone gets Bangkok time", r.rows?.[0]?.time_zone === "Asia/Bangkok");
 r = await hangout(user, { lat: 18.79, lng: 98.98, spotName: "Chiang Mai" });
-check("spot outside Bangkok rejected", /outside_bangkok/.test(r.error ?? ""));
+check("spot outside Bangkok needs its time zone", /invalid_time_zone/.test(r.error ?? ""));
+r = await hangout(user, { lat: 48.8606, lng: 2.3376, spotName: "Louvre", zone: "Mars/Olympus_Mons" });
+check("made-up time zone rejected", /invalid_time_zone/.test(r.error ?? ""));
+r = await hangout(user, { lat: 91, lng: 2.3, spotName: "Nowhere", zone: "Europe/Paris" });
+check("spot off the globe rejected", /invalid_place/.test(r.error ?? ""));
+r = await hangout(g1, { lat: 48.8606, lng: 2.3376, spotName: "Louvre", zone: "Europe/Paris" });
+check("hangout anywhere in the world with its time zone", !r.error);
+const parisHangoutId = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", user, `select place_name, time_zone from public.list_open_meetups() where id = $1`, [parisHangoutId]);
+check("world hangout listed with its spot and zone", r.rows?.[0]?.place_name === "Louvre" && r.rows[0].time_zone === "Europe/Paris");
+r = await tryQuery("authenticated", user, `select count(*)::int n from public.my_notifications(100) where meetup_id = $1`, [parisHangoutId]);
+check("Bangkok users aren't notified of a Paris hangout", r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", user, `select count(*)::int n from public.my_notifications(100, 48.85, 2.35) where meetup_id = $1`, [parisHangoutId]);
+check("people near Paris are notified of it", r.rows?.[0]?.n === 1);
+r = await tryQuery("authenticated", g1, `select public.cancel_meetup($1)`, [parisHangoutId]);
+check("world hangout cancelled like any other", !r.error);
+r = await tryQuery("authenticated", user, `select public.create_meetup_at_place($1, $2, 4)`, [lumphiniId, inHours(2)]);
+check("tables still need a Bangkok food place", /venue_unavailable/.test(r.error ?? ""));
 r = await hangout(user, { lat: 13.75, lng: 100.5, spotName: "   " });
 check("spot without a name rejected", /spot_name_required/.test(r.error ?? ""));
 r = await hangout(user, { placeId: lumphiniId, lat: 13.75, lng: 100.5, spotName: "x" });

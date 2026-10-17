@@ -14,7 +14,7 @@ import { ScreenHeader } from '@/components/screen-header';
 import { Radius, RaisedSmall, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { useAuth } from '@/lib/auth';
-import { formatWhen, formatWhenRange } from '@/lib/bangkok-time';
+import { deviceZone, formatUtcOffset, formatWhen, formatWhenRange, sameClock } from '@/lib/bangkok-time';
 import { isSafeLink, openLink, ticketLink } from '@/lib/links';
 import {
   cancelMeetup,
@@ -148,7 +148,12 @@ export default function TableScreen() {
             <View style={styles.fact}>
               <Icon name="time" size={18} color={Colors.accent} />
               <Text style={styles.factText}>
-                {isHangout ? formatWhenRange(meetup.starts_at, meetup.ends_at, t) : formatWhen(meetup.starts_at, t)}
+                {isHangout
+                  ? formatWhenRange(meetup.starts_at, meetup.ends_at, t, undefined, meetup.time_zone)
+                  : formatWhen(meetup.starts_at, t, undefined, meetup.time_zone)}
+                {!sameClock(meetup.time_zone, deviceZone(), new Date(meetup.starts_at))
+                  ? `  ·  ${t('hangouts.localTime', { offset: formatUtcOffset(meetup.time_zone, new Date(meetup.starts_at)) })}`
+                  : ''}
               </Text>
             </View>
             {isHangout && (

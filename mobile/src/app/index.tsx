@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { GlossyFill } from '@/components/glossy';
+import { GlossyFill, Shine } from '@/components/glossy';
 import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { LanguageToggle } from '@/components/language-toggle';
@@ -34,7 +34,7 @@ import { currentLanguage, localized } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { useThreads } from '@/lib/chat';
 import { formatWhen } from '@/lib/bangkok-time';
-import { useCurrentLocation } from '@/lib/location';
+import { distanceMeters, useCurrentLocation } from '@/lib/location';
 import {
   directionsUrl,
   joinMeetup,
@@ -64,6 +64,10 @@ type Selection =
 // and their Discount/Offer/Event/Party buttons are on the Create table map). My profile, the logo, language,
 // Travellers, Settings and the search bar float on top; a swipeable row of cards, "Create table", "Create hangout"
 // and a "List" button (everything open) float at the bottom.
+// The cards row and the List show tables and hangouts within this distance.
+const NEARBY_METERS = 50_000;
+const BANGKOK_CENTER = { lat: 13.7466, lng: 100.5393 };
+
 export default function HomeScreen() {
   const styles = useStyles();
   const Colors = useColors();
@@ -90,11 +94,18 @@ export default function HomeScreen() {
   const diningVenues = venues.venues.filter((venue) => !isHangoutVenue(venue));
   const diningVenueIds = new Set(diningVenues.map((venue) => venue.id));
   // Partner venues live on the Create table map, so home search finds places and areas only.
-  const search = useMapSearch('food', []);
+  const search = useMapSearch('food', [], { near: coords });
   const me = useMyName(session?.user.id);
-  const notifications = useNotifications(Boolean(session));
+  const notifications = useNotifications(Boolean(session), coords);
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const visibleMeetups = meetups.meetups;
+  // Hangouts can be anywhere in the world: the map pins them all, but the cards row and the List only show the ones
+  // near me (or near central Bangkok without my location).
+  const listCenter = coords ?? BANGKOK_CENTER;
+  const nearbyMeetups = visibleMeetups.filter((meetup) => {
+    const at = meetupCoords(meetup, venueById);
+    return !at || distanceMeters(listCenter, at) <= NEARBY_METERS;
+  });
 
   // Home shows what people created: tables share a 👥 pin per venue or place (partner venues themselves aren't
   // pinned on home), hangouts share a 🙌 pin per place or spot.
@@ -192,6 +203,9 @@ export default function HomeScreen() {
     } else if (result.type === 'place') {
       setSelection({ type: 'place', place: result.place });
       setFocus({ lat: result.place.lat, lng: result.place.lng, zoom: PLACE_ZOOM, seq: Date.now() });
+    } else if (result.type === 'world') {
+      setSelection(null);
+      setFocus({ lat: result.world.lat, lng: result.world.lng, zoom: result.world.zoom, seq: Date.now() });
     } else {
       setSelection(null);
       setFocus({ lat: result.area.lat, lng: result.area.lng, zoom: AREA_ZOOM[result.area.kind], seq: Date.now() });
@@ -327,14 +341,28 @@ export default function HomeScreen() {
           <MapSearchBar value={search.query} onChangeText={search.setQuery} placeholder={t('search.foodPlaceholder')} />
         </View>
 
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push('/plan-day')}
-          style={({ pressed }) => [styles.planPill, pressed && styles.roundButtonPressed]}>
-          <GlossyFill />
-          <Icon name="route" size={16} color={Colors.violet} />
-          <Text style={styles.locationPillText}>{t('plan.open')}</Text>
-        </Pressable>
+        {/* Plan my day: a bright violet → pink button, bigger than the round header buttons, with a star badge. The
+            badge sits outside the button, which clips its contents. */}
+        <View style={styles.planWrap}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push('/plan-day')}
+            style={({ pressed }) => [styles.planButton, pressed && styles.roundButtonPressed]}>
+            <LinearGradient
+              colors={[Colors.violet, Colors.pink]}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+            <Shine onColor />
+            <Icon name="route" size={22} color={Colors.white} />
+            <Text style={styles.planButtonText}>{t('plan.open')}</Text>
+          </Pressable>
+          <View style={styles.planStar} pointerEvents="none">
+            <Text style={styles.planStarText}>⭐</Text>
+          </View>
+        </View>
 
         {skipLogin && (
           // Developer-only notice (English on purpose): reminds that this build skips sign-in.
@@ -377,7 +405,7 @@ export default function HomeScreen() {
           />
         ) : !session ? null : meetups.status === 'loading' ? (
           <ActivityIndicator color={Colors.accent} style={styles.cardsSpinner} />
-        ) : visibleMeetups.length === 0 ? (
+        ) : nearbyMeetups.length === 0 ? (
           <View style={[styles.emptyCard, { marginHorizontal: Spacing.lg }]}>
             <GlossyFill />
             <Text style={styles.emptyTitle}>
@@ -389,7 +417,7 @@ export default function HomeScreen() {
         ) : (
           <FlatList
             horizontal
-            data={visibleMeetups}
+            data={nearbyMeetups}
             keyExtractor={(meetup) => meetup.id}
             renderItem={({ item }) => <View style={{ width: cardWidth }}>{renderMeetup(item)}</View>}
             showsHorizontalScrollIndicator={false}
@@ -439,7 +467,7 @@ export default function HomeScreen() {
 
       <SlideUpPanel open={listOpen} onClose={() => setListOpen(false)}>
         <ListPanel
-          meetups={visibleMeetups}
+          meetups={nearbyMeetups}
           meetupsStatus={session ? meetups.status : 'ready'}
           renderMeetup={renderMeetup}
           onRefresh={async () => {
@@ -791,22 +819,39 @@ const useStyles = makeStyles((Colors) => ({
     borderWidth: 1,
     borderColor: Colors.violet,
   },
-  planPill: {
+  planWrap: { alignSelf: 'flex-start', marginLeft: Spacing.lg, marginTop: Spacing.md },
+  // Taller than the 40 dp round header buttons, so it stands out.
+  planButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs,
-    alignSelf: 'flex-start',
-    marginLeft: Spacing.lg,
-    marginTop: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    minHeight: 36,
+    gap: Spacing.sm,
+    minHeight: 52,
+    paddingLeft: Spacing.lg,
+    paddingRight: Spacing.xl,
     borderRadius: Radius.pill,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    backgroundColor: Colors.violet,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
     overflow: 'hidden',
-    ...RaisedSmall,
+    ...Raised,
   },
+  planButtonText: { ...Type.label, fontSize: 17, fontWeight: '800', color: Colors.white },
+  planStar: {
+    position: 'absolute',
+    // Above the raised button's shadow layer on Android.
+    elevation: 12,
+    top: -8,
+    right: -8,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Colors.bg,
+    borderWidth: 2,
+    borderColor: '#FFC83D',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  planStarText: { fontSize: 13, lineHeight: 16 },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, gap: Spacing.md },
   cards: { gap: Spacing.md, paddingHorizontal: Spacing.lg },
   cardsSpinner: { marginVertical: Spacing.lg },

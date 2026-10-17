@@ -5,6 +5,7 @@
   "dependencies": {
     "@expo/ui": "~57.0.24",
     "@maplibre/maplibre-react-native": "^11.5.0",
+    "@photostructure/tz-lookup": "^11.7.0",
     "@react-native-google-signin/google-signin": "^16.1.5",
     "@supabase/supabase-js": "^2.117.3",
     "expo": "~57.0.29",

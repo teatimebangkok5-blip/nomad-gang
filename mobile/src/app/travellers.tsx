@@ -11,7 +11,7 @@ import { ScreenHeader } from '@/components/screen-header';
 import { VenueMap } from '@/components/venue-map';
 import { Radius, Raised, Spacing, Type } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
-import { formatDayLabel, bangkokDay, bangkokMinutes, formatClock } from '@/lib/bangkok-time';
+import { formatDayLabel, bangkokDay, bangkokMinutes, deviceZone, formatClock } from '@/lib/bangkok-time';
 import { useThreads, type ThreadSummary } from '@/lib/chat';
 import { useCurrentLocation } from '@/lib/location';
 import { useFollowing } from '@/lib/profiles';
@@ -242,9 +242,9 @@ function MessagesTab({ threads, myId }: { threads: ThreadSummary[] | null; myId:
                   {item.other_name}
                 </Text>
                 <Text style={styles.time}>
-                  {bangkokDay(when) === bangkokDay(new Date())
-                    ? formatClock(bangkokMinutes(when))
-                    : formatDayLabel(bangkokDay(when), t)}
+                  {bangkokDay(when, deviceZone()) === bangkokDay(new Date(), deviceZone())
+                    ? formatClock(bangkokMinutes(when, deviceZone()))
+                    : formatDayLabel(bangkokDay(when, deviceZone()), t, undefined, deviceZone())}
                 </Text>
               </View>
               <Text style={styles.muted} numberOfLines={1}>

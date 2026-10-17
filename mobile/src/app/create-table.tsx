@@ -90,7 +90,7 @@ export default function CreateTableScreen() {
     } else if (result.type === 'place') {
       setPicked({ type: 'place', place: result.place });
       setFocus({ lat: result.place.lat, lng: result.place.lng, zoom: PLACE_ZOOM, seq: Date.now() });
-    } else {
+    } else if (result.type === 'area') {
       setFocus({ lat: result.area.lat, lng: result.area.lng, zoom: AREA_ZOOM[result.area.kind], seq: Date.now() });
     }
   }

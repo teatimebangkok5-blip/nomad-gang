@@ -13,6 +13,7 @@ import { ScreenHeader } from '@/components/screen-header';
 import { Radius, RaisedSmall, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, type Language } from '@/i18n';
 import { useAuth } from '@/lib/auth';
+import { useCurrentLocation } from '@/lib/location';
 import { markNotificationsSeen, useNotifications, type AppNotification } from '@/lib/notifications';
 import { profilePhotoUrl } from '@/lib/photos';
 import { HANGOUT_CATEGORIES, PROMOTION_EMOJI } from '@/lib/venues';
@@ -36,7 +37,11 @@ export default function NotificationsScreen() {
   const Colors = useColors();
   const { t } = useTranslation();
   const { session } = useAuth();
-  const notifications = useNotifications(Boolean(session));
+  const location = useCurrentLocation();
+  const notifications = useNotifications(
+    Boolean(session),
+    location.state.status === 'granted' ? location.state.coords : null,
+  );
   const marked = useRef(false);
 
   // Once the list has loaded, everything in it counts as seen. The dots stay for this visit.

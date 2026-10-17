@@ -97,7 +97,7 @@ export function MapSearchResults({
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.list}>
         {results.map((result) => (
           <ResultRow
-            key={`${result.type}:${result.type === 'venue' ? result.venue.id : result.type === 'place' ? result.place.id : result.area.id}`}
+            key={resultKey(result)}
             result={result}
             onPress={() => {
               Keyboard.dismiss();
@@ -110,6 +110,13 @@ export function MapSearchResults({
       </ScrollView>
     </View>
   );
+}
+
+function resultKey(result: SearchResult): string {
+  if (result.type === 'venue') return `venue:${result.venue.id}`;
+  if (result.type === 'place') return `place:${result.place.id}`;
+  if (result.type === 'area') return `area:${result.area.id}`;
+  return result.world.id;
 }
 
 function ResultRow({ result, onPress }: { result: SearchResult; onPress: () => void }) {
@@ -136,6 +143,18 @@ function ResultRow({ result, onPress }: { result: SearchResult; onPress: () => v
     title = placeName(place, language);
     subtitle = t(`placeKind.${kind}`);
     icon = <Image source={PLACE_ICON_IMAGES[kind]} style={styles.placeIcon} contentFit="contain" />;
+  } else if (result.type === 'world') {
+    const { world } = result;
+    title = world.name;
+    const kindLabel = world.place ? t(`placeKind.${placeIcon(world.place.kind)}`) : t(`search.world.${world.kind}`);
+    subtitle = world.context ? `${kindLabel} · ${world.context}` : kindLabel;
+    icon = world.place ? (
+      <Image source={PLACE_ICON_IMAGES[placeIcon(world.place.kind)]} style={styles.placeIcon} contentFit="contain" />
+    ) : (
+      <View style={[styles.badge, styles.badgeWorld]}>
+        <Icon name={world.kind === 'street' ? 'road' : 'language'} size={16} color={Colors.white} />
+      </View>
+    );
   } else {
     const { area } = result;
     title = areaName(area, language);
@@ -214,6 +233,7 @@ const useStyles = makeStyles((Colors) => ({
   badge: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   badgeVenue: { backgroundColor: Colors.orange },
   badgeArea: { backgroundColor: Colors.violet },
+  badgeWorld: { backgroundColor: '#3F78E0' },
   badgeEmoji: { fontSize: 15 },
   spinner: { marginVertical: Spacing.md },
   empty: { ...Type.body, color: Colors.textSecondary, padding: Spacing.lg, textAlign: 'center' },

@@ -152,7 +152,7 @@ export default function PlanDayScreen() {
     search.clear();
     if (found.type === 'venue') setStart({ type: 'picked', name: localized(found.venue, 'name', language), at: found.venue });
     else if (found.type === 'place') setStart({ type: 'picked', name: placeName(found.place, language), at: found.place });
-    else setStart({ type: 'picked', name: areaName(found.area, language), at: found.area });
+    else if (found.type === 'area') setStart({ type: 'picked', name: areaName(found.area, language), at: found.area });
   }
 
   if (result) {
@@ -197,16 +197,18 @@ export default function PlanDayScreen() {
           <View style={styles.results}>
             <GlossyFill />
             {search.searching && <ActivityIndicator color={Colors.accent} style={styles.spinner} />}
-            {search.results.slice(0, 8).map((found) => {
+            {search.results.filter((found) => found.type !== 'world').slice(0, 8).map((found) => {
               const name =
                 found.type === 'venue'
                   ? localized(found.venue, 'name', language)
                   : found.type === 'place'
                     ? placeName(found.place, language)
-                    : areaName(found.area, language);
+                    : found.type === 'area'
+                      ? areaName(found.area, language)
+                      : '';
               return (
                 <Pressable
-                  key={`${found.type}:${found.type === 'venue' ? found.venue.id : found.type === 'place' ? found.place.id : found.area.id}`}
+                  key={`${found.type}:${found.type === 'venue' ? found.venue.id : found.type === 'place' ? found.place.id : found.type === 'area' ? found.area.id : ''}`}
                   accessibilityRole="button"
                   onPress={() => pickSearch(found)}
                   style={({ pressed }) => [styles.resultRow, pressed && styles.pressed]}>

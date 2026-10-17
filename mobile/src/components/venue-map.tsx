@@ -6,6 +6,7 @@ import {
   Map,
   Marker,
   UserLocation,
+  VectorSource,
   type CameraRef,
   type MapRef,
 } from '@maplibre/maplibre-react-native';
@@ -18,7 +19,17 @@ import { Radius } from '@/constants/theme';
 import { currentLanguage } from '@/i18n';
 import type { Coords } from '@/lib/location';
 import { PLACE_ICON_IMAGES } from '@/lib/place-icons';
-import { PLACE_ICON_COLORS, placeIcon, placeName, type MapBounds, type Place } from '@/lib/places';
+import {
+  PLACE_ICON_COLORS,
+  placeIcon,
+  placeName,
+  WORLD_FAMOUS_LANGUAGES,
+  WORLD_FAMOUS_MIN,
+  WORLD_SUBCLASS_KIND,
+  worldPlaceFromTile,
+  type MapBounds,
+  type Place,
+} from '@/lib/places';
 import { makeStyles, useColors, useTheme } from '@/lib/theme';
 import type { VenueCategory } from '@/lib/venues';
 
@@ -41,6 +52,41 @@ function lighten(hex: string, amount: number): string {
     return Math.round(c + (255 - c) * amount);
   };
   return `rgb(${channel(16)}, ${channel(8)}, ${channel(0)})`;
+}
+
+// Zoomed out, places are small dots in their icon color; from this zoom on they show their icon and name.
+const ICON_ZOOM = 15;
+
+// The world places layer (Hangout map) reads OpenFreeMap's vector tiles directly: OpenStreetMap's "poi" layer,
+// filtered to places to hang out. Bangkok is left out there: its places come from the database (public.places).
+const WORLD_TILES = 'https://tiles.openfreemap.org/planet';
+const BANGKOK_BOX = {
+  type: 'Polygon',
+  coordinates: [[[100.25, 13.45], [100.95, 13.45], [100.95, 14.1], [100.25, 14.1], [100.25, 13.45]]],
+};
+const WORLD_SUBCLASSES = Object.keys(WORLD_SUBCLASS_KIND);
+const WORLD_FILTER = [
+  'all',
+  ['has', 'name'],
+  [
+    'any',
+    ['match', ['get', 'subclass'], WORLD_SUBCLASSES, true, false],
+    [
+      'all',
+      ['==', ['get', 'class'], 'place_of_worship'],
+      ['>=', ['+', ...WORLD_FAMOUS_LANGUAGES.map((lang) => ['case', ['has', `name:${lang}`], 1, 0])], WORLD_FAMOUS_MIN],
+    ],
+  ],
+  ['!', ['within', BANGKOK_BOX]],
+];
+// Tile subclass → the app's icon (as in PLACE_ICON_COLORS); religious places use the temple icon.
+function worldMatch(value: (kind: string) => string, fallback: string) {
+  return [
+    'match',
+    ['get', 'subclass'],
+    ...Object.entries(WORLD_SUBCLASS_KIND).flatMap(([subclass, kind]) => [subclass, value(kind)]),
+    fallback,
+  ];
 }
 
 // Free map: MapLibre with OpenFreeMap tiles (OpenStreetMap data). No API key, no billing.
@@ -88,6 +134,7 @@ export function VenueMap({
   onPinPress,
   places = [],
   onPlacePress,
+  worldPlaces = false,
   onMapPress,
   onBoundsChange,
   userCoords,
@@ -104,6 +151,9 @@ export function VenueMap({
   // Bangkok places (OpenStreetMap) drawn as colored icons with their names; tapping one calls onPlacePress.
   places?: Place[];
   onPlacePress?: (place: Place) => void;
+  // Hangout map: also draw world places from the map tiles (outside Bangkok); tapping one calls onPlacePress with a
+  // Place that has `world: true`.
+  worldPlaces?: boolean;
   // Tap on the map itself (not on a pin or a dot), e.g. to drop a pin anywhere.
   onMapPress?: (coords: Coords) => void;
   // Called when the visible area changes (used to load the places in view).
@@ -186,6 +236,7 @@ export function VenueMap({
         icon: `tm-${placeIcon(place.kind)}`,
         name: placeName(place, language),
         color: labelColor(PLACE_ICON_COLORS[placeIcon(place.kind)]),
+        dot: PLACE_ICON_COLORS[placeIcon(place.kind)],
       },
     })),
   };
@@ -202,6 +253,21 @@ export function VenueMap({
         properties: { name: pin.label, color: pin.tone === 'violet' ? labelColor(Colors.violet) : Colors.accent },
       })),
   };
+
+  // World places: icon color by kind, and the name in the app's language when OpenStreetMap has it (Thai falls back
+  // to English, which reads better than an unfamiliar script).
+  const worldColor = worldMatch((kind) => PLACE_ICON_COLORS[placeIcon(kind)], PLACE_ICON_COLORS.temple) as never;
+  const worldName =
+    language === 'th'
+      ? ['coalesce', ['get', 'name:th'], ['get', 'name:en'], ['get', 'name']]
+      : ['coalesce', ['get', 'name:en'], ['get', 'name']];
+  // Small dot with a thin ring, a little bigger as the map zooms in.
+  const dotStyle = (color: unknown) => ({
+    circleColor: color as never,
+    circleRadius: ['interpolate', ['linear'], ['zoom'], 10, 2.5, ICON_ZOOM, 5] as never,
+    circleStrokeColor: Colors.bg,
+    circleStrokeWidth: 1,
+  });
 
   // A route opens on its first point; otherwise the user, else central Bangkok.
   const start = route?.[0] ?? userCoords ?? BANGKOK;
@@ -306,10 +372,12 @@ export function VenueMap({
               const place = places.find((p) => p.id === id);
               if (place) onPlacePress?.(place);
             }}>
+            <Layer id="places-dots" type="circle" maxzoom={ICON_ZOOM} style={dotStyle(['get', 'dot'])} />
             {/* Icons that would overlap are hidden until the map is zoomed in; names hide first. */}
             <Layer
               id="places-icons"
               type="symbol"
+              minzoom={ICON_ZOOM}
               style={{
                 iconImage: ['get', 'icon'],
                 iconSize: PLACE_ICON_SIZE,
@@ -328,6 +396,52 @@ export function VenueMap({
               }}
             />
           </GeoJSONSource>
+        )}
+
+        {worldPlaces && (
+          <VectorSource
+            id="world-places"
+            url={WORLD_TILES}
+            onPress={(event) => {
+              event.stopPropagation();
+              const feature = event.nativeEvent.features[0];
+              const place = feature ? worldPlaceFromTile(feature) : null;
+              if (place) onPlacePress?.(place);
+            }}>
+            <Layer
+              id="world-places-dots"
+              type="circle"
+              source-layer="poi"
+              maxzoom={ICON_ZOOM}
+              filter={WORLD_FILTER as never}
+              style={dotStyle(worldColor)}
+            />
+            <Layer
+              id="world-places-icons"
+              type="symbol"
+              source-layer="poi"
+              minzoom={ICON_ZOOM}
+              filter={WORLD_FILTER as never}
+              style={{
+                iconImage: worldMatch((kind) => `tm-${placeIcon(kind)}`, 'tm-temple') as never,
+                iconSize: PLACE_ICON_SIZE,
+                iconPadding: [1],
+                // Better-known places win when icons would overlap.
+                symbolSortKey: ['get', 'rank'],
+                textField: worldName as never,
+                textFont: LABEL_FONT,
+                textSize: 12,
+                textAnchor: 'left',
+                textJustify: 'left',
+                textOffset: [1.6, -0.1],
+                textMaxWidth: 9,
+                textOptional: true,
+                textColor: worldMatch((kind) => labelColor(PLACE_ICON_COLORS[placeIcon(kind)]), labelColor(PLACE_ICON_COLORS.temple)) as never,
+                textHaloColor: Colors.bg,
+                textHaloWidth: 1.5,
+              }}
+            />
+          </VectorSource>
         )}
 
         {pinLabelsGeoJson.features.length > 0 && (

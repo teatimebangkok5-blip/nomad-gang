@@ -24,6 +24,8 @@ export type MeetupPlace = {
 export type OpenMeetup = MeetupPlace & {
   id: string;
   kind: MeetupKind;
+  // IANA time zone of the place (hangouts can be anywhere; tables are 'Asia/Bangkok'). Times show in this zone.
+  time_zone: string;
   host_id: string;
   title: string;
   description: string;
@@ -39,6 +41,7 @@ export type MeetupMember = { user_id: string; joined_at: string; display_name: s
 export type MeetupDetail = MeetupPlace & {
   id: string;
   kind: MeetupKind;
+  time_zone: string;
   host_id: string;
   title: string;
   description: string;
@@ -58,6 +61,7 @@ const KNOWN_ERRORS = [
   'title_required',
   'invalid_place',
   'outside_bangkok',
+  'invalid_time_zone',
   'spot_name_required',
   'auth_required',
   'not_allowed',
@@ -119,11 +123,12 @@ export async function createMeetupAtPlace(input: {
   return result(data as string | null, error);
 }
 
-// A hangout at a partner venue, a place (food or hangout place), or a named spot anywhere on the map.
+// A hangout at a partner venue, a place (food or hangout place), or a named spot anywhere in the world (a dropped pin
+// or a world place from the map tiles), with the spot's time zone.
 export type HangoutWhere =
   | { type: 'venue'; venueId: string }
   | { type: 'place'; placeId: string }
-  | { type: 'spot'; lat: number; lng: number; name: string };
+  | { type: 'spot'; lat: number; lng: number; name: string; timeZone: string };
 
 export async function createHangout(input: {
   where: HangoutWhere;
@@ -145,6 +150,7 @@ export async function createHangout(input: {
     p_spot_lat: where.type === 'spot' ? where.lat : null,
     p_spot_lng: where.type === 'spot' ? where.lng : null,
     p_spot_name: where.type === 'spot' ? where.name : null,
+    p_time_zone: where.type === 'spot' ? where.timeZone : null,
   });
   return result(data as string | null, error);
 }
@@ -272,7 +278,7 @@ async function fetchMeetup(id: string): Promise<MeetupDetail | null | 'error'> {
   const { data, error } = await supabase
     .from('meetups')
     .select(
-      'id, kind, venue_id, place_id, place:places(name, name_en, name_th, lat, lng, website), spot_name, spot_lat, spot_lng, ' +
+      'id, kind, time_zone, venue_id, place_id, place:places(name, name_en, name_th, lat, lng, website), spot_name, spot_lat, spot_lng, ' +
         'host_id, title, description, starts_at, ends_at, max_people, status, ' +
         'meetup_members(user_id, joined_at, profiles(display_name, avatar_path))',
     )

@@ -4,7 +4,7 @@ import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable,
 
 import { Icon } from '@/components/icon';
 import { Radius, Spacing, Type } from '@/constants/theme';
-import { bangkokMinutes, formatClock } from '@/lib/bangkok-time';
+import { bangkokMinutes, deviceZone, formatClock } from '@/lib/bangkok-time';
 import type { ChatErrorKey, ChatMessage } from '@/lib/chat';
 import { makeStyles, useColors } from '@/lib/theme';
 
@@ -70,7 +70,7 @@ export function ChatView({
                 <View style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}>
                   <Text style={[styles.body, mine && styles.bodyMine]}>{item.body}</Text>
                   <Text style={[styles.time, mine && styles.timeMine]}>
-                    {formatClock(bangkokMinutes(new Date(item.created_at)))}
+                    {formatClock(bangkokMinutes(new Date(item.created_at), deviceZone()))}
                   </Text>
                 </View>
               </View>

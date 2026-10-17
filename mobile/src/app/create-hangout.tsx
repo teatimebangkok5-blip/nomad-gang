@@ -34,11 +34,15 @@ import { currentLanguage, localized } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import {
   bangkokDay,
+  deviceZone,
   formatClock,
   formatDayLabel,
+  formatUtcOffset,
   formatWhenRange,
   fromBangkok,
+  sameClock,
   timeSlots,
+  zoneAt,
   type BangkokDay,
 } from '@/lib/bangkok-time';
 import { isSafeLink, openLink, ticketLink } from '@/lib/links';
@@ -87,9 +91,10 @@ const MIN_PEOPLE = 2;
 const MAX_PEOPLE = 30;
 const DURATIONS = [60, 120, 180, 240, 360, 480, 720]; // minutes
 
-// Create a hangout: 1) a full-screen map of places to hang out (temples, parks, malls, markets, museums,
-// attractions), partner venues with ticket discounts, free entry and events, and open hangouts. Tap a place, or
-// anywhere to drop a pin. 2) Title, description, day, time, how long and how many people.
+// Create a hangout anywhere in the world: 1) a full-screen map of places to hang out (Bangkok: temples, parks, malls,
+// markets, museums, attractions from the database, partner venues with ticket discounts, free entry and events;
+// elsewhere: world places from the map tiles), and open hangouts. Tap a place, or anywhere to drop a pin.
+// 2) Title, description, day, time (local time at the place), how long and how many people.
 export default function CreateHangoutScreen() {
   const styles = useStyles();
   const Colors = useColors();
@@ -124,7 +129,7 @@ export default function CreateHangoutScreen() {
       Boolean(entry && venue?.entry && entry.includes(venue.entry)));
   const hangoutVenues = venues.venues.filter((venue) => isHangoutVenue(venue) && venueMatches(venue));
   // Search finds every hangout venue and place, whatever filter button is on.
-  const search = useMapSearch('hangout', venues.venues.filter(isHangoutVenue));
+  const search = useMapSearch('hangout', venues.venues.filter(isHangoutVenue), { near: coords });
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const paramVenue = params.venueId ? venueById.get(params.venueId) : undefined;
   const paramFocus: MapFocus | null = paramVenue ? { lat: paramVenue.lat, lng: paramVenue.lng, zoom: PLACE_ZOOM, seq: 0 } : null;
@@ -218,6 +223,11 @@ export default function CreateHangoutScreen() {
     } else if (result.type === 'place') {
       setSelection({ type: 'place', place: result.place });
       setFocus({ lat: result.place.lat, lng: result.place.lng, zoom: PLACE_ZOOM, seq: Date.now() });
+    } else if (result.type === 'world') {
+      // Anywhere in the world: places to hang out open their card; cities, areas and streets just move the map.
+      const { world } = result;
+      setSelection(world.place ? { type: 'place', place: world.place } : null);
+      setFocus({ lat: world.lat, lng: world.lng, zoom: world.zoom, seq: Date.now() });
     } else {
       setSelection(null);
       setFocus({ lat: result.area.lat, lng: result.area.lng, zoom: AREA_ZOOM[result.area.kind], seq: Date.now() });
@@ -231,6 +241,7 @@ export default function CreateHangoutScreen() {
 
   function hangoutsAt(s: Selection): OpenMeetup[] {
     if (s.type === 'venue') return hangouts.filter((m) => m.venue_id === s.venueId);
+    if (s.type === 'place' && s.place.world) return groups.get(spotKey(s.place)) ?? [];
     if (s.type === 'place') return hangouts.filter((m) => !m.venue_id && m.place_id === s.place.id);
     if (s.type === 'group') return groups.get(s.key) ?? [];
     return [];
@@ -288,6 +299,7 @@ export default function CreateHangoutScreen() {
         onPinPress={handlePinPress}
         places={mapPlaces}
         onPlacePress={handlePlacePress}
+        worldPlaces={entry === null}
         onMapPress={(at) => setSelection({ type: 'spot', ...at })}
         onBoundsChange={onBoundsChange}
         mapPadding={{ top: topHeight, right: 0, bottom: bottomHeight, left: 0 }}
@@ -595,6 +607,11 @@ function PromotionRow({ promotion }: { promotion: VenueDeal }) {
   );
 }
 
+// The pin key of spot hangouts at this point (as meetupLocationKey makes it).
+function spotKey(at: { lat: number; lng: number }) {
+  return `s:${at.lat.toFixed(5)},${at.lng.toFixed(5)}`;
+}
+
 // Step 2: what, when, how long and how many people.
 function HangoutForm({ chosen, onChange }: { chosen: Chosen; onChange: () => void }) {
   const styles = useStyles();
@@ -602,11 +619,18 @@ function HangoutForm({ chosen, onChange }: { chosen: Chosen; onChange: () => voi
   const { t } = useTranslation();
   const language = currentLanguage();
 
+  // Days and times are local time at the place: Bangkok for venues and places, the pin's zone for spots and world
+  // places.
+  const at = chosen.type === 'venue' ? chosen.venue : chosen.type === 'place' ? chosen.place : chosen;
+  const isSpot = chosen.type === 'spot' || (chosen.type === 'place' && Boolean(chosen.place.world));
+  const [zone] = useState(() => (isSpot ? zoneAt(at.lat, at.lng) : 'Asia/Bangkok'));
   const [now] = useState(() => new Date());
-  const today = bangkokDay(now);
+  const today = bangkokDay(now, zone);
   const days = Array.from({ length: DAYS_AHEAD }, (_, i) => today + i);
-  const [day, setDay] = useState<BangkokDay>(() => (timeSlots(today, now).length ? today : today + 1));
-  const slots = timeSlots(day, now);
+  const [day, setDay] = useState<BangkokDay>(() => (timeSlots(today, now, zone).length ? today : today + 1));
+  const slots = timeSlots(day, now, zone);
+  // Tell people when the place's clock differs from their phone's.
+  const otherZone = !sameClock(zone, deviceZone(), now);
   const [minutes, setMinutes] = useState<number | null>(null);
   const [duration, setDuration] = useState(120);
   const [maxPeople, setMaxPeople] = useState(6);
@@ -636,14 +660,16 @@ function HangoutForm({ chosen, onChange }: { chosen: Chosen; onChange: () => voi
     const where: HangoutWhere =
       chosen.type === 'venue'
         ? { type: 'venue', venueId: chosen.venue.id }
-        : chosen.type === 'place'
+        : chosen.type === 'place' && chosen.place.world
+          ? { type: 'spot', lat: chosen.place.lat, lng: chosen.place.lng, name: (chosen.place.name_en || chosen.place.name).slice(0, 80), timeZone: zone }
+          : chosen.type === 'place'
           ? { type: 'place', placeId: chosen.place.id }
-          : { type: 'spot', lat: chosen.lat, lng: chosen.lng, name: spotName.trim() };
+          : { type: 'spot', lat: chosen.lat, lng: chosen.lng, name: spotName.trim(), timeZone: zone };
     setError(null);
     setCreating(true);
     const result = await createHangout({
       where,
-      startsAt: fromBangkok(day, minutes),
+      startsAt: fromBangkok(day, minutes, zone),
       durationMinutes: duration,
       maxPeople,
       title: title.trim(),
@@ -730,7 +756,7 @@ function HangoutForm({ chosen, onChange }: { chosen: Chosen; onChange: () => voi
             {days.map((option) => (
               <Chip
                 key={option}
-                label={formatDayLabel(option, t, now)}
+                label={formatDayLabel(option, t, now, zone)}
                 selected={option === day}
                 onPress={() => {
                   setDay(option);
@@ -742,6 +768,9 @@ function HangoutForm({ chosen, onChange }: { chosen: Chosen; onChange: () => voi
 
           <View style={styles.pad}>
             <Text style={styles.label}>{t('tables.time')}</Text>
+            {otherZone && (
+              <Text style={[styles.hint, styles.zoneHint]}>{t('hangouts.localTime', { offset: formatUtcOffset(zone, now) })}</Text>
+            )}
             {slots.length === 0 ? (
               <Text style={styles.hint}>{t('tables.noTimesLeft')}</Text>
             ) : (
@@ -978,4 +1007,5 @@ const useStyles = makeStyles((Colors) => ({
     marginTop: Spacing.lg,
   },
   submit: { marginTop: Spacing.xl },
+  zoneHint: { marginTop: -Spacing.xs, marginBottom: Spacing.sm },
 }));

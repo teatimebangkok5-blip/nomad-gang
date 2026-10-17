@@ -88,7 +88,8 @@ Product spec and tech stack below are agreed. Built so far:
   boxes should follow the same pattern (container with borderRadius + `overflow: 'hidden'` + Raised, `<GlossyFill />`
   as first child).
 - **Day planner / itinerary** (added 2026-10-16, `*_day_planner.sql`, `*_seed_place_details.sql`, `*_seed_transit.sql`):
-  "Plan my day" pill under the home search bar → `src/app/plan-day.tsx`: start (my location, 9 well-known areas or a
+  "Plan my day" button under the home search bar (violet → pink gradient, 52 dp, bigger than the round header buttons,
+  ⭐ badge on its top-right corner) → `src/app/plan-day.tsx`: start (my location, 9 well-known areas or a
   search result), day (14 days), from/until typed as HH:MM (`parseClock()` in `bangkok-time.ts`; 1–12 h), interests (temples, sights, markets, malls, museums, parks,
   family & fun), lunch/dinner and an evening bar, Entry: Free entry and/or Tickets (both = any place, also
   unconfirmed; one = `entryFilter()` groups), and getting around: any 1–3 of Walk / Taxi / BTS-MRT
@@ -118,6 +119,23 @@ Product spec and tech stack below are agreed. Built so far:
   `mark_notifications_seen()` when the page opens. App: `useNotifications()` in `src/lib/notifications.ts` (focus,
   foreground, every 2 min, and Realtime inserts on meetups / members / messages / deals). Tapping opens the table,
   chat, DM, profile, or for a deal `create-table` / `create-hangout` with `venueId` (create-hangout now takes it).
+- **Hangouts anywhere in the world** (added 2026-10-17, `*_world_hangouts.sql`; **tables stay Bangkok-only**).
+  World places are **not stored**: the Hangout map draws them straight from OpenFreeMap's vector tiles (OpenStreetMap
+  layer `poi`, `VectorSource` + `worldPlaces` prop on `VenueMap`), outside the Bangkok box only (Bangkok keeps its
+  database places). Founder's filter: sights & culture, parks & nature, shopping & markets, fun & entertainment
+  (`WORLD_SUBCLASS_KIND` in `src/lib/places.ts`), plus **well-known religious places only** = name in ≥ 8 of 14
+  languages (`WORLD_FAMOUS_*`). Hidden while Tickets / Free entry is on (entry unknown). Tapping one opens the place
+  card (`Place.world`); a hangout there, or at a dropped pin anywhere, is a **spot** hangout with the place's name.
+  `meetups.time_zone` (IANA): `Asia/Bangkok` for tables / venues / places; for spots the app looks it up offline
+  (`zoneAt()` via `@photostructure/tz-lookup`) and `create_hangout(…, p_time_zone)` checks it against
+  `pg_timezone_names` (`invalid_time_zone`). Times show in the place's local time: the helpers in
+  `bangkok-time.ts` take an optional `zone` (default Bangkok; others via Intl), with "Local time at this place (UTC+2)"
+  where it differs from the phone. Chat / message times use the phone's zone. **Search**: home and the Hangout map
+  also query **Photon** (photon.komoot.io, free OSM search, no key) after the Bangkok results (`type: 'world'` in
+  `useMapSearch(…, { near })`); create-table and the planner stay Bangkok-only. Home's cards row and List show
+  tables / hangouts within 50 km of me (or central Bangkok); the map pins all of them. `my_notifications(limit, lat,
+  lng)`: new tables / hangouts only within 50 km of that point (Bangkok box without one). Day planner, partner venues,
+  promotions and areas are still Bangkok-only.
 - **Login without SMS for now** (founder's decision 2026-10-16): `app_settings.require_phone_verification` (default
   false) and `EXPO_PUBLIC_REQUIRE_PHONE` (default false) let Google accounts in without the phone check; turn both on
   once SMS is set up. With `EXPO_PUBLIC_SKIP_LOGIN=false`, a leftover anonymous guest session is signed out on start.
@@ -148,6 +166,7 @@ meet up at a table. It is inspired by NomadTable but is **not a copy**. Don't co
 - **Android first**, then **iPhone later** from the same code base. Build Android features now, but don't use anything
   Android-only that would block the iPhone version.
 - **Launch city: Bangkok, Thailand.** Prices and discounts are in Thai Baht (THB), and times use Asia/Bangkok (UTC+7).
+  Exception: **hangouts can be anywhere in the world** (founder, 2026-10-17) and use the place's local time zone.
 - **Languages: Thai and English.** All user-facing text goes through translation files from the start (no hard-coded
   strings). Venue names and deal descriptions need both a Thai and an English version.
 
@@ -294,7 +313,8 @@ How the key rules map onto this:
     `src/lib/places.ts`, images in `assets/images/map-icons/` (120 px **3D** glossy balls with a shadow and the white
     Material icon, Apache 2.0, drawn by a System.Drawing script; shown at `PLACE_ICON_SIZE` 0.32 ≈ 32 dp) registered
     with `Images`. Pins (`PinView`) are 50 dp 3D balls: gradient, shine, white rim, elevation shadow, ground shadow.
-    Overlapping icons hide until zoomed in (MapLibre collision); names hide first. Labels use `Noto Sans Bold` (must
+    Zoomed out (below `ICON_ZOOM` 15) places are **small dots in their icon color**; from zoom 15 they show icon +
+    name. Overlapping icons hide until zoomed in (MapLibre collision); names hide first. Labels use `Noto Sans Bold` (must
     be a font OpenFreeMap serves; it has Thai). Pins with a `label` (partner venues) get their name beside them too.
     Props: `pins`, `places`, `onPlacePress`, `onMapPress`, `onBoundsChange`, `fullScreen`, `mapPadding`
     (→ `contentInset`). Keep `attribution` on (OSM licence).
@@ -338,7 +358,7 @@ How the key rules map onto this:
   locks the meetup row with `for update` so the last seat can't be taken twice). Rules: live venue, start between
   now−15 min and now+7 days, 3–12 people, lasts 3 hours, max 3 open tables hosted per person, host leaving =
   cancel. Hangouts (`kind = 'hangout'`, `create_hangout`): exactly one of venue / place / spot (`spot_name`,
-  `spot_lat`, `spot_lng`, inside the Bangkok box), title required, 2–30 people, start within 14 days, 30 min–12 h,
+  `spot_lat`, `spot_lng`, anywhere in the world since `*_world_hangouts.sql`, with `time_zone`), title required, 2–30 people, start within 14 days, 30 min–12 h,
   max 3 open hangouts per host (separate from the 3 tables); `list_open_meetups` returns `kind`, `description` and
   the spot as `place_name/lat/lng`. Callers must be phone-verified, or anonymous while `app_settings.allow_guest_meetups`. Errors are short
   keys (`meetup_full`, `invalid_time`, …) that the app translates. `profiles` rows are created by a trigger on

@@ -14,7 +14,7 @@ import { VenueMap, type MapPin } from '@/components/venue-map';
 import { Radius, RaisedSmall, Spacing, Type } from '@/constants/theme';
 import { useLanguage } from '@/i18n';
 import { GEM_BUDGETS, GEM_CATEGORIES, GEM_CATEGORY_EMOJI, matchesBudget, useGems, type GemBudget, type GemCategory } from '@/lib/gems';
-import { useCurrentLocation } from '@/lib/location';
+import { BANGKOK_CENTER, inBangkok, useCurrentLocation } from '@/lib/location';
 import { makeStyles, useColors } from '@/lib/theme';
 
 // Hidden Gems map: the curated Bangkok places tourists often miss, filtered by area, category, budget or saved.
@@ -66,6 +66,8 @@ export default function GemsScreen() {
         onPinPress={setSelectedId}
         onMapPress={() => setSelectedId(null)}
         userCoords={coords ?? null}
+        // The gems are in Bangkok: someone outside Bangkok starts there, not on their own location.
+        center={coords && !inBangkok(coords) ? BANGKOK_CENTER : null}
         mapPadding={{ top: topHeight, right: 0, bottom: bottomHeight, left: 0 }}
         initialZoom={12}
       />

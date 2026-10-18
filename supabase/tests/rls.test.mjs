@@ -1452,7 +1452,7 @@ check("anyone signed in sees a profile's passport summary", r.rows?.[0]?.s?.poin
 
 // --- Hidden Gems
 r = await tryQuery("authenticated", admin, `select count(*)::int n, count(*) filter (where is_published)::int published, count(place_id)::int linked from public.gems`);
-check("121 gems seeded; 101 published, 20 drafts; most linked to OSM places", r.rows?.[0]?.n === 121 && r.rows[0].published === 101 && r.rows[0].linked >= 80);
+check("121 gems seeded; 118 published, 3 drafts that can't be placed yet; most linked to OSM places", r.rows?.[0]?.n === 121 && r.rows[0].published === 118 && r.rows[0].linked >= 80);
 r = await tryQuery("authenticated", admin, `select number, name_en, category from public.gems where number in (1, 17, 18, 31, 66, 95, 103) order by number`);
 check("the founder's 100 come first (existing gems reuse their numbers), the rest from 101 in their old order",
   JSON.stringify(r.rows?.map((g) => [g.number, g.name_en, g.category])) === JSON.stringify([
@@ -1463,7 +1463,7 @@ check("the founder's 100 come first (existing gems reuse their numbers), the res
 r = await tryQuery("authenticated", admin, `select count(distinct number)::int n from public.gems where number between 1 and 100`);
 check("numbers 1–100 are each used once", r.rows?.[0]?.n === 100);
 r = await tryQuery("authenticated", c2, `select * from public.list_gems()`);
-check("app users list the published gems", r.rows?.length === 101 && !r.rows.some((g) => g.name_en === "W District, Phra Khanong" || g.name_en === "Nusara"));
+check("app users list the published gems", r.rows?.length === 118 && !r.rows.some((g) => g.name_en === "Old Town White Coffee"));
 const lumphiniGem = r.rows?.find((g) => g.name_en === "Lumphini Park");
 r = await tryQuery("authenticated", c2, `select * from public.gems where not is_published`);
 check("drafts are hidden from app users", !r.error && r.rows.length === 0);

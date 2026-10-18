@@ -409,6 +409,8 @@ const th: Translation = {
     visitedCount: 'คุณไปมาแล้ว {{count}} จาก {{total}} แห่ง',
     allAreas: 'ทุกย่าน',
     saved: 'ที่บันทึก',
+    googleMaps: 'Google Maps',
+    googleMapsLabel: 'เปิด {{name}} ใน Google Maps',
     categories: {
       food: 'อาหาร',
       cafes: 'คาเฟ่',

@@ -253,9 +253,11 @@ Product spec and tech stack below are agreed. Built so far:
   Invites, and map "stories" on home instead of a posts feed.
 - **Hidden Gems list** (`*_hidden_gems.sql` + `*_more_hidden_gems.sql`): the founder's numbered list of 100 (2026-10-18:
   1–30 places by type, 31–65 cafés, 66–100 food) is gems 1–100; the first 32 gems not on it are 101+ (still
-  published). Areas are free text and become the map's area chips. Places not in OpenStreetMap or chains without a
-  clear branch are drafts at an approximate pin with a `check_note` (20 drafts); the founder fixes and publishes them
-  in the admin panel.
+  published). Areas are free text and become the map's area chips. All are published (`*_publish_hidden_gems.sql`,
+  founder 2026-10-19) except 3 that can't be placed (Old Town White Coffee: no Bangkok branch; KALM, Wanwan: no
+  address); gems published with an approximate pin keep a `check_note`. The selected gem's pop-up card on the Gems
+  map has a **Google Maps** button: a plain `google.com/maps/search` link by name (`googleMapsUrl()` in
+  `src/lib/links.ts`, no API key or billing).
 - **Design refresh** (2026-10-18, from the founder's Claude Design project "TableMeet Screen", layout variant a):
   fonts **Bricolage Grotesque** (headings) + **Figtree** (text), **Anuphan** in Thai (`assets/fonts/`, embedded by the
   `expo-font` plugin in `app.json` with one Android family per typeface; **needs a prebuild + new native build**,

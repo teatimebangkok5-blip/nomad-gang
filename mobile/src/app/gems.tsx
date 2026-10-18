@@ -110,7 +110,7 @@ export default function GemsScreen() {
         {gems === null ? (
           <ActivityIndicator color={Colors.accent} />
         ) : selected ? (
-          <GemCard gem={selected} onPress={() => router.push({ pathname: '/gem/[id]', params: { id: selected.id } })} />
+          <GemCard gem={selected} mapsLink onPress={() => router.push({ pathname: '/gem/[id]', params: { id: selected.id } })} />
         ) : shown.length === 0 ? (
           <View style={styles.empty}>
             <GlossyFill />

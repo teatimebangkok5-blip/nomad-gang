@@ -9,6 +9,12 @@ export function openLink(url: string | null | undefined) {
   if (isSafeLink(url)) Linking.openURL(url);
 }
 
+// A place in Google Maps (a plain link, no Google API or key): opens the Google Maps app if installed, else the
+// browser. Searched by name so people see the place's own page (reviews, photos, hours).
+export function googleMapsUrl(name: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${name}, Bangkok`)}`;
+}
+
 // The official ticket page for a venue: an event's or ticket discount's own link first, then the venue's.
 export function ticketLink(venue: {
   ticket_url: string | null;

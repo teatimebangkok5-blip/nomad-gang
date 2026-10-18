@@ -407,6 +407,8 @@ const en = {
     visitedCount: "You've visited {{count}} of {{total}}",
     allAreas: 'All areas',
     saved: 'Saved',
+    googleMaps: 'Google Maps',
+    googleMapsLabel: 'Open {{name}} in Google Maps',
     categories: {
       food: 'Food',
       cafes: 'Cafés',

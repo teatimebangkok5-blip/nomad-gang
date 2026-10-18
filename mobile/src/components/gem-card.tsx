@@ -3,14 +3,18 @@ import { useTranslation } from 'react-i18next';
 import { Pressable, Text, View } from 'react-native';
 
 import { GlossyFill } from '@/components/glossy';
+import { Icon } from '@/components/icon';
 import { Radius, Raised, Spacing, Type } from '@/constants/theme';
 import { localized, useLanguage } from '@/i18n';
 import { GEM_CATEGORY_EMOJI, gemPhoto, type Gem } from '@/lib/gems';
-import { makeStyles } from '@/lib/theme';
+import { googleMapsUrl, openLink } from '@/lib/links';
+import { makeStyles, useColors } from '@/lib/theme';
 
-// A Hidden Gem in a list or on the map: photo, name, area · category · price, the local tip.
-export function GemCard({ gem, onPress }: { gem: Gem; onPress: () => void }) {
+// A Hidden Gem in a list or on the map: photo, name, area · category · price, the local tip. On the map (the
+// selected gem's pop-up) it also has a Google Maps button.
+export function GemCard({ gem, onPress, mapsLink = false }: { gem: Gem; onPress: () => void; mapsLink?: boolean }) {
   const styles = useStyles();
+  const Colors = useColors();
   const { t } = useTranslation();
   const language = useLanguage();
   const photo = gemPhoto(gem);
@@ -41,6 +45,17 @@ export function GemCard({ gem, onPress }: { gem: Gem; onPress: () => void }) {
         <Text style={styles.tip} numberOfLines={2}>
           💡 {localized(gem, 'tip', language)}
         </Text>
+        {mapsLink && (
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel={t('gems.googleMapsLabel', { name: localized(gem, 'name', language) })}
+            onPress={() => openLink(googleMapsUrl(gem.name_en))}
+            hitSlop={6}
+            style={({ pressed }) => [styles.mapsLink, pressed && styles.pressed]}>
+            <Icon name="map" size={16} color={Colors.accent} />
+            <Text style={styles.mapsLinkText}>{t('gems.googleMaps')}</Text>
+          </Pressable>
+        )}
       </View>
       {gem.saved && <Text style={styles.saved}>♥</Text>}
     </Pressable>
@@ -76,5 +91,19 @@ const useStyles = makeStyles((Colors) => ({
   meta: { ...Type.small, color: Colors.textSecondary },
   local: { ...Type.small, fontSize: 11, fontWeight: '800', color: Colors.accent },
   tip: { ...Type.small, color: Colors.textMuted },
+  mapsLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: Spacing.xs,
+    marginTop: Spacing.xs,
+    minHeight: 32,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surfaceRaised,
+  },
+  mapsLinkText: { ...Type.label, color: Colors.accent },
   saved: { fontSize: 18, color: Colors.pink },
 }));

@@ -10,6 +10,7 @@ import {
   type CameraRef,
   type MapRef,
 } from '@maplibre/maplibre-react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -95,8 +96,12 @@ export type MapPin = {
   emoji: string;
   // Name shown beside the pin (e.g. the partner venue's name).
   label?: string;
-  // Violet for tables at places and travellers; orange (default) for partner venues.
-  tone?: 'orange' | 'violet';
+  // Violet for tables at places and travellers; orange (default) for partner venues; story = brand ring.
+  tone?: 'orange' | 'violet' | 'story';
+  // A photo in the ball instead of the emoji (story pins: the poster's profile picture).
+  image?: string | null;
+  // Read out by screen readers.
+  accessibilityLabel?: string;
   // Shown as a badge, e.g. the number of open tables at the venue.
   count?: number;
   selected?: boolean;
@@ -535,25 +540,32 @@ function routePadding(mapPadding: { top: number; right: number; bottom: number; 
 const PIN_GRADIENTS = {
   orange: ['#FFB547', '#FE593B', '#FF1F78'],
   violet: ['#B79DFF', '#7B4DFF', '#4B22C9'],
+  story: ['#FF1F78', '#FE593B', '#FFB547'],
 } as const;
 
 function PinView({ pin }: { pin: MapPin }) {
   const styles = useStyles();
-  const tone = pin.tone === 'violet' ? 'violet' : 'orange';
-  const gradient = PIN_GRADIENTS[tone];
+  const gradient = PIN_GRADIENTS[pin.tone ?? 'orange'];
   return (
-    <View style={styles.pinWrap}>
+    <View style={styles.pinWrap} accessibilityLabel={pin.accessibilityLabel}>
       <View style={[styles.pinBody, pin.selected && styles.pinSelected]}>
         <View style={styles.pin}>
           <LinearGradient colors={gradient} start={{ x: 0.3, y: 0 }} end={{ x: 0.7, y: 1 }} style={StyleSheet.absoluteFill} />
-          {/* Shine across the top. */}
-          <LinearGradient
-            colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']}
-            start={{ x: 0.5, y: 0 }}
-            end={{ x: 0.5, y: 1 }}
-            style={styles.shine}
-          />
-          <Text style={styles.emoji}>{pin.emoji}</Text>
+          {pin.image ? (
+            // The photo inside a thin gradient ring.
+            <Image source={pin.image} style={styles.pinImage} contentFit="cover" accessibilityIgnoresInvertColors />
+          ) : (
+            <>
+              {/* Shine across the top. */}
+              <LinearGradient
+                colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
+                style={styles.shine}
+              />
+              <Text style={styles.emoji}>{pin.emoji}</Text>
+            </>
+          )}
         </View>
         <View style={[styles.tail, { backgroundColor: gradient[2] }]} />
       </View>
@@ -599,6 +611,7 @@ const useStyles = makeStyles((Colors) => ({
     shadowOffset: { width: 0, height: 4 },
   },
   pinSelected: { transform: [{ scale: 1.2 }] },
+  pinImage: { position: 'absolute', top: 3, left: 3, right: 3, bottom: 3, borderRadius: PIN / 2 },
   shine: { position: 'absolute', top: 2, left: 7, right: 7, height: PIN * 0.42, borderRadius: PIN },
   emoji: { fontSize: 25, textShadowColor: 'rgba(0,0,0,0.35)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 3 },
   tail: {

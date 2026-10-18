@@ -251,6 +251,19 @@ Product spec and tech stack below are agreed. Built so far:
   cost. Planned next (founder, 2026-10-18, in this order): Rewards Passport (stamps / points / milestones 3-5-10,
   completion by GPS check-in or host code + admin review), Hidden Gems (founder supplies the list), Locals + Safety +
   Invites, and map "stories" on home instead of a posts feed.
+- **Map stories** (added 2026-10-19, `*_map_stories.sql`): camera button first in the home row (before Plan my day)
+  → `src/app/post-story.tsx` (take / pick a photo, caption ≤ 150) → `post_story(path, caption, lat, lng)`: pinned on
+  the home map for **24 hours** for everyone signed in (anywhere in the world), except across a block. **The exact
+  location is never stored**: the server moves the pin 100–250 m in a random direction (plus `area_near` name in
+  Bangkok). Same phone / guest rule as meetups (`meetup_caller_allowed`), max 10 per person per 24 h. One pin per
+  person (profile picture in a brand ring, `MapPin.image` + `tone: 'story'`, count when > 1, key `s:<user id>`) →
+  full-screen viewer `src/app/story/[userId].tsx` (tap right / left, ⋮ = delete mine or Report / Block via
+  `openSafetyMenu(context 'story')`). Reports: `reports.context = 'story'`; hidden for the reporter at once and for
+  everyone at 3 open reports until the founder resolves them. Photos: private `story-photos` bucket
+  `<user id>/<file>`, signed links, readable only while the story is live for you. `clear_my_expired_stories()` runs
+  once per app start (deletes my expired rows, the app deletes the files); account deletion removes the folder. Data:
+  `src/lib/stories.ts` (`useStories`, Realtime on `stories`). Privacy Policy mentions stories. No admin UI yet
+  (`delete_story` works for admins).
 - **Hidden Gems list** (`*_hidden_gems.sql` + `*_more_hidden_gems.sql`): the founder's numbered list of 100 (2026-10-18:
   1–30 places by type, 31–65 cafés, 66–100 food) is gems 1–100; the first 32 gems not on it are 101+ (still
   published). Areas are free text and become the map's area chips. All are published (`*_publish_hidden_gems.sql`,

@@ -218,7 +218,7 @@ export async function blockUser(myId: string, otherId: string): Promise<ChatErro
 export async function reportUser(input: {
   myId: string;
   otherId: string;
-  context: 'traveller' | 'direct' | 'table';
+  context: 'traveller' | 'direct' | 'table' | 'story';
   contextId?: string;
   reason: string;
 }): Promise<ChatErrorKey | null> {

@@ -1495,5 +1495,74 @@ r = await tryQuery("authenticated", admin, `select public.admin_accept_gem_sugge
 r = await tryQuery("authenticated", admin, `select is_published, contributor_id from public.gems where id = $1`, [r.rows?.[0]?.id]);
 check("accepted suggestion becomes an unpublished gem credited to its author", r.rows?.[0]?.is_published === false && r.rows[0].contributor_id === c3);
 
+// --- Map stories
+const [s1, s2, s3, s4, s5, s6, sNoPhone] = [1, 2, 3, 4, 5, 6, 7].map((n) => `5f000000-0000-4000-8000-00000000000${n}`);
+await db.exec(`insert into auth.users (id, email, raw_user_meta_data, phone_confirmed_at) values
+  ${[s1, s2, s3, s4, s5, s6].map((id, i) => `('${id}', 'story${i}@x.com', '{"full_name": "Story ${i}"}', now())`).join(", ")},
+  ('${sNoPhone}', 'nophone@x.com', '{}', null);`);
+const storyPath = `${s1}/story-1.jpg`;
+await tryQuery("authenticated", s1, `insert into storage.objects (bucket_id, name) values ('story-photos', $1)`, [storyPath]);
+await tryQuery("authenticated", s1, `insert into storage.objects (bucket_id, name) values ('story-photos', $1)`, [`${s1}/not-a-story.jpg`]);
+r = await tryQuery("authenticated", s1, `select public.post_story($1, ' Sunset at the river ', 13.7563, 100.5018) as id`, [storyPath]);
+check("post a story", !r.error && !!r.rows?.[0]?.id);
+const storyId = r.rows?.[0]?.id;
+r = await db.query(`select lat, lng, caption, area_name_en, expires_at > now() + interval '23 hours' as day from public.stories where id = $1`, [storyId]);
+const moved = r.rows[0] && 6371000 * 2 * Math.asin(Math.sqrt(
+  Math.sin(((r.rows[0].lat - 13.7563) * Math.PI) / 360) ** 2 +
+    Math.cos((13.7563 * Math.PI) / 180) * Math.cos((r.rows[0].lat * Math.PI) / 180) * Math.sin(((r.rows[0].lng - 100.5018) * Math.PI) / 360) ** 2,
+));
+check("only a point 100–250 m away is stored, for 24 hours", moved >= 95 && moved <= 255 && r.rows[0].day && r.rows[0].caption === "Sunset at the river");
+r = await tryQuery("authenticated", s1, `select public.post_story($1, '', 13.75, 100.5)`, [`${s2}/x.jpg`]);
+check("a story's photo must be in my own folder", /invalid_photo/.test(r.error ?? ""));
+r = await tryQuery("authenticated", s1, `select public.post_story($1, $2, 13.75, 100.5)`, [storyPath, "x".repeat(151)]);
+check("captions are 150 characters max", /invalid_caption/.test(r.error ?? ""));
+const phoneSetting = (await db.query(`select require_phone_verification v from public.app_settings`)).rows[0].v;
+await db.exec(`update public.app_settings set require_phone_verification = true`);
+r = await tryQuery("authenticated", sNoPhone, `select public.post_story($1, '', 13.75, 100.5)`, [`${sNoPhone}/a.jpg`]);
+await db.query(`update public.app_settings set require_phone_verification = $1`, [phoneSetting]);
+check("posting follows the phone rule", /not_allowed/.test(r.error ?? ""));
+r = await tryQuery("authenticated", s2, `insert into public.stories (user_id, photo_path, lat, lng) values ($1, $2, 13.75, 100.5)`, [s2, `${s2}/a.jpg`]);
+check("stories can't be written directly", !!r.error);
+r = await tryQuery("authenticated", s2, `select id, display_name from public.map_stories()`);
+check("others see the story on the map with the poster's name", r.rows?.some((s) => s.id === storyId && s.display_name === "Story 0"));
+r = await tryQuery("authenticated", "", `select * from public.map_stories()`);
+check("signed-out callers see no stories", !!r.error || r.rows.length === 0);
+r = await tryQuery("authenticated", s2, `select name from storage.objects where bucket_id = 'story-photos'`);
+check("others open a live story's photo, not other files in the folder",
+  r.rows?.length === 1 && r.rows[0].name === storyPath);
+await tryQuery("authenticated", s3, `insert into public.blocks (blocker_id, blocked_id) values ($1, $2)`, [s3, s1]);
+r = await tryQuery("authenticated", s3, `select id from public.map_stories()`);
+check("blocking hides stories", r.rows?.length === 0);
+r = await tryQuery("authenticated", s2, `insert into public.reports (reporter_id, reported_id, context, context_id, reason) values ($1, $2, 'story', $3, 'spam')`, [s2, s1, storyId]);
+check("report a story", !r.error);
+r = await tryQuery("authenticated", s2, `select id from public.map_stories()`);
+const s4Sees = (await tryQuery("authenticated", s4, `select id from public.map_stories()`)).rows?.length === 1;
+check("the reporter stops seeing it at once, others still do", r.rows?.length === 0 && s4Sees);
+for (const who of [s4, s5]) {
+  await tryQuery("authenticated", who, `insert into public.reports (reporter_id, reported_id, context, context_id, reason) values ($1, $2, 'story', $3, 'harassment')`, [who, s1, storyId]);
+}
+r = await tryQuery("authenticated", s6, `select id from public.map_stories()`);
+const ownerSees = (await tryQuery("authenticated", s1, `select id from public.map_stories()`)).rows?.length === 1;
+check("hidden for everyone at 3 reports (the poster still sees it)", r.rows?.length === 0 && ownerSees);
+r = await tryQuery("authenticated", s6, `select name from storage.objects where bucket_id = 'story-photos'`);
+check("a hidden story's photo can't be opened", r.rows?.length === 0);
+await db.query(`update public.reports set resolved = true where context_id = $1`, [storyId]);
+r = await tryQuery("authenticated", s6, `select id from public.map_stories()`);
+check("shown again when the founder resolves the reports", r.rows?.length === 1);
+r = await tryQuery("authenticated", s6, `select public.delete_story($1)`, [storyId]);
+check("can't delete someone else's story", /not_found/.test(r.error ?? ""));
+await db.query(`update public.stories set expires_at = now() - interval '1 minute' where id = $1`, [storyId]);
+r = await tryQuery("authenticated", s6, `select id from public.map_stories()`);
+check("stories disappear after 24 hours", r.rows?.length === 0);
+r = await tryQuery("authenticated", s6, `select public.clear_my_expired_stories() as path`);
+check("clearing expired stories only touches my own", r.rows?.length === 0);
+r = await tryQuery("authenticated", s1, `select public.clear_my_expired_stories() as path`);
+check("clear my expired stories (returns the photos to remove)", r.rows?.length === 1 && r.rows[0].path === storyPath);
+r = await tryQuery("authenticated", s1, `select public.delete_story($1) as path`, [storyId]);
+check("a deleted story is gone", /not_found/.test(r.error ?? ""));
+await db.query(`insert into public.stories (user_id, photo_path, lat, lng) select $1::uuid, $1::text || '/s' || g || '.jpg', 13.75, 100.5 from generate_series(1, 10) g`, [s2]);
+r = await tryQuery("authenticated", s2, `select public.post_story($1, '', 13.75, 100.5)`, [`${s2}/eleventh.jpg`]);
+check("max 10 stories per person per 24 hours", /too_many_stories/.test(r.error ?? ""));
+
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

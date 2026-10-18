@@ -9,15 +9,17 @@ export function openSafetyMenu(input: {
   name: string;
   myId: string;
   otherId: string;
-  context: 'traveller' | 'direct' | 'table';
+  context: 'traveller' | 'direct' | 'table' | 'story';
   contextId?: string;
   onBlocked: () => void;
+  onReported?: () => void;
 }) {
-  const { t, name, myId, otherId, context, contextId, onBlocked } = input;
+  const { t, name, myId, otherId, context, contextId, onBlocked, onReported } = input;
 
   function report(reason: string) {
     reportUser({ myId, otherId, context, contextId, reason }).then((error) => {
       Alert.alert(error ? t(`chat.errors.${error}`) : t('chat.reported'));
+      if (!error) onReported?.();
     });
   }
 

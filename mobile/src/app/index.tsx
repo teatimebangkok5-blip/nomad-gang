@@ -51,6 +51,7 @@ import { usePlansForMeetups, type DayPlan } from '@/lib/plans';
 import { useChats } from '@/lib/messages';
 import { useNotifications } from '@/lib/notifications';
 import { useMyName } from '@/lib/profiles';
+import { clearMyExpiredStories, groupStories, useStories } from '@/lib/stories';
 import { makeStyles, useColors } from '@/lib/theme';
 
 // What's open over the map: the place sheet for a partner venue or any Bangkok food place (OpenStreetMap) someone
@@ -127,6 +128,23 @@ export default function HomeScreen() {
   // Hangouts made from a day plan: tapping their pin draws the plan's route.
   const dayPlans = usePlansForMeetups(visibleMeetups.filter((meetup) => meetup.kind === 'hangout').map((meetup) => meetup.id));
   const selectedPlan = popMeetups.map((meetup) => dayPlans.get(meetup.id)).find((plan) => plan) ?? null;
+  // Stories: one pin per person (their profile picture in a brand ring) at their latest story. Key s:<user id>.
+  const { stories } = useStories(!!session);
+  useEffect(() => {
+    if (session) clearMyExpiredStories();
+  }, [session]);
+  const storyPins: MapPin[] = groupStories(stories ?? []).map((group) => ({
+    key: `s:${group.userId}`,
+    lat: group.lat,
+    lng: group.lng,
+    emoji: initialsOf(group.name) || '📸',
+    tone: 'story',
+    image: group.avatarPath ? profilePhotoUrl(group.avatarPath) : null,
+    count: group.stories.length > 1 ? group.stories.length : undefined,
+    accessibilityLabel:
+      group.userId === session?.user.id ? t('stories.pinLabelMine') : t('stories.pinLabel', { name: group.name }),
+  }));
+
   const pins: MapPin[] = [...pinGroups].flatMap(([key, list]) => {
     const at = meetupCoords(list[0], venueById);
     if (!at) return [];
@@ -203,9 +221,13 @@ export default function HomeScreen() {
     <View style={styles.root}>
       <VenueMap
         fullScreen
-        pins={pins}
+        pins={[...storyPins, ...pins]}
         userCoords={coords}
-        onPinPress={(key) => setSelection((current) => (current?.type === 'pin' && current.key === key ? null : { type: 'pin', key }))}
+        onPinPress={(key) =>
+          key.startsWith('s:')
+            ? router.push({ pathname: '/story/[userId]', params: { userId: key.slice(2) } })
+            : setSelection((current) => (current?.type === 'pin' && current.key === key ? null : { type: 'pin', key }))
+        }
         onMapPress={() => selection?.type === 'pin' && setSelection(null)}
         places={mapPlaces}
         placeDots={placeDots}
@@ -280,6 +302,13 @@ export default function HomeScreen() {
 
             {/* Plan my day, Hidden Gems and the Rewards Passport, then the feed filters. */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+              <RoundButton
+                size={40}
+                icon="camera"
+                iconColor={Colors.pinkText}
+                label={t('stories.add')}
+                onPress={() => router.push('/post-story')}
+              />
               <RoundButton size={40} icon="route" tone="plan" star label={t('plan.open')} onPress={() => router.push('/plan-day')} />
               <RoundButton size={40} label={t('gems.title')} onPress={() => router.push('/gems')}>
                 <Text style={styles.emojiButton}>💎</Text>
@@ -413,6 +442,15 @@ export default function HomeScreen() {
       </SlideUpPanel>
     </View>
   );
+}
+
+// "Somchai Jaidee" -> "SJ" (a story pin without a profile picture).
+function initialsOf(name: string): string {
+  return name
+    .split(/s+/)
+    .slice(0, 2)
+    .map((part) => part.slice(0, 1).toUpperCase())
+    .join('');
 }
 
 // A day hangout's plan under its pop-up card: tap to open the plan.

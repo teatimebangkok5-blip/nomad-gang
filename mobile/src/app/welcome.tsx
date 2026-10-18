@@ -1,25 +1,29 @@
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Platform, ScrollView, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Button } from '@/components/button';
-import { Icon, type IconName } from '@/components/icon';
-import { LanguageToggle } from '@/components/language-toggle';
+import { LanguageSegment } from '@/components/language-toggle';
 import { Logo } from '@/components/logo';
-import { Radius, Spacing, Type } from '@/constants/theme';
+import { Fonts, Radius, Spacing, Type } from '@/constants/theme';
 import { requirePhoneVerification, signInWithApple, signInWithGoogle } from '@/lib/auth';
 import { supabaseConfigured } from '@/lib/supabase';
 import { makeStyles, useColors, useTheme } from '@/lib/theme';
 
+const HERO_HEIGHT = 470;
+
 // First screen: what TableMeet is, and sign in with Google (and Apple on iPhone). Signing in means agreeing to the
-// Terms of Use and Privacy Policy, linked below the buttons.
+// Terms of Use and Privacy Policy, linked below the buttons. The hero is the app icon's artwork, zoomed past its
+// frame, fading into the background.
 export default function WelcomeScreen() {
   const styles = useStyles();
   const Colors = useColors();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const { name: themeName } = useTheme();
   const { t } = useTranslation();
   const [signingIn, setSigningIn] = useState(false);
@@ -49,45 +53,43 @@ export default function WelcomeScreen() {
     if (result === 'no-play-services') setError(t('welcome.errorPlayServices'));
   }
 
-  const steps: { icon: IconName; text: string }[] = [
-    { icon: 'nearMe', text: t('welcome.step1') },
-    { icon: 'group', text: t('welcome.step2') },
-    { icon: 'deal', text: t('welcome.step3') },
-  ];
+  // The artwork is square; show it bigger than the screen so its rounded frame is cut off.
+  const art = Math.max(width, HERO_HEIGHT) * 1.3;
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.topBar}>
-          <Logo />
-          <LanguageToggle />
-        </View>
+    <View style={styles.root}>
+      <View style={styles.hero} pointerEvents="none">
+        <Image
+          source={require('@/assets/images/icon.png')}
+          style={{ position: 'absolute', width: art, height: art, left: (width - art) / 2, top: (HERO_HEIGHT - art) / 2 - 20 }}
+          contentFit="cover"
+          accessibilityIgnoresInvertColors
+        />
+        <LinearGradient
+          colors={['rgba(10, 6, 18, 0.55)', 'rgba(10, 6, 18, 0)', 'rgba(10, 6, 18, 0)', Colors.bg]}
+          locations={[0, 0.3, 0.55, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+      </View>
 
-        <View style={styles.hero}>
-          <Image
-            source={require('@/assets/images/icon.png')}
-            style={styles.heroIcon}
-            contentFit="cover"
-            accessibilityIgnoresInvertColors
-          />
-          <Text style={styles.title}>{t('welcome.title')}</Text>
-          <Text style={styles.subtitle}>{t('welcome.subtitle')}</Text>
-        </View>
+      <View style={[styles.language, { top: insets.top + Spacing.md }]}>
+        <LanguageSegment />
+      </View>
 
-        <View style={styles.steps}>
-          {steps.map((step, index) => (
-            <View key={step.icon} style={styles.step}>
-              <View style={styles.stepIcon}>
-                <Icon name={step.icon} size={22} color={Colors.accent} />
-              </View>
-              <Text style={styles.stepNumber}>{index + 1}</Text>
-              <Text style={styles.stepText}>{step.text}</Text>
-            </View>
-          ))}
-        </View>
-      </ScrollView>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + Spacing.xl }]} bounces={false}>
+        <View style={styles.spacer} />
+        <Image
+          source={require('@/assets/images/icon.png')}
+          style={styles.icon}
+          contentFit="cover"
+          accessibilityIgnoresInvertColors
+        />
+        <Logo size={38} />
+        <Text style={styles.tagline}>{t('welcome.title')}</Text>
+        <Text style={styles.subtitle}>{t('welcome.subtitle')}</Text>
 
-      <View style={styles.footer}>
+        <View style={styles.flexGrow} />
+
         {!supabaseConfigured && (
           <Text style={styles.previewNotice}>Preview build: not connected to the TableMeet server yet.</Text>
         )}
@@ -104,12 +106,25 @@ export default function WelcomeScreen() {
                 ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
                 : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
             }
-            cornerRadius={Radius.md}
+            cornerRadius={28}
             style={styles.appleButton}
             onPress={handleApple}
           />
         )}
-        <Button title={t('welcome.continueWithGoogle')} onPress={handleGoogle} loading={signingIn} />
+        {/* Sign in with Google: a white button (without Google's logo, which may not be redrawn). */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ busy: signingIn }}
+          disabled={signingIn}
+          onPress={handleGoogle}
+          style={({ pressed }) => [styles.google, pressed && styles.pressed]}>
+          <LinearGradient colors={['#FFFFFF', '#FFFFFF', '#F1ECF7']} locations={[0, 0.5, 1]} style={StyleSheet.absoluteFill} />
+          {signingIn ? (
+            <ActivityIndicator color="#1A1028" />
+          ) : (
+            <Text style={styles.googleText}>{t('welcome.continueWithGoogle')}</Text>
+          )}
+        </Pressable>
         {requirePhoneVerification && <Text style={styles.note}>{t('welcome.nextStepNote')}</Text>}
         <Text style={styles.note}>
           {t('welcome.agreePrefix')}
@@ -128,61 +143,54 @@ export default function WelcomeScreen() {
           </Text>
           {t('welcome.agreeSuffix')}
         </Text>
-      </View>
-    </SafeAreaView>
+      </ScrollView>
+    </View>
   );
 }
 
 const useStyles = makeStyles((Colors) => ({
-  safe: { flex: 1, backgroundColor: Colors.bg },
-  scroll: { flexGrow: 1, paddingHorizontal: Spacing.xl, paddingBottom: Spacing.xl },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: Spacing.lg,
-  },
-  hero: { marginTop: Spacing.xxl, gap: Spacing.md },
-  heroIcon: { width: 96, height: 96, borderRadius: 24, marginBottom: Spacing.sm },
-  title: { ...Type.display, color: Colors.text },
-  subtitle: { ...Type.body, fontSize: 16, lineHeight: 24, color: Colors.textSecondary },
-  steps: { marginTop: Spacing.xxl, gap: Spacing.md },
-  step: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    padding: Spacing.lg,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.surface,
+  root: { flex: 1, backgroundColor: Colors.bg },
+  hero: { position: 'absolute', top: 0, left: 0, right: 0, height: HERO_HEIGHT, overflow: 'hidden' },
+  language: { position: 'absolute', right: Spacing.lg, zIndex: 2 },
+  scroll: { flexGrow: 1, paddingHorizontal: Spacing.xl, gap: 14 },
+  spacer: { height: 330 },
+  flexGrow: { flexGrow: 1, minHeight: Spacing.lg },
+  icon: {
+    width: 88,
+    height: 88,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    elevation: 10,
+    shadowColor: '#7B4DFF',
   },
-  stepIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.orangeTint,
+  tagline: { ...Type.title, lineHeight: 29, fontWeight: '700', color: Colors.text },
+  subtitle: { ...Type.body, color: Colors.textSecondary },
+  google: {
+    height: 56,
+    borderRadius: Radius.pill,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  stepNumber: { ...Type.label, color: Colors.textMuted },
-  stepText: { ...Type.body, color: Colors.text, flex: 1 },
-  footer: {
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.lg,
     gap: Spacing.md,
+    borderWidth: 1,
+    borderColor: '#E5DDF0',
+    overflow: 'hidden',
+    elevation: 6,
   },
+  pressed: { opacity: 0.85 },
+  googleText: { fontFamily: Fonts.body, fontSize: 16, fontWeight: '800', color: '#1A1028' },
   error: {
     ...Type.small,
     color: Colors.danger,
     backgroundColor: Colors.dangerBg,
     padding: Spacing.md,
     borderRadius: Radius.sm,
+    overflow: 'hidden',
   },
-  note: { ...Type.small, color: Colors.textMuted, textAlign: 'center' },
-  link: { color: Colors.accent, textDecorationLine: 'underline' },
-  appleButton: { height: 52 },
+  note: { ...Type.small, fontSize: 12, color: Colors.textMuted, textAlign: 'center' },
+  link: { color: Colors.textSecondary, fontWeight: '700' },
+  appleButton: { height: 56 },
   previewNotice: {
     ...Type.small,
     color: Colors.textSecondary,
@@ -190,5 +198,6 @@ const useStyles = makeStyles((Colors) => ({
     padding: Spacing.md,
     borderRadius: Radius.sm,
     textAlign: 'center',
+    overflow: 'hidden',
   },
 }));

@@ -5,14 +5,17 @@ import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } fro
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
+import { FormInput } from '@/components/form-parts';
+import { Icon } from '@/components/icon';
 import { LanguageToggle } from '@/components/language-toggle';
-import { Radius, Spacing, Type } from '@/constants/theme';
+import { Fonts, Radius, Spacing, Type } from '@/constants/theme';
 import { signOut } from '@/lib/auth';
 import { formatPhone, toE164 } from '@/lib/phone';
 import { supabase } from '@/lib/supabase';
 import { makeStyles, useColors } from '@/lib/theme';
 
 const RESEND_SECONDS = 60;
+const CODE_LENGTH = 6;
 
 // Second step after Google sign-in: add a phone number to the account and confirm it with an SMS code.
 export default function VerifyPhoneScreen() {
@@ -71,7 +74,7 @@ export default function VerifyPhoneScreen() {
   }
 
   async function handleVerify() {
-    if (!sentTo || code.length !== 6) return;
+    if (!sentTo || code.length !== CODE_LENGTH) return;
     setError(null);
     setBusy(true);
     const { error: verifyError } = await supabase.auth.verifyOtp({ phone: sentTo, token: code, type: 'phone_change' });
@@ -85,14 +88,37 @@ export default function VerifyPhoneScreen() {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.topBar}>
-            <Button title={t('phone.useDifferentAccount')} variant="text" onPress={signOut} />
+            <Text style={styles.topTitle}>{t('phone.header')}</Text>
             <LanguageToggle />
           </View>
 
-          <Text style={styles.title}>{t('phone.title')}</Text>
-          <Text style={styles.subtitle}>
-            {sentTo ? t('phone.codeSentTo', { phone: formatPhone(sentTo) }) : t('phone.subtitle')}
-          </Text>
+          <View style={styles.smsIcon}>
+            <Icon name="sms" size={32} color={Colors.violetText} />
+          </View>
+          <View style={styles.titles}>
+            <Text style={styles.title}>{sentTo ? t('phone.codeTitle') : t('phone.title')}</Text>
+            <Text style={styles.subtitle}>
+              {sentTo ? (
+                <>
+                  {t('phone.codeSentPrefix')}
+                  <Text style={styles.phone}>{formatPhone(sentTo)}</Text>
+                  {' · '}
+                  <Text
+                    accessibilityRole="button"
+                    style={styles.change}
+                    onPress={() => {
+                      if (busy) return;
+                      setSentTo(null);
+                      setError(null);
+                    }}>
+                    {t('phone.changeNumber')}
+                  </Text>
+                </>
+              ) : (
+                t('phone.subtitle')
+              )}
+            </Text>
+          </View>
 
           {error && (
             <Text accessibilityRole="alert" style={styles.error}>
@@ -103,59 +129,72 @@ export default function VerifyPhoneScreen() {
           {sentTo === null ? (
             <View style={styles.form}>
               <Text style={styles.label}>{t('phone.phoneLabel')}</Text>
-              <TextInput
+              <FormInput
+                icon="phone"
                 value={phoneInput}
                 onChangeText={setPhoneInput}
                 placeholder={t('phone.phonePlaceholder')}
-                placeholderTextColor={Colors.textMuted}
-                selectionColor={Colors.orange}
-                keyboardAppearance="dark"
                 keyboardType="phone-pad"
                 autoComplete="tel"
                 textContentType="telephoneNumber"
                 returnKeyType="send"
                 onSubmitEditing={handleSend}
                 autoFocus
-                style={styles.input}
+                style={styles.phoneInput}
               />
               <Text style={styles.hint}>{t('phone.phoneHint')}</Text>
-              <Button title={t('phone.sendCode')} onPress={handleSend} loading={busy} disabled={!phoneInput.trim()} />
             </View>
           ) : (
             <View style={styles.form}>
-              <Text style={styles.label}>{t('phone.codeLabel')}</Text>
-              <TextInput
-                value={code}
-                onChangeText={(text) => setCode(text.replace(/\D/g, '').slice(0, 6))}
-                keyboardType="number-pad"
-                autoComplete="sms-otp"
-                textContentType="oneTimeCode"
-                maxLength={6}
-                selectionColor={Colors.orange}
-                keyboardAppearance="dark"
-                autoFocus
-                style={[styles.input, styles.codeInput]}
-              />
-              <Button title={t('phone.verify')} onPress={handleVerify} loading={busy} disabled={code.length !== 6} />
-              <View style={styles.row}>
-                <Button
-                  title={resendIn > 0 ? t('phone.resendIn', { seconds: resendIn }) : t('phone.resend')}
-                  variant="text"
-                  disabled={resendIn > 0 || busy}
-                  onPress={() => sendCode(sentTo)}
+              {/* Six boxes; the real input lies invisibly on top so typing and SMS autofill work. */}
+              <View style={styles.boxes}>
+                {Array.from({ length: CODE_LENGTH }, (_, i) => (
+                  <View
+                    key={i}
+                    style={[styles.box, i === code.length && styles.boxActive, i < code.length && styles.boxFilled]}>
+                    <Text style={styles.digit}>{code[i] ?? ''}</Text>
+                  </View>
+                ))}
+                <TextInput
+                  value={code}
+                  onChangeText={(text) => setCode(text.replace(/\D/g, '').slice(0, CODE_LENGTH))}
+                  keyboardType="number-pad"
+                  autoComplete="sms-otp"
+                  textContentType="oneTimeCode"
+                  maxLength={CODE_LENGTH}
+                  caretHidden
+                  autoFocus
+                  accessibilityLabel={t('phone.codeLabel')}
+                  style={styles.hiddenInput}
                 />
-                <Button
-                  title={t('phone.changeNumber')}
-                  variant="text"
-                  disabled={busy}
-                  onPress={() => {
-                    setSentTo(null);
-                    setError(null);
-                  }}
-                />
+              </View>
+              <View style={styles.resendRow}>
+                <Icon name="timer" size={18} color={Colors.textMuted} />
+                {resendIn > 0 ? (
+                  <Text style={styles.resendText}>
+                    {t('phone.resendInPrefix')}
+                    <Text style={styles.resendTime}>{`0:${String(resendIn).padStart(2, '0')}`}</Text>
+                  </Text>
+                ) : (
+                  <Text
+                    accessibilityRole="button"
+                    style={[styles.resendText, styles.change]}
+                    onPress={() => !busy && sendCode(sentTo)}>
+                    {t('phone.resend')}
+                  </Text>
+                )}
               </View>
             </View>
           )}
+
+          <View style={styles.grow} />
+          <Button
+            title={sentTo ? t('phone.verify') : t('phone.sendCode')}
+            onPress={sentTo ? handleVerify : handleSend}
+            loading={busy}
+            disabled={sentTo ? code.length !== CODE_LENGTH : !phoneInput.trim()}
+          />
+          <Button title={t('phone.useDifferentAccount')} variant="text" onPress={signOut} />
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -165,38 +204,52 @@ export default function VerifyPhoneScreen() {
 const useStyles = makeStyles((Colors) => ({
   safe: { flex: 1, backgroundColor: Colors.bg },
   flex: { flex: 1 },
-  scroll: { flexGrow: 1, paddingHorizontal: Spacing.xl, paddingBottom: Spacing.xl },
-  topBar: {
-    flexDirection: 'row',
+  scroll: { flexGrow: 1, paddingHorizontal: 20, paddingBottom: Spacing.lg, gap: 18 },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: Spacing.sm },
+  topTitle: { ...Type.label, fontSize: 15, color: Colors.textSecondary },
+  smsIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    marginTop: Spacing.sm,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: Spacing.sm,
-    marginHorizontal: -Spacing.md,
-    paddingRight: Spacing.md,
+    justifyContent: 'center',
+    backgroundColor: Colors.violetTint,
   },
-  title: { ...Type.title, color: Colors.text, marginTop: Spacing.xxl },
-  subtitle: { ...Type.body, color: Colors.textSecondary, marginTop: Spacing.sm },
+  titles: { gap: Spacing.sm },
+  title: { ...Type.display, color: Colors.text },
+  subtitle: { ...Type.body, color: Colors.textSecondary },
+  phone: { color: Colors.text, fontWeight: '800' },
+  change: { color: Colors.accent, fontWeight: '800' },
   error: {
     ...Type.small,
     color: Colors.danger,
     backgroundColor: Colors.dangerBg,
     padding: Spacing.md,
     borderRadius: Radius.sm,
-    marginTop: Spacing.lg,
+    overflow: 'hidden',
   },
-  form: { marginTop: Spacing.xl, gap: Spacing.md },
-  label: { ...Type.label, color: Colors.textSecondary, marginBottom: -Spacing.xs },
-  input: {
-    minHeight: 52,
-    borderWidth: 1,
-    borderColor: Colors.borderStrong,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surface,
-    paddingHorizontal: Spacing.lg,
-    fontSize: 18,
-    color: Colors.text,
+  form: { gap: Spacing.md },
+  label: { ...Type.label, color: Colors.textSecondary },
+  phoneInput: { fontSize: 18 },
+  hint: { ...Type.small, color: Colors.textMuted },
+  boxes: { flexDirection: 'row', gap: Spacing.sm },
+  box: {
+    flex: 1,
+    height: 60,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    backgroundColor: Colors.field,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  codeInput: { fontSize: 24, letterSpacing: 8, textAlign: 'center' },
-  hint: { ...Type.small, color: Colors.textMuted, marginTop: -Spacing.xs },
-  row: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap' },
+  boxActive: { borderColor: Colors.orange },
+  boxFilled: { borderColor: Colors.borderStrong },
+  digit: { fontFamily: Fonts.heading, fontSize: 24, fontWeight: '800', color: Colors.text },
+  hiddenInput: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, opacity: 0, color: 'transparent' },
+  resendRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  resendText: { ...Type.label, fontWeight: '600', color: Colors.textMuted },
+  resendTime: { color: Colors.text, fontWeight: '800' },
+  grow: { flexGrow: 1 },
 }));

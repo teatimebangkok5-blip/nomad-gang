@@ -1,11 +1,10 @@
 import { useLocalSearchParams } from 'expo-router';
-import { useTranslation } from 'react-i18next';
 import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ScreenHeader } from '@/components/screen-header';
 import { Spacing, Type } from '@/constants/theme';
-import { currentLanguage } from '@/i18n';
+import { useLanguage } from '@/i18n';
 import { legalDoc, type LegalDocId } from '@/legal/content';
 import { legalContact } from '@/lib/legal';
 import { makeStyles } from '@/lib/theme';
@@ -13,10 +12,10 @@ import { makeStyles } from '@/lib/theme';
 // Terms of Use or Privacy Policy, in the app's language. Open from the welcome screen and Settings (signed in or not).
 export default function LegalScreen() {
   const styles = useStyles();
-  useTranslation();
+  const language = useLanguage();
   const { doc } = useLocalSearchParams<{ doc: string }>();
   const id: LegalDocId = doc === 'privacy' ? 'privacy' : 'terms';
-  const content = legalDoc(id, currentLanguage(), legalContact);
+  const content = legalDoc(id, language, legalContact);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>

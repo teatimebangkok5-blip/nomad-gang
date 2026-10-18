@@ -4,15 +4,27 @@ import { BackHandler, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Icon } from '@/components/icon';
+import { RoundButton } from '@/components/round-button';
 import { Radius, Spacing, Type } from '@/constants/theme';
-import { makeStyles, useColors } from '@/lib/theme';
+import { makeStyles } from '@/lib/theme';
 
-// The list that slides up over a full-screen map ("List" button), with a "Map" button and a scrim to close it.
-// The Android back button closes it too. Render it last so it sits on top of the map's floating UI.
-export function SlideUpPanel({ open, onClose, children }: { open: boolean; onClose: () => void; children: ReactNode }) {
+// The list that slides up over a full-screen map ("List" button): handle, an optional title and subtitle, a close
+// button and a scrim to close it. The Android back button closes it too. Render it last so it sits on top of the
+// map's floating UI.
+export function SlideUpPanel({
+  open,
+  onClose,
+  title,
+  subtitle,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title?: string;
+  subtitle?: string;
+  children: ReactNode;
+}) {
   const styles = useStyles();
-  const Colors = useColors();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
 
@@ -35,17 +47,14 @@ export function SlideUpPanel({ open, onClose, children }: { open: boolean; onClo
       <Animated.View
         entering={SlideInDown.duration(260)}
         exiting={SlideOutDown.duration(200)}
-        style={[styles.sheet, { top: insets.top + 72, paddingBottom: insets.bottom }]}>
+        style={[styles.sheet, { top: insets.top + 120, paddingBottom: insets.bottom }]}>
+        <View style={styles.handle} />
         <View style={styles.header}>
-          <View style={styles.handle} />
-          <Pressable
-            accessibilityRole="button"
-            onPress={onClose}
-            hitSlop={8}
-            style={({ pressed }) => [styles.mapButton, pressed && styles.pressed]}>
-            <Icon name="map" size={18} color={Colors.text} />
-            <Text style={styles.mapButtonText}>{t('tables.showMap')}</Text>
-          </Pressable>
+          <View style={styles.titles}>
+            {title ? <Text style={styles.title}>{title}</Text> : null}
+            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+          </View>
+          <RoundButton icon="close" label={t('tables.showMap')} onPress={onClose} />
         </View>
         {children}
       </Animated.View>
@@ -54,37 +63,38 @@ export function SlideUpPanel({ open, onClose, children }: { open: boolean; onClo
 }
 
 const useStyles = makeStyles((Colors) => ({
-  scrim: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(0, 0, 0, 0.45)' },
+  scrim: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(10, 6, 18, 0.5)' },
   sheet: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: Colors.bg,
-    borderTopLeftRadius: Radius.lg + 8,
-    borderTopRightRadius: Radius.lg + 8,
+    backgroundColor: Colors.overlay,
+    borderTopLeftRadius: Radius.sheet,
+    borderTopRightRadius: Radius.sheet,
     borderWidth: 1,
+    borderBottomWidth: 0,
     borderColor: Colors.border,
+    elevation: 16,
+  },
+  handle: {
+    width: 40,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: Colors.borderStrong,
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 6,
   },
   header: {
-    alignItems: 'center',
-    paddingTop: Spacing.sm,
-    paddingHorizontal: Spacing.lg,
-    gap: Spacing.sm,
-  },
-  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.borderStrong },
-  mapButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs,
-    alignSelf: 'flex-end',
-    minHeight: 36,
-    paddingHorizontal: Spacing.md,
-    borderRadius: Radius.pill,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.borderStrong,
+    gap: Spacing.md - 2,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.xs,
+    paddingBottom: Spacing.md,
   },
-  mapButtonText: { ...Type.label, color: Colors.text },
-  pressed: { opacity: 0.7 },
+  titles: { flex: 1, gap: 2 },
+  title: { ...Type.title, color: Colors.text },
+  subtitle: { ...Type.small, color: Colors.textMuted },
 }));

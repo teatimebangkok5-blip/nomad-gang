@@ -1,22 +1,28 @@
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GlossyFill } from '@/components/glossy';
 import { Button } from '@/components/button';
 import { CouponBox } from '@/components/coupon-box';
-import { Icon } from '@/components/icon';
+import { Icon, type IconName } from '@/components/icon';
+import { DealTag, KindTag, StatusTag, dealBadge } from '@/components/meetup-card';
 import { PlanTimeline } from '@/components/plan-timeline';
 import { RewardCard } from '@/components/reward-card';
 import { PlanMap } from '@/components/plan-view';
+import { RoundButton } from '@/components/round-button';
 import { ScreenHeader } from '@/components/screen-header';
-import { Radius, RaisedSmall, Spacing, Type } from '@/constants/theme';
-import { currentLanguage, localized } from '@/i18n';
+import { VenueMap } from '@/components/venue-map';
+import { avatarColor, Radius, Raised, Spacing, Type } from '@/constants/theme';
+import { localized, useLanguage } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { deviceZone, formatUtcOffset, formatWhen, formatWhenRange, sameClock } from '@/lib/bangkok-time';
+import { useCheckedIn } from '@/lib/coupons';
+import { meetupStatus } from '@/lib/feed';
 import { isSafeLink, openLink, ticketLink } from '@/lib/links';
 import {
   cancelMeetup,
@@ -28,6 +34,7 @@ import {
   type MeetupErrorKey,
 } from '@/lib/meetups';
 import { profilePhotoUrl } from '@/lib/photos';
+import { useChallenges } from '@/lib/passport';
 import { usePlanForMeetup } from '@/lib/plans';
 import { REWARD_MIN_PEOPLE, useRewards } from '@/lib/rewards';
 import { useMyFeedback } from '@/lib/profiles';
@@ -35,13 +42,17 @@ import { venuePhotoUrl } from '@/lib/supabase';
 import { PROMOTION_EMOJI, useVenues } from '@/lib/venues';
 import { makeStyles, useColors } from '@/lib/theme';
 
-// One table or hangout: where and when, who's coming, and join / leave / cancel.
+const HERO = 196;
+
+// One table or hangout: a small map of where, what and when, the check-in box, who's coming, and join / leave /
+// cancel / chat in the bar at the bottom.
 export default function TableScreen() {
   const styles = useStyles();
   const Colors = useColors();
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const { session } = useAuth();
   const { state, reload } = useMeetup(id);
   const venues = useVenues();
@@ -51,16 +62,15 @@ export default function TableScreen() {
   const [openedAt] = useState(() => Date.now());
   const loaded = state.status === 'ready' ? state.meetup : null;
   const endsAt = loaded ? new Date(loaded.ends_at).getTime() : 0;
+  const amMember = Boolean(loaded?.members.some((m) => m.user_id === session?.user.id));
   const canRate = Boolean(
-    loaded &&
-      loaded.status === 'open' &&
-      endsAt <= openedAt &&
-      endsAt > openedAt - 14 * 24 * 60 * 60 * 1000 &&
-      loaded.members.some((m) => m.user_id === session?.user.id),
+    loaded && loaded.status === 'open' && endsAt <= openedAt && endsAt > openedAt - 14 * 24 * 60 * 60 * 1000 && amMember,
   );
   const feedback = useMyFeedback(id, canRate);
+  const checkedIn = useCheckedIn(id, amMember && loaded?.status === 'open');
   // A day hangout made from a day plan links to the plan.
   const dayPlan = usePlanForMeetup(id);
+  const challenges = useChallenges();
 
   async function run(action: (meetupId: string) => Promise<{ error: MeetupErrorKey | null }>) {
     setError(null);
@@ -94,15 +104,16 @@ export default function TableScreen() {
   }
 
   const meetup = state.meetup;
+  const challenge = challenges.find((c) => c.id === meetup.challenge_id);
   const venue = meetup.venue_id ? venues.venues.find((v) => v.id === meetup.venue_id) : undefined;
-  const mapsTarget = venue
-    ? { lat: venue.lat, lng: venue.lng, name: localized(venue, 'name', language) }
+  const at = venue
+    ? { lat: venue.lat, lng: venue.lng }
     : meetup.place_lat !== null && meetup.place_lng !== null
-      ? { lat: meetup.place_lat, lng: meetup.place_lng, name: meetupPlaceName(meetup, language) }
+      ? { lat: meetup.place_lat, lng: meetup.place_lng }
       : null;
   const userId = session?.user.id;
   const isHost = meetup.host_id === userId;
-  const isMember = meetup.members.some((m) => m.user_id === userId);
+  const isMember = amMember;
   const ended = new Date(meetup.ends_at) <= new Date();
   const cancelled = meetup.status === 'cancelled';
   const seatsLeft = Math.max(0, meetup.max_people - meetup.members.length);
@@ -112,6 +123,15 @@ export default function TableScreen() {
   // Hangouts: the official ticket page the founder added, else the place's official website (OpenStreetMap).
   const tickets = isHangout && venue ? ticketLink(venue) : null;
   const website = isHangout && !tickets && isSafeLink(meetup.place_website) ? meetup.place_website : null;
+  const status =
+    cancelled || ended
+      ? null
+      : meetupStatus({ starts_at: meetup.starts_at, max_people: meetup.max_people, member_count: meetup.members.length }, new Date(openedAt));
+  const when = isHangout
+    ? formatWhenRange(meetup.starts_at, meetup.ends_at, t, undefined, meetup.time_zone)
+    : formatWhen(meetup.starts_at, t, undefined, meetup.time_zone);
+  const otherClock = !sameClock(meetup.time_zone, deviceZone(), new Date(meetup.starts_at));
+  const title = meetup.title || placeLabel;
 
   function confirm(message: string, actionLabel: string, action: () => void) {
     Alert.alert(message, undefined, [
@@ -120,114 +140,150 @@ export default function TableScreen() {
     ]);
   }
 
+  function share() {
+    Share.share({ message: t('tables.shareText', { title, when, place: placeLabel }) }).catch(() => {});
+  }
+
+  const leave = () =>
+    isHangout
+      ? confirm(t('hangouts.leaveConfirm'), t('hangouts.leave'), () => run(leaveMeetup))
+      : confirm(t('tables.leaveConfirm'), t('tables.leave'), () => run(leaveMeetup));
+  const cancel = () =>
+    isHangout
+      ? confirm(t('hangouts.cancelConfirm'), t('hangouts.cancel'), () => run(cancelMeetup))
+      : confirm(t('tables.cancelConfirm'), t('tables.cancelTable'), () => run(cancelMeetup));
+  const open = !cancelled && !ended;
+
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
-      <ScreenHeader />
+    <View style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content}>
-        {venue?.photo_path ? (
-          <Image
-            source={venuePhotoUrl(venue.photo_path)}
-            style={styles.photo}
-            contentFit="cover"
-            accessibilityIgnoresInvertColors
+        {/* Where: a small map of the place (or the venue's photo), under the back and share buttons. */}
+        <View style={[styles.hero, { height: insets.top + HERO }]}>
+          {at ? (
+            // A picture of the place: touches go to the scroll view.
+            <View style={StyleSheet.absoluteFill} pointerEvents="none">
+            <VenueMap
+              fullScreen
+              interactive={false}
+              userCoords={null}
+              center={at}
+              initialZoom={15.5}
+              pins={[
+                {
+                  key: 'here',
+                  ...at,
+                  emoji: isHangout ? '🙌' : '👥',
+                  tone: isHangout ? 'violet' : 'orange',
+                  count: meetup.members.length,
+                },
+              ]}
+              onPinPress={() => {}}
+              mapPadding={{ top: insets.top + 40, right: 0, bottom: 20, left: 0 }}
+            />
+            </View>
+          ) : venue?.photo_path ? (
+            <Image source={venuePhotoUrl(venue.photo_path)} style={StyleSheet.absoluteFill} contentFit="cover" />
+          ) : null}
+          <LinearGradient
+            colors={['rgba(10, 6, 18, 0.55)', 'rgba(10, 6, 18, 0)', 'rgba(10, 6, 18, 0)', Colors.bg]}
+            locations={[0, 0.35, 0.7, 1]}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
           />
-        ) : null}
+          <View style={[styles.heroBar, { top: insets.top + 6 }]}>
+            <RoundButton
+              icon="back"
+              label={t('common.back')}
+              onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+            />
+            <View style={styles.flex} />
+            {open && <RoundButton icon="share" label={t('tables.share')} onPress={share} />}
+          </View>
+        </View>
 
-        <View style={styles.pad}>
-          {isHangout ? (
-            <>
-              <Text style={styles.kindTag}>🙌 {t('hangouts.hangout')}</Text>
-              <Text style={styles.venue}>{meetup.title}</Text>
-              {meetup.description ? <Text style={styles.description}>{meetup.description}</Text> : null}
-            </>
-          ) : (
-            <>
-              <Text style={styles.venue}>{placeLabel}</Text>
-              {meetup.title ? <Text style={styles.title}>{meetup.title}</Text> : null}
-            </>
-          )}
-
-          <View style={styles.facts}>
-            <View style={styles.fact}>
-              <Icon name="time" size={18} color={Colors.accent} />
-              <Text style={styles.factText}>
-                {isHangout
-                  ? formatWhenRange(meetup.starts_at, meetup.ends_at, t, undefined, meetup.time_zone)
-                  : formatWhen(meetup.starts_at, t, undefined, meetup.time_zone)}
-                {!sameClock(meetup.time_zone, deviceZone(), new Date(meetup.starts_at))
-                  ? `  ·  ${t('hangouts.localTime', { offset: formatUtcOffset(meetup.time_zone, new Date(meetup.starts_at)) })}`
-                  : ''}
-              </Text>
-            </View>
-            {isHangout && (
-              <View style={styles.fact}>
-                <Icon name={venue ? venue.category : 'pin'} size={18} color={Colors.accent} />
-                <Text style={styles.factText}>{placeLabel}</Text>
-              </View>
-            )}
-            <View style={styles.fact}>
-              <Icon name="group" size={18} color={Colors.accent} />
-              <Text style={styles.factText}>
-                {t('tables.peopleCount', { count: meetup.members.length, max: meetup.max_people })}
-                {!cancelled && !ended && seatsLeft > 0 ? ` · ${t('tables.seatsLeft', { count: seatsLeft })}` : ''}
-              </Text>
-            </View>
-            {meetup.meeting_point ? (
-              <View style={styles.fact}>
-                <Icon name="pin" size={18} color={Colors.accent} />
-                <Text style={styles.factText}>{t('feed.meetAt', { place: meetup.meeting_point })}</Text>
-              </View>
-            ) : null}
-            {typeof meetup.cost_level === 'number' ? (
-              <View style={styles.fact}>
-                <Text style={styles.factEmoji}>฿</Text>
-                <Text style={styles.factText}>
-                  {t('feed.costPerPerson', { cost: t(`feed.cost.${meetup.cost_level}`) })}
+        <View style={styles.body}>
+          <View style={styles.tags}>
+            <KindTag hangout={isHangout} />
+            {cancelled || ended ? (
+              <View style={styles.endedTag}>
+                <Text style={styles.endedText}>
+                  {cancelled ? t('tables.cancelledShort') : t('tables.endedShort')}
                 </Text>
               </View>
+            ) : (
+              <StatusTag status={status} joined={isMember} />
+            )}
+            {venue?.deal && <DealTag label={`${dealBadge(venue.deal, t)} · ${t('home.partner')}`} push={false} />}
+          </View>
+
+          <View style={styles.titles}>
+            <Text style={styles.title}>{title}</Text>
+            {meetup.title ? <Text style={styles.subtitle}>{placeLabel}</Text> : null}
+            {isHangout && meetup.description ? <Text style={styles.description}>{meetup.description}</Text> : null}
+          </View>
+
+          <View style={styles.card}>
+            <GlossyFill />
+            <InfoRow icon="event" first>
+              {when}
+              {otherClock ? (
+                <Text style={styles.infoMuted}>
+                  {`  ·  ${t('hangouts.localTime', { offset: formatUtcOffset(meetup.time_zone, new Date(meetup.starts_at)) })}`}
+                </Text>
+              ) : null}
+            </InfoRow>
+            {isHangout && <InfoRow icon={venue ? venue.category : 'pin'}>{placeLabel}</InfoRow>}
+            {meetup.meeting_point ? <InfoRow icon="pin">{meetup.meeting_point}</InfoRow> : null}
+            {typeof meetup.cost_level === 'number' ? (
+              <InfoRow icon="payments">{t('feed.costPerPerson', { cost: t(`feed.cost.${meetup.cost_level}`) })}</InfoRow>
             ) : null}
+            <InfoRow icon="group">
+              {t('tables.peopleCount', { count: meetup.members.length, max: meetup.max_people })}
+              {open && seatsLeft > 0 ? ` · ${t('tables.seatsLeft', { count: seatsLeft })}` : ''}
+            </InfoRow>
+            {challenge && (
+              <InfoRow emoji={challenge.emoji}>
+                {t('passport.challengeFact', { title: localized(challenge, 'title', language), points: challenge.points })}
+              </InfoRow>
+            )}
             {venue?.address_en || venue?.address_th ? (
-              <View style={styles.fact}>
-                <Icon name="location" size={18} color={Colors.accent} />
-                <Text style={styles.factText}>{localized(venue, 'address', language)}</Text>
-              </View>
+              <InfoRow icon="location">{localized(venue, 'address', language)}</InfoRow>
             ) : null}
-            {mapsTarget && (
-              <Pressable accessibilityRole="link" onPress={() => Linking.openURL(directionsUrl(mapsTarget))} style={styles.fact}>
-                <Icon name="map" size={18} color={Colors.accent} />
-                <Text style={styles.mapsLink}>{t('tables.openInMaps')}</Text>
-              </Pressable>
+          </View>
+
+          <View style={styles.links}>
+            {at && (
+              <LinkChip
+                icon="map"
+                label={t('tables.openInMaps')}
+                onPress={() => Linking.openURL(directionsUrl({ ...at, name: placeLabel }))}
+              />
             )}
             {dayPlan && (
-              <Pressable
-                accessibilityRole="button"
+              <LinkChip
+                icon="route"
+                label={`${t('plan.dayPlan')} · ${t('plan.stops', { count: dayPlan.stops.length })}`}
                 onPress={() => router.push({ pathname: '/plan/[id]', params: { id: dayPlan.id } })}
-                style={styles.fact}>
-                <Icon name="route" size={18} color={Colors.accent} />
-                <Text style={styles.mapsLink}>
-                  {t('plan.dayPlan')} · {t('plan.stops', { count: dayPlan.stops.length })}
-                </Text>
-              </Pressable>
+              />
             )}
             {(tickets || website) && (
-              <Pressable accessibilityRole="link" onPress={() => openLink(tickets ?? website)} style={styles.fact}>
-                <Icon name={tickets ? 'ticket' : 'website'} size={18} color={Colors.accent} />
-                <Text style={styles.mapsLink}>{tickets ? t('hangouts.buyTickets') : t('hangouts.officialWebsite')}</Text>
-              </Pressable>
+              <LinkChip
+                icon={tickets ? 'ticket' : 'website'}
+                label={tickets ? t('hangouts.buyTickets') : t('hangouts.officialWebsite')}
+                onPress={() => openLink(tickets ?? website)}
+              />
             )}
           </View>
 
-          {dayPlan && (
-            <View style={styles.planMap}>
-              <PlanMap start={null} stops={dayPlan.stops} height={220} />
-            </View>
-          )}
+          {dayPlan && <PlanMap start={null} stops={dayPlan.stops} height={220} />}
 
+          {/* Promotions at a hangout venue (events, tickets…); a table's deal before joining (members see it in the
+              check-in box). */}
           {isHangout
             ? venue?.promotions.map((promotion) => (
                 <View key={promotion.id} style={styles.deal}>
                   <Text style={styles.dealEmoji}>{PROMOTION_EMOJI[promotion.kind]}</Text>
-                  <View style={styles.dealBody}>
+                  <View style={styles.flex}>
                     <Text style={styles.dealTitle}>{localized(promotion, 'title', language)}</Text>
                     <Text style={styles.dealNote}>
                       {promotion.kind === 'ticket'
@@ -241,19 +297,20 @@ export default function TableScreen() {
                   </View>
                 </View>
               ))
-            : venue?.deal && (
+            : venue?.deal &&
+              !isMember && (
                 <View style={styles.deal}>
-                  <Icon name="deal" size={18} color={Colors.accent} />
-                  <View style={styles.dealBody}>
+                  <Icon name="deal" size={20} color={Colors.accent} />
+                  <View style={styles.flex}>
                     <Text style={styles.dealTitle}>{localized(venue.deal, 'title', language)}</Text>
                     <Text style={styles.dealNote}>{t('tables.discountNote')}</Text>
                   </View>
                 </View>
               )}
 
-          {/* Group coupon at a partner venue: check in, then the QR for the staff. */}
-          {isMember && meetup.venue_id && !cancelled && !ended && (
-            <CouponBox meetupId={id} timeZone={meetup.time_zone} />
+          {/* Check in (Rewards Passport + a partner venue's coupon), until 3 days after the end. */}
+          {isMember && !cancelled && endsAt > openedAt - 3 * 24 * 60 * 60 * 1000 && (
+            <CouponBox meetupId={id} timeZone={meetup.time_zone} isHost={isHost} ended={ended} />
           )}
 
           {(cancelled || ended) && (
@@ -269,49 +326,64 @@ export default function TableScreen() {
           )}
 
           {/* Host reward: travel deals for this city once it ends (not cancelled) with 4+ people. */}
-          {isHost && !cancelled && (
-            ended && meetup.members.length >= REWARD_MIN_PEOPLE ? (
-              <View style={styles.reward}>
-                <HostReward meetupId={id} />
-              </View>
+          {isHost &&
+            !cancelled &&
+            (ended && meetup.members.length >= REWARD_MIN_PEOPLE ? (
+              <HostReward meetupId={id} />
             ) : (
-              <Pressable accessibilityRole="button" onPress={() => router.push('/rewards')}>
-                <Text style={styles.rewardHint}>
+              <Pressable accessibilityRole="button" onPress={() => router.push('/rewards')} style={styles.bonus}>
+                <Text style={styles.bonusEmoji}>🎁</Text>
+                <Text style={styles.bonusText}>
                   {ended
                     ? t('rewards.notThisTime', { count: REWARD_MIN_PEOPLE })
                     : t('rewards.hostBonus', { count: REWARD_MIN_PEOPLE })}{' '}
-                  <Text style={styles.rewardLink}>{t('rewards.seeExample')}</Text>
+                  <Text style={styles.bonusLink}>{t('rewards.seeExample')}</Text>
                 </Text>
               </Pressable>
-            )
-          )}
+            ))}
 
-          <Text style={styles.heading}>{canRate ? t('feedback.title') : t('tables.whoIsComing')}</Text>
-          {canRate && <Text style={styles.feedbackBody}>{t('feedback.body')}</Text>}
-          <View style={styles.members}>
+          <View>
+            <View style={styles.membersHeader}>
+              <Text style={styles.heading}>{canRate ? t('feedback.title') : t('tables.members')}</Text>
+              <Text style={styles.membersCount}>
+                {meetup.members.length}/{meetup.max_people}
+              </Text>
+            </View>
+            {canRate && <Text style={styles.feedbackBody}>{t('feedback.body')}</Text>}
             {meetup.members.map((member) => {
               const vote = feedback.votes.get(member.user_id);
               const rateable = canRate && member.user_id !== userId;
+              const here = checkedIn.has(member.user_id);
+              const initials = member.display_name
+                .split(/\s+/)
+                .slice(0, 2)
+                .map((part) => part.slice(0, 1).toUpperCase())
+                .join('');
               return (
                 <View key={member.user_id} style={styles.member}>
-                  <GlossyFill />
                   {/* Tap a person to open their profile. */}
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`${t('profile.open')}: ${member.display_name}`}
                     onPress={() => router.push({ pathname: '/profile/[userId]', params: { userId: member.user_id } })}
-                    style={({ pressed }) => [styles.memberMain, pressed && styles.memberPressed]}>
-                    <View style={styles.avatar}>
+                    style={({ pressed }) => [styles.memberMain, pressed && styles.pressed]}>
+                    <View style={[styles.avatar, { backgroundColor: avatarColor(member.user_id) }]}>
                       {member.avatar_path ? (
                         <Image source={profilePhotoUrl(member.avatar_path)} style={styles.avatarImage} contentFit="cover" />
                       ) : (
-                        <Text style={styles.avatarText}>{member.display_name.slice(0, 1).toUpperCase() || '?'}</Text>
+                        <Text style={styles.avatarText}>{initials || '?'}</Text>
                       )}
                     </View>
-                    <Text style={styles.memberName} numberOfLines={1}>
-                      {member.display_name}
-                      {member.user_id === userId ? ` (${t('tables.you')})` : ''}
-                    </Text>
+                    <View style={styles.flex}>
+                      <Text style={styles.memberName} numberOfLines={1}>
+                        {member.user_id === userId ? t('tables.you') : member.display_name}
+                      </Text>
+                      {open && isMember && (
+                        <Text style={[styles.memberSub, here && styles.memberHere]}>
+                          {here ? t('coupon.memberCheckedIn') : t('coupon.memberNotYet')}
+                        </Text>
+                      )}
+                    </View>
                     {member.user_id === meetup.host_id && <Text style={styles.hostTag}>{t('tables.host')}</Text>}
                   </Pressable>
                   {rateable && (
@@ -330,7 +402,7 @@ export default function TableScreen() {
                           style={({ pressed }) => [
                             styles.voteButton,
                             vote === value && (value === 1 ? styles.voteUp : styles.voteDown),
-                            pressed && styles.memberPressed,
+                            pressed && styles.pressed,
                           ]}>
                           <Text style={styles.voteEmoji}>{value === 1 ? '👍' : '👎'}</Text>
                         </Pressable>
@@ -348,61 +420,74 @@ export default function TableScreen() {
             </Text>
           )}
 
-          {isMember && (
-            <View style={styles.actions}>
-              <Button
-                title={isHangout ? t('hangouts.chat') : t('chat.openChat')}
-                icon={<Icon name="chat" size={20} color={Colors.onBrand} />}
-                onPress={() => router.push({ pathname: '/table-chat/[id]', params: { id } })}
-              />
-            </View>
-          )}
-
-          {!cancelled && !ended && (
-            <View style={styles.actions}>
-              {isHost ? (
-                <Button
-                  title={isHangout ? t('hangouts.cancel') : t('tables.cancelTable')}
-                  variant="secondary"
-                  loading={busy}
-                  onPress={() =>
-                    isHangout
-                      ? confirm(t('hangouts.cancelConfirm'), t('hangouts.cancel'), () => run(cancelMeetup))
-                      : confirm(t('tables.cancelConfirm'), t('tables.cancelTable'), () => run(cancelMeetup))
-                  }
-                />
-              ) : isMember ? (
-                <Button
-                  title={isHangout ? t('hangouts.leave') : t('tables.leave')}
-                  variant="secondary"
-                  loading={busy}
-                  onPress={() =>
-                    isHangout
-                      ? confirm(t('hangouts.leaveConfirm'), t('hangouts.leave'), () => run(leaveMeetup))
-                      : confirm(t('tables.leaveConfirm'), t('tables.leave'), () => run(leaveMeetup))
-                  }
-                />
-              ) : (
-                <Button
-                  title={seatsLeft > 0 ? t('tables.join') : t('tables.full')}
-                  variant={isHangout ? 'violet' : 'primary'}
-                  loading={busy}
-                  disabled={seatsLeft === 0}
-                  onPress={() => run(joinMeetup)}
-                />
-              )}
-            </View>
-          )}
-
           {dayPlan && (
-            <>
-              <Text style={styles.heading}>{t('plan.dayPlan')}</Text>
+            <View>
+              <Text style={[styles.heading, styles.headingSpace]}>{t('plan.dayPlan')}</Text>
               <PlanTimeline stops={dayPlan.stops} />
-            </>
+            </View>
           )}
         </View>
       </ScrollView>
-    </SafeAreaView>
+
+      {/* Chat and leave / cancel for members; join for everyone else. */}
+      {(isMember || open) && (
+        <View style={[styles.bar, { paddingBottom: insets.bottom + Spacing.md }]}>
+          {isMember ? (
+            <>
+              <View style={styles.flex}>
+                <Button
+                  title={isHangout ? t('hangouts.chat') : t('chat.openChat')}
+                  variant="secondary"
+                  icon={<Icon name="forum" size={22} color={Colors.text} />}
+                  onPress={() => router.push({ pathname: '/table-chat/[id]', params: { id } })}
+                />
+              </View>
+              {open && (
+                <Button
+                  title={isHost ? (isHangout ? t('hangouts.cancel') : t('tables.cancelTable')) : t('tables.leaveShort')}
+                  variant="danger"
+                  loading={busy}
+                  onPress={isHost ? cancel : leave}
+                />
+              )}
+            </>
+          ) : (
+            <View style={styles.flex}>
+              <Button
+                title={seatsLeft > 0 ? t('tables.join') : t('tables.full')}
+                variant={isHangout ? 'violet' : 'primary'}
+                loading={busy}
+                disabled={seatsLeft === 0}
+                onPress={() => run(joinMeetup)}
+              />
+            </View>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function InfoRow({ icon, emoji, first = false, children }: { icon?: IconName; emoji?: string; first?: boolean; children: ReactNode }) {
+  const styles = useStyles();
+  const Colors = useColors();
+  return (
+    <View style={[styles.infoRow, !first && styles.infoBorder]}>
+      {emoji ? <Text style={styles.infoEmoji}>{emoji}</Text> : icon && <Icon name={icon} size={22} color={Colors.accent} />}
+      <Text style={styles.infoText}>{children}</Text>
+    </View>
+  );
+}
+
+function LinkChip({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
+  const styles = useStyles();
+  const Colors = useColors();
+  return (
+    <Pressable accessibilityRole="link" onPress={onPress} style={({ pressed }) => [styles.linkChip, pressed && styles.pressed]}>
+      <GlossyFill />
+      <Icon name={icon} size={18} color={Colors.text} />
+      <Text style={styles.linkChipText}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -416,46 +501,61 @@ function HostReward({ meetupId }: { meetupId: string }) {
 }
 
 const useStyles = makeStyles((Colors) => ({
-  reward: { marginTop: Spacing.lg },
-  rewardLink: { fontWeight: '800', textDecorationLine: 'underline' },
-  rewardHint: {
-    ...Type.small,
-    color: Colors.glow,
-    backgroundColor: Colors.orangeTint,
-    padding: Spacing.md,
-    borderRadius: Radius.md,
-    marginTop: Spacing.lg,
-    overflow: 'hidden',
-  },
   safe: { flex: 1, backgroundColor: Colors.bg },
-  content: { paddingBottom: Spacing.xxl * 2 },
+  flex: { flex: 1 },
+  pressed: { opacity: 0.75 },
+  content: { paddingBottom: Spacing.xl },
   spinner: { marginTop: Spacing.xxl * 2 },
   center: { alignItems: 'center', gap: Spacing.md, padding: Spacing.xxl },
   centerText: { ...Type.body, color: Colors.textSecondary, textAlign: 'center' },
-  photo: { width: '100%', aspectRatio: 16 / 9, backgroundColor: Colors.surfaceRaised },
-  pad: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg },
-  venue: { ...Type.display, fontSize: 26, lineHeight: 32, color: Colors.text },
-  title: { ...Type.body, fontSize: 16, color: Colors.textSecondary, marginTop: Spacing.xs },
-  kindTag: { ...Type.label, color: Colors.textSecondary, marginBottom: Spacing.xs },
-  description: { ...Type.body, color: Colors.textSecondary, marginTop: Spacing.sm },
-  dealEmoji: { fontSize: 18 },
-  facts: { marginTop: Spacing.lg, gap: Spacing.sm },
-  fact: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  factText: { ...Type.body, color: Colors.text, flex: 1 },
-  factEmoji: { width: 18, textAlign: 'center', fontSize: 16, fontWeight: '800', color: Colors.accent },
-  mapsLink: { ...Type.body, color: Colors.accent, fontWeight: '600' },
+  hero: { overflow: 'hidden', backgroundColor: Colors.surfaceRaised },
+  heroBar: { position: 'absolute', left: Spacing.md, right: Spacing.md, flexDirection: 'row', gap: Spacing.sm },
+  body: { paddingHorizontal: Spacing.lg, marginTop: -14, gap: 14 },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
+  endedTag: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: Radius.pill, backgroundColor: Colors.dangerBg },
+  endedText: { fontSize: 12, lineHeight: 16, fontWeight: '800', color: Colors.danger },
+  titles: { gap: 4 },
+  title: { ...Type.display, fontSize: 26, lineHeight: 31, color: Colors.text },
+  subtitle: { ...Type.label, fontWeight: '600', color: Colors.textSecondary },
+  description: { ...Type.body, color: Colors.textSecondary, marginTop: Spacing.xs },
+  card: {
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    overflow: 'hidden',
+    ...Raised,
+  },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.md, paddingHorizontal: 14 },
+  infoBorder: { borderTopWidth: 1, borderTopColor: Colors.border },
+  infoEmoji: { width: 22, textAlign: 'center', fontSize: 18 },
+  infoText: { ...Type.body, fontWeight: '600', color: Colors.text, flex: 1 },
+  infoMuted: { fontWeight: '500', color: Colors.textMuted },
+  links: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  linkChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 40,
+    paddingHorizontal: 14,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    overflow: 'hidden',
+    ...Raised,
+  },
+  linkChipText: { ...Type.label, color: Colors.text },
   deal: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.md,
-    marginTop: Spacing.lg,
-    padding: Spacing.md,
-    borderRadius: Radius.md,
+    padding: 14,
+    borderRadius: Radius.lg,
     backgroundColor: Colors.orangeTint,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 154, 27, 0.35)',
   },
-  dealBody: { flex: 1, gap: 2 },
-  dealTitle: { ...Type.label, color: Colors.glow },
+  dealEmoji: { fontSize: 20 },
+  dealTitle: { ...Type.label, color: Colors.text },
   dealNote: { ...Type.small, color: Colors.textSecondary },
   status: {
     ...Type.label,
@@ -463,23 +563,44 @@ const useStyles = makeStyles((Colors) => ({
     backgroundColor: Colors.dangerBg,
     padding: Spacing.md,
     borderRadius: Radius.sm,
-    marginTop: Spacing.lg,
+    overflow: 'hidden',
   },
-  heading: { ...Type.heading, color: Colors.text, marginTop: Spacing.xl, marginBottom: Spacing.md },
-  members: { gap: Spacing.sm },
-  member: {
+  bonus: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
-    padding: Spacing.sm,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surface,
-    overflow: 'hidden',
-    ...RaisedSmall,
+    gap: Spacing.md - 2,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    backgroundColor: Colors.pinkTint,
   },
+  bonusEmoji: { fontSize: 20 },
+  bonusText: { ...Type.small, fontWeight: '600', color: Colors.text, flex: 1 },
+  bonusLink: { fontWeight: '800', textDecorationLine: 'underline' },
+  membersHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: Spacing.xs },
+  heading: { ...Type.heading, fontWeight: '800', color: Colors.text },
+  headingSpace: { marginBottom: Spacing.md },
+  membersCount: { ...Type.label, fontSize: 13, color: Colors.textMuted },
+  feedbackBody: { ...Type.small, color: Colors.textSecondary, marginBottom: Spacing.sm },
+  member: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, minHeight: 56 },
   memberMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-  memberPressed: { opacity: 0.7 },
-  feedbackBody: { ...Type.small, color: Colors.textSecondary, marginTop: -Spacing.sm, marginBottom: Spacing.md },
+  avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  avatarText: { fontSize: 14, fontWeight: '800', color: Colors.onBrand },
+  avatarImage: { width: 44, height: 44 },
+  memberName: { ...Type.body, fontWeight: '700', color: Colors.text },
+  memberSub: { ...Type.small, fontSize: 12, fontWeight: '600', color: Colors.textMuted },
+  memberHere: { color: Colors.ok },
+  hostTag: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
+    color: Colors.pinkText,
+    backgroundColor: Colors.pinkTint,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: Radius.pill,
+    overflow: 'hidden',
+  },
   votes: { flexDirection: 'row', gap: Spacing.xs },
   voteButton: {
     width: 44,
@@ -494,34 +615,21 @@ const useStyles = makeStyles((Colors) => ({
   voteUp: { backgroundColor: Colors.orangeTint, borderColor: Colors.orange },
   voteDown: { backgroundColor: Colors.dangerBg, borderColor: Colors.danger },
   voteEmoji: { fontSize: 18 },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.violetTint,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: { ...Type.label, color: Colors.text },
-  avatarImage: { width: 36, height: 36, borderRadius: 18 },
-  memberName: { ...Type.body, color: Colors.text, flex: 1 },
-  hostTag: {
-    ...Type.small,
-    fontWeight: '700',
-    color: Colors.onBrand,
-    backgroundColor: Colors.pink,
-    paddingHorizontal: Spacing.sm,
-    borderRadius: Radius.pill,
-    overflow: 'hidden',
-  },
   error: {
     ...Type.small,
     color: Colors.danger,
     backgroundColor: Colors.dangerBg,
     padding: Spacing.md,
     borderRadius: Radius.sm,
-    marginTop: Spacing.lg,
+    overflow: 'hidden',
   },
-  actions: { marginTop: Spacing.xl },
-  planMap: { marginTop: Spacing.lg },
+  bar: {
+    flexDirection: 'row',
+    gap: Spacing.md - 2,
+    paddingTop: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    backgroundColor: Colors.surface,
+  },
 }));

@@ -8,7 +8,7 @@ import { GlossyFill } from '@/components/glossy';
 import { Icon } from '@/components/icon';
 import { ScreenHeader } from '@/components/screen-header';
 import { Radius, RaisedSmall, Spacing, Type } from '@/constants/theme';
-import { currentLanguage } from '@/i18n';
+import { useLanguage } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { countryName, flagEmoji } from '@/lib/profile-options';
 import { useFriendsOf, useProfile } from '@/lib/profiles';
@@ -19,7 +19,7 @@ export default function FriendsScreen() {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const { userId } = useLocalSearchParams<{ userId: string }>();
   const { session } = useAuth();
   const friends = useFriendsOf(userId);

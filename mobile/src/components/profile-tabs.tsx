@@ -9,7 +9,7 @@ import { Icon } from '@/components/icon';
 import { SearchPicker, useProfileOptions } from '@/components/profile-fields';
 import { WorldClocks } from '@/components/world-clocks';
 import { Radius, Raised, RaisedSmall, Spacing, Type } from '@/constants/theme';
-import { currentLanguage } from '@/i18n';
+import { useLanguage } from '@/i18n';
 import { formatWhen } from '@/lib/bangkok-time';
 import {
   countryName,
@@ -70,7 +70,7 @@ export function AboutTab({
 }) {
   const styles = useStyles();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const empty = profile.languages.length === 0 && !profile.profession && !profile.travel_style && profile.interests.length === 0;
 
   return (
@@ -126,7 +126,7 @@ export function TravelTab({ profile, isMe, onChanged }: { profile: Profile; isMe
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const options = useProfileOptions();
   const [picking, setPicking] = useState(false);
   const visited = profile.visited_countries;
@@ -250,7 +250,7 @@ function TripRow({ trip, today, isMe }: { trip: Trip; today: string; isMe: boole
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const now = trip.starts_on <= today && trip.ends_on >= today;
 
   return (
@@ -323,7 +323,7 @@ function EventRow({ meetup }: { meetup: ProfileMeetup }) {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const place =
     (language === 'th' ? meetup.venue_name_th || meetup.place_name_th : meetup.venue_name_en || meetup.place_name_en) ||
     meetup.venue_name_en ||

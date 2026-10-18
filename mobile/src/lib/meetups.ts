@@ -42,6 +42,8 @@ export type OpenMeetup = MeetupPlace & {
   area_name: string | null;
   area_name_en: string | null;
   area_name_th: string | null;
+  // Group challenge picked by the host (Rewards Passport).
+  challenge_id?: string | null;
 };
 
 // Expected cost per person: 0 free, 1 under ฿300, 2 ฿300–700, 3 ฿700–1,500, 4 over ฿1,500.
@@ -63,6 +65,7 @@ export type MeetupDetail = MeetupPlace & {
   status: 'open' | 'cancelled';
   cost_level: CostLevel | null;
   meeting_point: string | null;
+  challenge_id: string | null;
   members: MeetupMember[];
   // The place's official website (OpenStreetMap), if any.
   place_website: string | null;
@@ -304,7 +307,7 @@ async function fetchMeetup(id: string): Promise<MeetupDetail | null | 'error'> {
     .from('meetups')
     .select(
       'id, kind, time_zone, venue_id, place_id, place:places(name, name_en, name_th, lat, lng, website), spot_name, spot_lat, spot_lng, ' +
-        'host_id, title, description, starts_at, ends_at, max_people, status, cost_level, meeting_point, ' +
+        'host_id, title, description, starts_at, ends_at, max_people, status, cost_level, meeting_point, challenge_id, ' +
         'meetup_members(user_id, joined_at, profiles(display_name, avatar_path))',
     )
     .eq('id', id)

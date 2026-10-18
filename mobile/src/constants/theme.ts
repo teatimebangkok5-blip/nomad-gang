@@ -33,6 +33,13 @@ export type ThemeColors = {
   white: string;
   danger: string;
   dangerBg: string;
+  // Violet / pink text and icons on plain backgrounds or on their tints (Hangout labels, "Host").
+  violetText: string;
+  pinkText: string;
+  // Success text: "Checked in ✓", "Open now", "Free entry".
+  ok: string;
+  // Text field background.
+  field: string;
   // Top-of-map fade: opaque → transparent.
   fade: readonly [string, string, string];
   // Glossy 3D style: surfaces go light (top) → base (bottom), with a shine over the top half.
@@ -57,16 +64,20 @@ export const darkColors: ThemeColors = {
   accent: '#FF9A1B',
   glow: '#F6C98F',
   onBrand: '#0A0612',
-  orangeTint: 'rgba(255, 154, 27, 0.14)',
-  pinkTint: 'rgba(255, 31, 120, 0.16)',
-  violetTint: 'rgba(123, 77, 255, 0.18)',
+  orangeTint: 'rgba(255, 154, 27, 0.15)',
+  pinkTint: 'rgba(255, 31, 120, 0.15)',
+  violetTint: 'rgba(123, 77, 255, 0.16)',
   pressed: 'rgba(255, 255, 255, 0.08)',
   white: '#FFFFFF',
   danger: '#FF6B7A',
-  dangerBg: 'rgba(255, 77, 94, 0.14)',
-  fade: ['rgba(10, 6, 18, 0.95)', 'rgba(10, 6, 18, 0.75)', 'rgba(10, 6, 18, 0)'],
+  dangerBg: 'rgba(255, 107, 122, 0.14)',
+  violetText: '#B9A2FF',
+  pinkText: '#FF6FA3',
+  ok: '#5FD39A',
+  field: '#120A1E',
+  fade: ['rgba(10, 6, 18, 0.94)', 'rgba(10, 6, 18, 0.7)', 'rgba(10, 6, 18, 0)'],
   surfaceGradient: ['#2A1D40', '#160D24'],
-  shine: ['rgba(255, 255, 255, 0.16)', 'rgba(255, 255, 255, 0)'],
+  shine: ['rgba(255, 255, 255, 0.09)', 'rgba(255, 255, 255, 0.03)'],
 };
 
 export const lightColors: ThemeColors = {
@@ -75,31 +86,70 @@ export const lightColors: ThemeColors = {
   surfaceRaised: '#F3EEF9',
   border: '#E5DDF0',
   borderStrong: '#CFC3E2',
-  overlay: 'rgba(255, 255, 255, 0.96)',
+  overlay: 'rgba(255, 255, 255, 0.95)',
   text: '#1A1028',
-  textSecondary: '#4E4361',
-  textMuted: '#6B6080',
+  textSecondary: '#4A3D5E',
+  textMuted: '#6B5F82',
   orange: '#FF9A1B',
   coral: '#FE593B',
   pink: '#FF1F78',
-  violet: '#6A3CE8',
-  accent: '#B35400',
+  violet: '#7B4DFF',
+  accent: '#A85300',
   glow: '#8A4300',
-  onBrand: '#1A1028',
-  orangeTint: 'rgba(255, 154, 27, 0.16)',
-  pinkTint: 'rgba(255, 31, 120, 0.12)',
-  violetTint: 'rgba(106, 60, 232, 0.10)',
+  onBrand: '#0A0612',
+  orangeTint: 'rgba(255, 154, 27, 0.15)',
+  pinkTint: 'rgba(255, 31, 120, 0.15)',
+  violetTint: 'rgba(123, 77, 255, 0.16)',
   pressed: 'rgba(26, 16, 40, 0.06)',
   white: '#FFFFFF',
-  danger: '#C4223A',
-  dangerBg: 'rgba(196, 34, 58, 0.10)',
-  fade: ['rgba(251, 248, 254, 0.96)', 'rgba(251, 248, 254, 0.8)', 'rgba(251, 248, 254, 0)'],
-  surfaceGradient: ['#FFFFFF', '#EFE8F8'],
-  shine: ['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0)'],
+  danger: '#C8283B',
+  dangerBg: 'rgba(200, 40, 59, 0.10)',
+  violetText: '#5A2FE0',
+  pinkText: '#C2004C',
+  ok: '#1E7F4F',
+  field: '#FFFFFF',
+  fade: ['rgba(251, 248, 254, 0.95)', 'rgba(251, 248, 254, 0.75)', 'rgba(251, 248, 254, 0)'],
+  surfaceGradient: ['#FFFFFF', '#F3EEF9'],
+  shine: ['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0.55)'],
 };
 
-// The pin / "Meet" gradient, left to right. Used for the main button in both themes.
+// The pin / "Meet" gradient, left to right: badges ("Partner", "−15%"), progress bars, the avatar ring.
 export const BrandGradient = ['#FF9A1B', '#FE593B', '#FF1F78'] as const;
+
+// Button fills, the same in both themes (top → bottom, except Plan my day which runs left → right). Text on orange
+// and plan is `onBrand`, on violet white. Draw them with <ToneFill /> (src/components/glossy.tsx).
+export const Tones = {
+  orange: { colors: ['#FFB547', '#FF9A1B', '#FE593B'], locations: [0, 0.45, 1], horizontal: false },
+  violet: { colors: ['#8F6BFF', '#7B4DFF', '#6236F0'], locations: [0, 0.5, 1], horizontal: false },
+  lilac: { colors: ['#BBA3FF', '#9C7AFF', '#8E66FF'], locations: [0, 0.5, 1], horizontal: false },
+  plan: { colors: ['#A88BFF', '#D86BD0', '#FF4F93'], locations: [0, 0.5, 1], horizontal: true },
+  brand: { colors: BrandGradient, locations: [0, 0.5, 1], horizontal: true },
+} as const;
+export type Tone = keyof typeof Tones;
+
+// Colored glow under brand buttons (Android draws elevation shadows in shadowColor from Android 9).
+export const ToneShadow = {
+  orange: { elevation: 6, shadowColor: '#FE593B', shadowOpacity: 0.35, shadowRadius: 9, shadowOffset: { width: 0, height: 6 } },
+  violet: { elevation: 6, shadowColor: '#7B4DFF', shadowOpacity: 0.38, shadowRadius: 9, shadowOffset: { width: 0, height: 6 } },
+  plan: { elevation: 6, shadowColor: '#D86BD0', shadowOpacity: 0.35, shadowRadius: 9, shadowOffset: { width: 0, height: 6 } },
+} as const;
+
+// Avatar colors for people without a photo (picked from their id, so a person keeps their color).
+export const AvatarColors = ['#FFB547', '#FF6FA3', '#A98BFF', '#6FD3B0', '#7FB8FF', '#FFD36E'] as const;
+export function avatarColor(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
+  return AvatarColors[Math.abs(hash) % AvatarColors.length];
+}
+
+// Fonts (assets/fonts, embedded by the expo-font plugin in app.json, so a new native build is needed after
+// changing them): Bricolage Grotesque for headings, Figtree for everything else. In Thai both are swapped for
+// Anuphan by makeStyles (src/lib/theme.tsx), which also gives Figtree to any text style without a font.
+export const Fonts = {
+  heading: 'Bricolage Grotesque',
+  body: 'Figtree',
+  thai: 'Anuphan',
+} as const;
 
 // Raised (3D) shadows: elevation on Android, shadow* on iOS.
 export const Raised = {
@@ -127,18 +177,20 @@ export const Spacing = {
   xxl: 32,
 } as const;
 
+// sm: notes and small tags; md: text fields, tiles, time slots; lg: cards and boxes; sheet: panels sliding up.
 export const Radius = {
-  sm: 8,
-  md: 12,
-  lg: 16,
+  sm: 10,
+  md: 18,
+  lg: 22,
+  sheet: 30,
   pill: 999,
 } as const;
 
 export const Type = {
-  display: { fontSize: 30, lineHeight: 38, fontWeight: '700' },
-  title: { fontSize: 22, lineHeight: 30, fontWeight: '700' },
-  heading: { fontSize: 17, lineHeight: 24, fontWeight: '600' },
-  body: { fontSize: 15, lineHeight: 22, fontWeight: '400' },
-  small: { fontSize: 13, lineHeight: 18, fontWeight: '400' },
-  label: { fontSize: 13, lineHeight: 18, fontWeight: '600' },
+  display: { fontFamily: Fonts.heading, fontSize: 30, lineHeight: 36, fontWeight: '800', letterSpacing: -0.5 },
+  title: { fontFamily: Fonts.heading, fontSize: 22, lineHeight: 28, fontWeight: '800', letterSpacing: -0.2 },
+  heading: { fontFamily: Fonts.heading, fontSize: 17, lineHeight: 23, fontWeight: '700' },
+  body: { fontFamily: Fonts.body, fontSize: 15, lineHeight: 22, fontWeight: '500' },
+  small: { fontFamily: Fonts.body, fontSize: 13, lineHeight: 18, fontWeight: '500' },
+  label: { fontFamily: Fonts.body, fontSize: 14, lineHeight: 19, fontWeight: '700' },
 } as const;

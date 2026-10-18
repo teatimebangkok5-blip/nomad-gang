@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
-  Alert,
+  BackHandler,
   FlatList,
   Linking,
   Pressable,
@@ -19,37 +19,33 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FavoriteButton } from '@/components/favorite-button';
-import { GlossyFill, Shine } from '@/components/glossy';
+import { GlossyFill, ToneFill } from '@/components/glossy';
 import { Button } from '@/components/button';
 import { Chip } from '@/components/chip';
-import { Icon } from '@/components/icon';
+import { Icon, type IconName } from '@/components/icon';
 import { LanguageToggle } from '@/components/language-toggle';
 import { Logo } from '@/components/logo';
 import { MeetupCard } from '@/components/meetup-card';
 import { stopName } from '@/components/plan-timeline';
 import { MapSearchBar, MapSearchResults } from '@/components/map-search';
+import { PROMOTION_ICON } from '@/components/promo-filter';
+import { RoundButton } from '@/components/round-button';
 import { SlideUpPanel } from '@/components/slide-up-panel';
 import { VenueMap, type MapFocus, type MapPin } from '@/components/venue-map';
 import { AREA_ZOOM, PLACE_ZOOM, useMapSearch, type SearchResult } from '@/lib/map-search';
-import { Radius, Raised, RaisedSmall, Spacing, Type } from '@/constants/theme';
-import { currentLanguage, localized } from '@/i18n';
+import { avatarColor, Radius, Raised, Spacing, Type } from '@/constants/theme';
+import { localized, useLanguage } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { formatWhen } from '@/lib/bangkok-time';
 import { FEED_FILTERS, matchesFilter, type FeedFilter } from '@/lib/feed';
 import type { FavoriteTarget } from '@/lib/favorites';
-import { distanceMeters, useCurrentLocation } from '@/lib/location';
-import {
-  directionsUrl,
-  joinMeetup,
-  meetupCoords,
-  meetupLocationKey,
-  meetupPlaceName,
-  useOpenMeetups,
-  type OpenMeetup,
-} from '@/lib/meetups';
-import { placeName, usePlacesInView, type Place } from '@/lib/places';
+import { isSafeLink, openLink } from '@/lib/links';
+import { BANGKOK_CENTER, distanceMeters, useCurrentLocation } from '@/lib/location';
+import { directionsUrl, meetupCoords, meetupLocationKey, useOpenMeetups, type OpenMeetup } from '@/lib/meetups';
+import { PLACE_ICON_COLORS, placeCategory, placeIcon, placeName, usePlacesInView, type Place } from '@/lib/places';
 import { skipLogin } from '@/lib/preview';
-import { isHangoutVenue, PROMOTION_EMOJI, useVenues, type Venue } from '@/lib/venues';
+import { venuePhotoUrl } from '@/lib/supabase';
+import { isHangoutVenue, useVenues, type Venue } from '@/lib/venues';
 import { profilePhotoUrl } from '@/lib/photos';
 import { usePlansForMeetups, type DayPlan } from '@/lib/plans';
 import { useChats } from '@/lib/messages';
@@ -57,20 +53,16 @@ import { useNotifications } from '@/lib/notifications';
 import { useMyName } from '@/lib/profiles';
 import { makeStyles, useColors } from '@/lib/theme';
 
-// What the bottom card shows: a partner venue, any Bangkok food place (OpenStreetMap) someone tapped, or the
-// hangouts at one spot (when there are several; a single one opens straight away).
-type Selection =
-  | { type: 'venue'; venueId: string }
-  | { type: 'place'; place: Place }
-  | { type: 'hangouts'; key: string };
+// What's open over the map: the place sheet for a partner venue or any Bangkok food place (OpenStreetMap) someone
+// tapped, or the pop-up cards of the tables / hangouts at one pin.
+type Selection = { type: 'venue'; venueId: string } | { type: 'place'; place: Place } | { type: 'pin'; key: string };
 
-// Home: a full-screen map of the open tables and hangouts people created, plus food place icons (partner venues
-// and their Discount/Offer/Event/Party buttons are on the Create table map). My profile, the logo, language,
-// Travellers, Settings and the search bar float on top; a swipeable row of cards, "Create table", "Create hangout"
-// and a "List" button (everything open) float at the bottom.
-// The cards row and the List show tables and hangouts within this distance.
+// Home: a full-screen map of the open tables (👥) and hangouts (🙌) people created, plus food place icons (partner
+// venues and their Discount/Offer/Event/Party buttons are on the Create table map). My profile, the logo,
+// language, Travellers, the bell, Settings, the search bar and a row of Plan my day + feed filters float on top;
+// List and Messages, the pop-up card of a tapped pin, and "Create table" / "Create hangout" float at the bottom.
+// The List shows tables and hangouts within this distance.
 const NEARBY_METERS = 50_000;
-const BANGKOK_CENTER = { lat: 13.7466, lng: 100.5393 };
 
 export default function HomeScreen() {
   const styles = useStyles();
@@ -86,21 +78,19 @@ export default function HomeScreen() {
   const location = useCurrentLocation();
   const [selection, setSelection] = useState<Selection | null>(null);
   const { places: mapPlaces, dots: placeDots, dotsMinZoom, onBoundsChange } = usePlacesInView();
-  const [joiningId, setJoiningId] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
   const [topHeight, setTopHeight] = useState(0);
   const [bottomHeight, setBottomHeight] = useState(0);
 
   const coords = location.state.status === 'granted' ? location.state.coords : null;
   const venueById = new Map(venues.venues.map((venue) => [venue.id, venue]));
-  const diningVenues = venues.venues.filter((venue) => !isHangoutVenue(venue));
-  const diningVenueIds = new Set(diningVenues.map((venue) => venue.id));
+  const diningVenueIds = new Set(venues.venues.filter((venue) => !isHangoutVenue(venue)).map((venue) => venue.id));
   // Partner venues live on the Create table map, so home search finds places and areas only.
   const search = useMapSearch('food', [], { near: coords });
   const me = useMyName(session?.user.id);
   const notifications = useNotifications(Boolean(session), coords);
   const [focus, setFocus] = useState<MapFocus | null>(null);
-  // Feed filters (Today, Tonight, Food, Drinks, Explore, Budget-friendly) apply to the pins, cards and List.
+  // Feed filters (Today, Tonight, Food, Drinks, Explore, Budget-friendly) apply to the pins and the List.
   const [filter, setFilter] = useState<FeedFilter>('all');
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -110,102 +100,63 @@ export default function HomeScreen() {
   const visibleMeetups = meetups.meetups.filter((meetup) =>
     matchesFilter(meetup, filter, meetup.venue_id ? venueById.get(meetup.venue_id) : undefined, now),
   );
-  // Hangouts can be anywhere in the world: the map pins them all, but the cards row and the List only show the ones
-  // near me (or near central Bangkok without my location).
+  // Hangouts can be anywhere in the world: the map pins them all, but the List only shows the ones near me (or near
+  // central Bangkok without my location).
   const listCenter = coords ?? BANGKOK_CENTER;
   const nearbyMeetups = visibleMeetups.filter((meetup) => {
     const at = meetupCoords(meetup, venueById);
     return !at || distanceMeters(listCenter, at) <= NEARBY_METERS;
   });
 
-  // Home shows what people created: tables share a 👥 pin per venue or place (partner venues themselves aren't
-  // pinned on home), hangouts share a 🙌 pin per place or spot.
-  const tablesAtVenue = new Map<string, number>();
-  const tablesAtPlace = new Map<string, OpenMeetup[]>();
-  const hangoutGroups = new Map<string, OpenMeetup[]>();
+  // Tables share a 👥 pin per venue or place (partner venues themselves aren't pinned on home), hangouts share a 🙌
+  // pin per place or spot. Pin keys: v:<venue id>, p:<place id>, h:<location key>.
+  const pinGroups = new Map<string, OpenMeetup[]>();
   for (const meetup of visibleMeetups) {
-    if (meetup.venue_id && diningVenueIds.has(meetup.venue_id)) {
-      tablesAtVenue.set(meetup.venue_id, (tablesAtVenue.get(meetup.venue_id) ?? 0) + 1);
-    } else if (meetup.kind === 'hangout') {
-      const key = meetupLocationKey(meetup);
-      hangoutGroups.set(key, [...(hangoutGroups.get(key) ?? []), meetup]);
-    } else if (meetup.place_id) {
-      tablesAtPlace.set(meetup.place_id, [...(tablesAtPlace.get(meetup.place_id) ?? []), meetup]);
-    }
+    const key =
+      meetup.venue_id && diningVenueIds.has(meetup.venue_id)
+        ? `v:${meetup.venue_id}`
+        : meetup.kind === 'hangout'
+          ? `h:${meetupLocationKey(meetup)}`
+          : meetup.place_id
+            ? `p:${meetup.place_id}`
+            : null;
+    if (key) pinGroups.set(key, [...(pinGroups.get(key) ?? []), meetup]);
   }
-  const meetupsAtSelection = (s: Selection) =>
-    s.type === 'hangouts'
-      ? (hangoutGroups.get(s.key) ?? [])
-      : meetups.meetups.filter((meetup) =>
-          s.type === 'venue' ? meetup.venue_id === s.venueId : !meetup.venue_id && meetup.place_id === s.place.id,
-        );
+  const selectedPinKey = selection?.type === 'pin' ? selection.key : null;
+  const popMeetups = selectedPinKey ? (pinGroups.get(selectedPinKey) ?? []) : [];
   // Hangouts made from a day plan: tapping their pin draws the plan's route.
   const dayPlans = usePlansForMeetups(visibleMeetups.filter((meetup) => meetup.kind === 'hangout').map((meetup) => meetup.id));
-  const selectedPlan =
-    selection?.type === 'hangouts'
-      ? (meetupsAtSelection(selection)
-          .map((meetup) => dayPlans.get(meetup.id))
-          .find((plan) => plan) ?? null)
-      : null;
-  const selectedVenueId = selection?.type === 'venue' ? selection.venueId : null;
-  const selectedPlaceId = selection?.type === 'place' ? selection.place.id : null;
-  const selectedHangoutsKey = selection?.type === 'hangouts' ? selection.key : null;
-  const pins: MapPin[] = [
-    ...[...tablesAtVenue].flatMap(([venueId, count]) => {
-      const venue = venueById.get(venueId);
-      return venue
-        ? [{ key: `v:${venueId}`, lat: venue.lat, lng: venue.lng, emoji: '👥', tone: 'violet' as const, count, selected: venueId === selectedVenueId }]
-        : [];
-    }),
-    ...[...tablesAtPlace].flatMap(([placeId, list]) => {
-      const first = list[0];
-      return first.place_lat !== null && first.place_lng !== null
-        ? [{ key: `p:${placeId}`, lat: first.place_lat, lng: first.place_lng, emoji: '👥', tone: 'violet' as const, count: list.length, selected: placeId === selectedPlaceId }]
-        : [];
-    }),
-    ...[...hangoutGroups].flatMap(([key, list]) => {
-      const at = meetupCoords(list[0], venueById);
-      return at
-        ? [{ key: `h:${key}`, ...at, emoji: '🙌', tone: 'violet' as const, count: list.length, selected: key === selectedHangoutsKey }]
-        : [];
-    }),
-  ];
+  const selectedPlan = popMeetups.map((meetup) => dayPlans.get(meetup.id)).find((plan) => plan) ?? null;
+  const pins: MapPin[] = [...pinGroups].flatMap(([key, list]) => {
+    const at = meetupCoords(list[0], venueById);
+    if (!at) return [];
+    const hangouts = key.startsWith('h:');
+    return [
+      {
+        key,
+        ...at,
+        emoji: hangouts ? '🙌' : '👥',
+        tone: hangouts ? ('violet' as const) : ('orange' as const),
+        count: list.reduce((sum, meetup) => sum + meetup.member_count, 0),
+        selected: key === selectedPinKey,
+      },
+    ];
+  });
 
-  const cardWidth = Math.min(width - Spacing.lg * 2 - Spacing.xl, 420);
+  const sheetOpen = selection?.type === 'venue' || selection?.type === 'place';
+  const cardWidth = Math.min(width - Spacing.md * 2 - Spacing.xl, 420);
 
-  function handlePinPress(key: string) {
-    if (key.startsWith('h:')) {
-      const group = hangoutGroups.get(key.slice(2)) ?? [];
-      // A single hangout opens straight away, unless it's a day plan: then the card and its route show first.
-      if (group.length === 1 && !dayPlans.has(group[0].id)) openTable(group[0]);
-      else if (group.length > 0) setSelection({ type: 'hangouts', key: key.slice(2) });
-      return;
-    }
-    if (key.startsWith('v:')) {
-      const venueId = key.slice(2);
-      setSelection((current) => (current?.type === 'venue' && current.venueId === venueId ? null : { type: 'venue', venueId }));
-      return;
-    }
-    const placeId = key.slice(2);
-    const first = tablesAtPlace.get(placeId)?.[0];
-    if (first?.place_name && first.place_lat !== null && first.place_lng !== null) {
-      setSelection({
-        type: 'place',
-        place: {
-          id: placeId,
-          name: first.place_name,
-          name_en: first.place_name_en,
-          name_th: first.place_name_th,
-          kind: 'restaurant',
-          lat: first.place_lat,
-          lng: first.place_lng,
-        },
-      });
-    }
-  }
+  // The Android back button closes the place sheet or the pop-up first.
+  useEffect(() => {
+    if (!selection) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setSelection(null);
+      return true;
+    });
+    return () => sub.remove();
+  }, [selection]);
 
-  // Tap on a place dot: a place linked to a partner venue opens as that venue.
-  // Search result: move the map there and open its card (areas just move the map).
+  // Search result: move the map there and open its sheet (areas just move the map).
   function handleSearchPick(result: SearchResult) {
     search.clear();
     if (result.type === 'venue') {
@@ -223,40 +174,30 @@ export default function HomeScreen() {
     }
   }
 
+  // Tap on a place dot: a place linked to a partner venue opens as that venue.
   function handlePlacePress(place: Place) {
     const venue = venues.venues.find((v) => v.place_id === place.id);
     setSelection(venue ? { type: 'venue', venueId: venue.id } : { type: 'place', place });
   }
 
-  function createAt(s: Selection) {
-    if (s.type === 'venue') {
-      router.push({ pathname: '/create-table', params: { venueId: s.venueId } });
-    } else if (s.type === 'place') {
-      router.push({ pathname: '/create-table', params: { placeId: s.place.id } });
-    } else {
-      router.push('/create-hangout');
-    }
-  }
-
-  async function handleJoin(id: string) {
-    setJoiningId(id);
-    const { error } = await joinMeetup(id);
-    setJoiningId(null);
-    if (error) Alert.alert(t(`tables.errors.${error}`));
-    else meetups.reload();
-  }
-
   const openTable = (meetup: OpenMeetup) => router.push({ pathname: '/table/[id]', params: { id: meetup.id } });
 
-  const renderMeetup = (meetup: OpenMeetup) => (
+  const renderMeetup = (meetup: OpenMeetup, compact = true) => (
     <MeetupCard
       meetup={meetup}
+      compact={compact}
       venue={meetup.venue_id ? venueById.get(meetup.venue_id) : undefined}
-      joining={joiningId === meetup.id}
-      onJoin={() => handleJoin(meetup.id)}
       onPress={() => openTable(meetup)}
     />
   );
+
+  const myInitials = me?.name
+    ? me.name
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((part) => part.slice(0, 1).toUpperCase())
+        .join('')
+    : null;
 
   return (
     <View style={styles.root}>
@@ -264,7 +205,8 @@ export default function HomeScreen() {
         fullScreen
         pins={pins}
         userCoords={coords}
-        onPinPress={handlePinPress}
+        onPinPress={(key) => setSelection((current) => (current?.type === 'pin' && current.key === key ? null : { type: 'pin', key }))}
+        onMapPress={() => selection?.type === 'pin' && setSelection(null)}
         places={mapPlaces}
         placeDots={placeDots}
         dotsMinZoom={dotsMinZoom}
@@ -276,242 +218,193 @@ export default function HomeScreen() {
         routeStops={selectedPlan?.stops.map((stop, index) => ({ lat: stop.lat, lng: stop.lng, label: String(index + 1) }))}
       />
 
-      {/* Top: logo, language, chips. A fade keeps it readable over the map. */}
-      <View style={styles.top} pointerEvents="box-none" onLayout={(e) => setTopHeight(e.nativeEvent.layout.height)}>
-        <LinearGradient
-          colors={Colors.fade}
-          locations={[0, 0.7, 1]}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
+      {sheetOpen ? (
+        <PlaceSheet
+          selection={selection}
+          venue={selection.type === 'venue' ? venueById.get(selection.venueId) : undefined}
+          meetups={meetups.meetups.filter((meetup) =>
+            selection.type === 'venue'
+              ? meetup.venue_id === selection.venueId
+              : !meetup.venue_id && meetup.place_id === selection.place.id,
+          )}
+          renderMeetup={(meetup) => renderMeetup(meetup, false)}
+          onClose={() => setSelection(null)}
         />
-        <View style={[styles.topBar, { paddingTop: insets.top + Spacing.sm }]}>
-          <View style={styles.brand}>
-            {/* My profile, top left. */}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('profile.myProfile')}
-              hitSlop={8}
-              disabled={!session}
-              onPress={() => session && router.push({ pathname: '/profile/[userId]', params: { userId: session.user.id } })}
-              style={({ pressed }) => [styles.profileButton, pressed && styles.roundButtonPressed]}>
-              <GlossyFill />
-              {me?.avatarPath ? (
-                <Image source={profilePhotoUrl(me.avatarPath)} style={StyleSheet.absoluteFill} contentFit="cover" />
-              ) : me ? (
-                <Text style={styles.profileInitial}>{me.name.slice(0, 1).toUpperCase()}</Text>
-              ) : (
-                <Icon name="person" size={20} color={Colors.text} />
-              )}
-            </Pressable>
-            <Logo size={20} />
-          </View>
-          <View style={styles.topActions}>
-            <LanguageToggle />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('travellers.open')}
-              hitSlop={8}
-              onPress={() => router.push('/travellers')}
-              style={({ pressed }) => [styles.roundButton, pressed && styles.roundButtonPressed]}>
-              <GlossyFill />
-              <Icon name="travellers" size={20} color={Colors.accent} />
-            </Pressable>
-            {/* The badge sits outside the button, which clips its contents to the circle. */}
-            <View>
+      ) : (
+        <>
+          {/* Top: profile, logo, header buttons, search, Plan my day + filters, over a fade. */}
+          <View style={styles.top} pointerEvents="box-none" onLayout={(e) => setTopHeight(e.nativeEvent.layout.height)}>
+            <LinearGradient colors={Colors.fade} locations={[0, 0.55, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
+            <View style={[styles.topBar, { paddingTop: insets.top + 6 }]}>
+              {/* My profile, top left: photo or initials in the brand ring. */}
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={
+                accessibilityLabel={t('profile.myProfile')}
+                hitSlop={6}
+                disabled={!session}
+                onPress={() => session && router.push({ pathname: '/profile/[userId]', params: { userId: session.user.id } })}
+                style={({ pressed }) => [styles.profileRing, pressed && styles.pressed]}>
+                <ToneFill tone="brand" shine={false} />
+                <View
+                  style={[styles.profileInner, { backgroundColor: session ? avatarColor(session.user.id) : Colors.surfaceRaised }]}>
+                  {me?.avatarPath ? (
+                    <Image source={profilePhotoUrl(me.avatarPath)} style={StyleSheet.absoluteFill} contentFit="cover" />
+                  ) : myInitials ? (
+                    <Text style={styles.profileInitials}>{myInitials}</Text>
+                  ) : (
+                    <Icon name="person" size={20} color={Colors.onBrand} />
+                  )}
+                </View>
+              </Pressable>
+              <View style={styles.logo}>
+                <Logo size={21} />
+              </View>
+              <LanguageToggle />
+              <RoundButton icon="explore" tone="violet" label={t('travellers.open')} onPress={() => router.push('/travellers')} />
+              <RoundButton
+                icon="notifications"
+                label={
                   notifications.unreadCount > 0
                     ? t('notifications.openUnread', { count: notifications.unreadCount })
                     : t('notifications.open')
                 }
-                hitSlop={8}
+                badge={notifications.unreadCount}
                 onPress={() => router.push('/notifications')}
-                style={({ pressed }) => [styles.roundButton, pressed && styles.roundButtonPressed]}>
-                <GlossyFill />
-                <Icon name="notifications" size={20} color={Colors.accent} />
-              </Pressable>
-              {notifications.unreadCount > 0 && (
-                <View style={styles.countBadge} pointerEvents="none">
-                  <Text style={styles.countBadgeText}>{notifications.unreadCount > 9 ? '9+' : notifications.unreadCount}</Text>
-                </View>
-              )}
+              />
+              <RoundButton icon="settings" label={t('settings.open')} onPress={() => router.push('/settings')} />
             </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('settings.open')}
-              hitSlop={8}
-              onPress={() => router.push('/settings')}
-              style={({ pressed }) => [styles.roundButton, pressed && styles.roundButtonPressed]}>
-              <GlossyFill />
-              <Icon name="settings" size={20} color={Colors.textSecondary} />
-            </Pressable>
+
+            <View style={styles.search}>
+              <MapSearchBar value={search.query} onChangeText={search.setQuery} placeholder={t('search.foodPlaceholder')} />
+            </View>
+
+            {/* Plan my day, Hidden Gems and the Rewards Passport, then the feed filters. */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+              <RoundButton size={40} icon="route" tone="plan" star label={t('plan.open')} onPress={() => router.push('/plan-day')} />
+              <RoundButton size={40} label={t('gems.title')} onPress={() => router.push('/gems')}>
+                <Text style={styles.emojiButton}>💎</Text>
+              </RoundButton>
+              <RoundButton size={40} label={t('passport.title')} onPress={() => router.push('/passport')}>
+                <Text style={styles.emojiButton}>🎫</Text>
+              </RoundButton>
+              <View style={styles.divider} />
+              {FEED_FILTERS.map((option) => (
+                <Chip key={option} label={t(`feed.filters.${option}`)} selected={option === filter} onPress={() => setFilter(option)} />
+              ))}
+            </ScrollView>
+
+            {skipLogin && (
+              // Developer-only notice (English on purpose): reminds that this build skips sign-in.
+              <Text style={styles.previewNotice}>Preview mode: sign-in is turned off</Text>
+            )}
+
+            {location.state.status === 'denied' && (
+              <Pressable
+                accessibilityRole="button"
+                onPress={location.request}
+                style={({ pressed }) => [styles.locationPill, pressed && styles.pressed]}>
+                <Icon name="locationOff" size={16} color={Colors.violetText} />
+                <Text style={styles.locationPillText}>
+                  {location.state.canAskAgain ? t('home.locationOffTitle') : t('home.locationOpenSettings')}
+                </Text>
+              </Pressable>
+            )}
           </View>
-        </View>
 
-        <View style={styles.search}>
-          <MapSearchBar value={search.query} onChangeText={search.setQuery} placeholder={t('search.foodPlaceholder')} />
-        </View>
-
-        {/* Plan my day: a bright violet → pink button, bigger than the round header buttons, with a star badge. The
-            badge sits outside the button, which clips its contents. */}
-        <View style={styles.planWrap}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push('/plan-day')}
-            style={({ pressed }) => [styles.planButton, pressed && styles.roundButtonPressed]}>
+          {/* Bottom: List + Messages, the tapped pin's cards, Create table / Create hangout. */}
+          <View
+            style={[styles.bottom, { paddingBottom: insets.bottom + Spacing.lg }]}
+            pointerEvents="box-none"
+            onLayout={(e) => setBottomHeight(e.nativeEvent.layout.height)}>
             <LinearGradient
-              colors={[Colors.violet, Colors.pink]}
-              start={{ x: 0, y: 0.5 }}
-              end={{ x: 1, y: 0.5 }}
+              colors={[Colors.fade[2], Colors.fade[1], Colors.fade[0]]}
+              locations={[0, 0.4, 1]}
               style={StyleSheet.absoluteFill}
               pointerEvents="none"
             />
-            <Shine onColor />
-            <Icon name="route" size={22} color={Colors.white} />
-            <Text style={styles.planButtonText}>{t('plan.open')}</Text>
-          </Pressable>
-          <View style={styles.planStar} pointerEvents="none">
-            <Text style={styles.planStarText}>⭐</Text>
-          </View>
-        </View>
+            <View style={styles.cornerButtons} pointerEvents="box-none">
+              <RoundButton size={52} icon="listBulleted" label={t('tables.showList')} onPress={() => setListOpen(true)} />
+              <RoundButton
+                size={52}
+                icon="chatBubble"
+                label={unreadChats > 0 ? t('messages.openUnread', { count: unreadChats }) : t('messages.open')}
+                badge={unreadChats}
+                onPress={() => router.push('/messages')}
+              />
+            </View>
 
-        {skipLogin && (
-          // Developer-only notice (English on purpose): reminds that this build skips sign-in.
-          <Text style={styles.previewNotice}>Preview mode: sign-in is turned off</Text>
-        )}
-
-        {location.state.status === 'denied' && (
-          <Pressable
-            accessibilityRole="button"
-            onPress={location.request}
-            style={({ pressed }) => [styles.locationPill, pressed && styles.roundButtonPressed]}>
-            <Icon name="locationOff" size={16} color={Colors.accent} />
-            <Text style={styles.locationPillText}>
-              {location.state.canAskAgain ? t('home.locationOffTitle') : t('home.locationOpenSettings')}
-            </Text>
-          </Pressable>
-        )}
-      </View>
-
-      {/* Bottom: table cards row + actions. */}
-      <View
-        style={[styles.bottom, { paddingBottom: insets.bottom + Spacing.md }]}
-        pointerEvents="box-none"
-        onLayout={(e) => setBottomHeight(e.nativeEvent.layout.height)}>
-        {selection ? (
-          <PlaceCard
-            selection={selection}
-            venue={
-              selection.type === 'venue'
-                ? venueById.get(selection.venueId)
-                : selection.type === 'hangouts'
-                  ? venueById.get(meetupsAtSelection(selection)[0]?.venue_id ?? '')
-                  : undefined
-            }
-            tables={meetupsAtSelection(selection)}
-            dayPlan={selectedPlan}
-            renderMeetup={renderMeetup}
-            onCreate={() => createAt(selection)}
-            onClose={() => setSelection(null)}
-          />
-        ) : !session ? null : meetups.status === 'loading' ? (
-          <ActivityIndicator color={Colors.accent} style={styles.cardsSpinner} />
-        ) : nearbyMeetups.length === 0 && filter === 'all' ? (
-          <View style={[styles.emptyCard, { marginHorizontal: Spacing.lg }]}>
-            <GlossyFill />
-            <Text style={styles.emptyTitle}>
-              {meetups.status === 'error' ? t('tables.errorLoad') : t('tables.noTablesTitle')}
-            </Text>
-            {meetups.status !== 'error' && <Text style={styles.emptyBody}>{t('tables.noTablesBody')}</Text>}
-            {meetups.status !== 'error' && <Text style={styles.tip}>{t('tables.pickAnyPlace')}</Text>}
-          </View>
-        ) : (
-          <>
-            <FeedFilters value={filter} onChange={setFilter} />
-            {nearbyMeetups.length === 0 ? (
-              <View style={[styles.emptyCard, { marginHorizontal: Spacing.lg }]}>
-                <GlossyFill />
-                <Text style={styles.emptyBody}>{t('feed.noMatch')}</Text>
-              </View>
-            ) : (
-          <FlatList
-            horizontal
-            data={nearbyMeetups}
-            keyExtractor={(meetup) => meetup.id}
-            renderItem={({ item }) => <View style={{ width: cardWidth }}>{renderMeetup(item)}</View>}
-            showsHorizontalScrollIndicator={false}
-            snapToInterval={cardWidth + Spacing.md}
-            decelerationRate="fast"
-            contentContainerStyle={styles.cards}
-          />
-            )}
-          </>
-        )}
-
-        <View style={styles.actions}>
-          <View style={styles.createButton}>
-            <Button
-              compact
-              title={t('tables.createTable')}
-              icon={<Icon name="add" size={18} color={Colors.onBrand} />}
-              onPress={() => router.push('/create-table')}
-            />
-          </View>
-          <View style={styles.createButton}>
-            <Button
-              compact
-              variant="violet"
-              title={t('hangouts.createHangout')}
-              icon={<Icon name="hangout" size={18} color={Colors.white} />}
-              onPress={() => router.push('/create-hangout')}
-            />
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('tables.showList')}
-            onPress={() => setListOpen(true)}
-            style={({ pressed }) => [styles.listButton, pressed && styles.roundButtonPressed]}>
-            <GlossyFill />
-            <Icon name="list" size={22} color={Colors.text} />
-          </Pressable>
-          {/* Messages: every chat in one place. The badge sits outside the button, which clips its contents. */}
-          <View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={
-                unreadChats > 0 ? t('messages.openUnread', { count: unreadChats }) : t('messages.open')
-              }
-              onPress={() => router.push('/messages')}
-              style={({ pressed }) => [styles.listButton, pressed && styles.roundButtonPressed]}>
-              <GlossyFill />
-              <Icon name="chat" size={22} color={Colors.accent} />
-            </Pressable>
-            {unreadChats > 0 && (
-              <View style={styles.countBadge} pointerEvents="none">
-                <Text style={styles.countBadgeText}>{unreadChats > 9 ? '9+' : unreadChats}</Text>
+            {popMeetups.length > 0 && (
+              <View style={styles.pop}>
+                {popMeetups.length === 1 ? (
+                  <View style={styles.popSingle}>{renderMeetup(popMeetups[0])}</View>
+                ) : (
+                  <FlatList
+                    horizontal
+                    data={popMeetups}
+                    keyExtractor={(meetup) => meetup.id}
+                    renderItem={({ item }) => <View style={{ width: cardWidth }}>{renderMeetup(item)}</View>}
+                    showsHorizontalScrollIndicator={false}
+                    snapToInterval={cardWidth + Spacing.md - 2}
+                    decelerationRate="fast"
+                    contentContainerStyle={styles.popRow}
+                  />
+                )}
+                {selectedPlan && <PlanRow plan={selectedPlan} />}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('common.close')}
+                  hitSlop={8}
+                  onPress={() => setSelection(null)}
+                  style={({ pressed }) => [styles.grabber, pressed && styles.pressed]}>
+                  <GlossyFill />
+                  <View style={styles.grabberBar} />
+                </Pressable>
               </View>
             )}
+
+            <View style={styles.actions}>
+              <View style={styles.flex}>
+                <Button
+                  compact
+                  title={t('tables.createTable')}
+                  icon={<Icon name="addCircle" size={22} color={Colors.onBrand} />}
+                  onPress={() => router.push('/create-table')}
+                />
+              </View>
+              <View style={styles.flex}>
+                <Button
+                  compact
+                  variant="violet"
+                  title={t('hangouts.createHangout')}
+                  icon={<Icon name="addCircle" size={22} color={Colors.white} />}
+                  onPress={() => router.push('/create-hangout')}
+                />
+              </View>
+            </View>
           </View>
-        </View>
-      </View>
 
-      <MapSearchResults
-        visible={search.active}
-        searching={search.searching}
-        results={search.results}
-        top={Math.max(topHeight - Spacing.lg, insets.top + 100)}
-        onPick={handleSearchPick}
-        onClose={search.clear}
-      />
+          <MapSearchResults
+            visible={search.active}
+            searching={search.searching}
+            results={search.results}
+            top={Math.max(topHeight - Spacing.xxl * 2, insets.top + 100)}
+            onPick={handleSearchPick}
+            onClose={search.clear}
+          />
+        </>
+      )}
 
-      <SlideUpPanel open={listOpen} onClose={() => setListOpen(false)}>
+      <SlideUpPanel
+        open={listOpen}
+        onClose={() => setListOpen(false)}
+        title={t('home.openNearby')}
+        subtitle={session && meetups.status === 'ready' ? t('home.openNearbySub', { count: nearbyMeetups.length }) : undefined}>
         <ListPanel
           filter={filter}
           onFilter={setFilter}
           meetups={nearbyMeetups}
           meetupsStatus={session ? meetups.status : 'ready'}
-          renderMeetup={renderMeetup}
+          renderMeetup={(meetup) => renderMeetup(meetup)}
           onRefresh={async () => {
             location.refresh();
             await Promise.all([venues.pullToRefresh(), meetups.reload()]);
@@ -522,165 +415,205 @@ export default function HomeScreen() {
   );
 }
 
-function PlaceCard({
+// A day hangout's plan under its pop-up card: tap to open the plan.
+function PlanRow({ plan }: { plan: DayPlan }) {
+  const styles = useStyles();
+  const Colors = useColors();
+  const { t } = useTranslation();
+  const language = useLanguage();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => router.push({ pathname: '/plan/[id]', params: { id: plan.id } })}
+      style={({ pressed }) => [styles.planRow, pressed && styles.pressed]}>
+      <GlossyFill />
+      <Icon name="route" size={20} color={Colors.violetText} />
+      <View style={styles.flex}>
+        <Text style={styles.planTitle}>
+          {t('plan.dayPlan')} · {t('plan.stops', { count: plan.stops.length })}
+        </Text>
+        <Text style={styles.planStops} numberOfLines={1}>
+          {plan.stops.map((stop, index) => `${index + 1} ${stopName(stop, language)}`).join('  →  ')}
+        </Text>
+      </View>
+    </Pressable>
+  );
+}
+
+// The place sheet over the map: photo (partner venues), name and type, Open in Maps / website, partner offers,
+// what's happening there, "Create table here" and the heart.
+function PlaceSheet({
   selection,
   venue,
-  tables,
-  dayPlan,
+  meetups,
   renderMeetup,
-  onCreate,
   onClose,
 }: {
-  selection: Selection;
+  selection: { type: 'venue'; venueId: string } | { type: 'place'; place: Place };
   venue: Venue | undefined;
-  tables: OpenMeetup[];
-  dayPlan: DayPlan | null;
+  meetups: OpenMeetup[];
   renderMeetup: (meetup: OpenMeetup) => React.ReactNode;
-  onCreate: () => void;
   onClose: () => void;
 }) {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
-  const language = currentLanguage();
-  const hangouts = selection.type === 'hangouts';
-  const first = tables[0];
-  const name = venue
-    ? localized(venue, 'name', language)
-    : selection.type === 'place'
-      ? placeName(selection.place, language)
-      : first
-        ? meetupPlaceName(first, language)
-        : '';
-  const mapsTarget =
-    selection.type === 'place'
-      ? { lat: selection.place.lat, lng: selection.place.lng, name }
-      : venue
-        ? { lat: venue.lat, lng: venue.lng, name }
-        : first && first.place_lat !== null && first.place_lng !== null
-          ? { lat: first.place_lat, lng: first.place_lng, name }
-          : null;
+  const insets = useSafeAreaInsets();
+  const language = useLanguage();
+  const place = selection.type === 'place' ? selection.place : null;
+  const name = venue ? localized(venue, 'name', language) : place ? placeName(place, language) : '';
+  const category = venue ? venue.category : placeCategory(place?.kind ?? 'restaurant');
+  const iconColor = venue ? '#FE593B' : PLACE_ICON_COLORS[placeIcon(place?.kind ?? 'restaurant')];
+  const target = venue ?? place;
+  const website = place && isSafeLink(place.website) ? place.website : null;
+  const hangoutVenue = venue ? isHangoutVenue(venue) : false;
+  const favorite: FavoriteTarget | null = venue ? { venueId: venue.id } : place && !place.world ? { placeId: place.id } : null;
 
-  const favorite: FavoriteTarget | null = venue
-    ? { venueId: venue.id }
-    : selection.type === 'place' && !selection.place.world
-      ? { placeId: selection.place.id }
-      : null;
+  function create() {
+    if (venue) {
+      router.push({ pathname: hangoutVenue ? '/create-hangout' : '/create-table', params: { venueId: venue.id } });
+    } else if (place) {
+      router.push({ pathname: '/create-table', params: { placeId: place.id } });
+    }
+  }
 
   return (
-    <View style={styles.placeCard}>
-      <GlossyFill />
-      <View style={styles.placeHeader}>
-        <Text style={styles.placeName} numberOfLines={2}>
-          {name}
-        </Text>
-        {favorite && <FavoriteButton target={favorite} size={36} />}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('common.back')}
-          hitSlop={10}
-          onPress={onClose}
-          style={({ pressed }) => [styles.closeButton, pressed && styles.roundButtonPressed]}>
-          <Text style={styles.closeText}>✕</Text>
-        </Pressable>
+    <>
+      <LinearGradient
+        colors={Colors.fade}
+        locations={[0, 0.55, 1]}
+        style={[styles.sheetFade, { height: insets.top + 110 }]}
+        pointerEvents="none"
+      />
+      <View style={[styles.sheetBack, { top: insets.top + 6 }]}>
+        <RoundButton icon="back" label={t('common.back')} onPress={onClose} />
       </View>
+      <View style={[styles.sheet, { top: insets.top + 150 }]}>
+        <View style={styles.sheetHandle} />
+        <ScrollView contentContainerStyle={styles.sheetContent}>
+          {venue?.photo_path ? (
+            <Image source={venuePhotoUrl(venue.photo_path)} style={styles.sheetPhoto} contentFit="cover" />
+          ) : null}
 
-      {venue && venue.promotions.length > 0 ? (
-        <View style={styles.promoList}>
-          {venue.promotions.map((promotion) => (
-            <View key={promotion.id} style={styles.promoRow}>
-              <Text style={styles.promoEmoji}>{PROMOTION_EMOJI[promotion.kind]}</Text>
-              <View style={styles.promoBody}>
-                <Text style={styles.promoTitle} numberOfLines={1}>
-                  {localized(promotion, 'title', language)}
-                </Text>
-                <Text style={styles.promoMeta} numberOfLines={1}>
-                  {t(`promo.${promotion.kind}`)}
-                  {promotion.starts_at
-                    ? ` · ${formatWhen(promotion.starts_at, t)}`
-                    : promotion.kind === 'ticket'
-                      ? ` · ${t('hangouts.anyMember')}`
-                      : promotion.kind === 'free_entry'
-                        ? ''
-                        : ` · ${t('home.groupRule')}`}
-                </Text>
+          <View style={styles.sheetTitleRow}>
+            <View style={[styles.placeBall, { backgroundColor: iconColor }]}>
+              <Icon name={category} size={22} color={Colors.white} />
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.sheetName}>{name}</Text>
+              <Text style={styles.sheetType}>
+                {t(`category.${category}`)}
+                {(venue?.entry ?? place?.entry) ? (
+                  <Text style={styles.okText}>
+                    {'  ·  '}
+                    {(venue?.entry ?? place?.entry) === 'ticket' ? t('promoFilter.ticket') : t('promoFilter.free_entry')}
+                  </Text>
+                ) : null}
+              </Text>
+            </View>
+            {venue && (
+              <View style={styles.partnerBadge}>
+                <ToneFill tone="brand" shine={false} />
+                <Icon name="verified" size={16} color={Colors.onBrand} />
+                <Text style={styles.partnerText}>{t('home.partner')}</Text>
               </View>
-            </View>
-          ))}
-        </View>
-      ) : hangouts ? null : (
-        <Text style={styles.placeNote}>{t('tables.noDealHere')}</Text>
-      )}
-
-      {dayPlan && (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push({ pathname: '/plan/[id]', params: { id: dayPlan.id } })}
-          style={({ pressed }) => [styles.planRow, pressed && styles.roundButtonPressed]}>
-          <Icon name="route" size={20} color={Colors.violet} />
-          <View style={styles.promoBody}>
-            <Text style={styles.promoTitle}>
-              {t('plan.dayPlan')} · {t('plan.stops', { count: dayPlan.stops.length })}
-            </Text>
-            <Text style={styles.promoMeta} numberOfLines={2}>
-              {dayPlan.stops.map((stop, index) => `${index + 1} ${stopName(stop, language)}`).join('  →  ')}
-            </Text>
+            )}
           </View>
-        </Pressable>
-      )}
+          {venue && (venue.address_en || venue.address_th) ? (
+            <Text style={styles.sheetBody}>{localized(venue, 'address', language)}</Text>
+          ) : null}
 
-      {tables.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.placeTables}>
-          {tables.map((meetup) => (
-            <View key={meetup.id} style={styles.placeTable}>
-              {renderMeetup(meetup)}
-            </View>
-          ))}
-        </ScrollView>
-      )}
+          <View style={styles.linkRow}>
+            {target && (
+              <LinkChip
+                icon="map"
+                label={t('tables.openInMaps')}
+                onPress={() => Linking.openURL(directionsUrl({ lat: target.lat, lng: target.lng, name }))}
+              />
+            )}
+            {website && <LinkChip icon="language" label={t('hangouts.officialWebsite')} onPress={() => openLink(website)} />}
+          </View>
 
-      <View style={styles.placeActions}>
-        <View style={styles.createButton}>
-          {hangouts ? (
-            <Button
-              title={t('hangouts.createHangout')}
-              variant="violet"
-              icon={<Icon name="hangout" size={20} color={Colors.white} />}
-              onPress={onCreate}
-            />
-          ) : (
-            <Button
-              title={t('tables.createHere')}
-              icon={<Icon name="add" size={20} color={Colors.onBrand} />}
-              onPress={onCreate}
-            />
+          {venue && venue.promotions.length > 0 ? (
+            <>
+              <Text style={styles.sheetSection}>{t('home.partnerOffers')}</Text>
+              <View style={styles.promoGrid}>
+                {venue.promotions.map((promotion) => {
+                  const violet = promotion.kind === 'event' || promotion.kind === 'party';
+                  return (
+                    <View key={promotion.id} style={[styles.promoBox, violet ? styles.promoViolet : styles.promoOrange]}>
+                      <View style={styles.promoKind}>
+                        <Icon
+                          name={PROMOTION_ICON[promotion.kind]}
+                          size={16}
+                          color={violet ? Colors.violetText : Colors.accent}
+                        />
+                        <Text style={[styles.promoKindText, { color: violet ? Colors.violetText : Colors.accent }]}>
+                          {t(`promo.${promotion.kind}`)}
+                        </Text>
+                      </View>
+                      <Text style={styles.promoTitle}>{localized(promotion, 'title', language)}</Text>
+                      <Text style={styles.promoMeta} numberOfLines={2}>
+                        {promotion.starts_at
+                          ? formatWhen(promotion.starts_at, t)
+                          : promotion.kind === 'ticket'
+                            ? t('hangouts.anyMember')
+                            : promotion.kind === 'free_entry'
+                              ? ''
+                              : t('home.groupRule')}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </>
+          ) : hangoutVenue ? null : (
+            <Text style={styles.sheetBody}>{t('tables.noDealHere')}</Text>
           )}
+
+          {meetups.length > 0 && (
+            <>
+              <Text style={styles.sheetSection}>{t('home.happeningHere')}</Text>
+              {meetups.map((meetup) => (
+                <View key={meetup.id}>{renderMeetup(meetup)}</View>
+              ))}
+            </>
+          )}
+        </ScrollView>
+
+        <View style={[styles.sheetBar, { paddingBottom: insets.bottom + Spacing.lg }]}>
+          <View style={styles.flex}>
+            {hangoutVenue ? (
+              <Button
+                title={t('hangouts.createHangout')}
+                variant="violet"
+                icon={<Icon name="addCircle" size={22} color={Colors.white} />}
+                onPress={create}
+              />
+            ) : (
+              <Button
+                title={t('tables.createHere')}
+                icon={<Icon name="addCircle" size={22} color={Colors.onBrand} />}
+                onPress={create}
+              />
+            )}
+          </View>
+          {favorite && <FavoriteButton target={favorite} size={56} />}
         </View>
-        {mapsTarget && (
-          <Pressable
-            accessibilityRole="link"
-            accessibilityLabel={t('tables.openInMaps')}
-            onPress={() => Linking.openURL(directionsUrl(mapsTarget))}
-            style={({ pressed }) => [styles.listButton, pressed && styles.roundButtonPressed]}>
-            <GlossyFill />
-            <Icon name="map" size={20} color={Colors.text} />
-          </Pressable>
-        )}
       </View>
-    </View>
+    </>
   );
 }
 
-// Today / Tonight / Food / Drinks / Explore / Budget-friendly.
-function FeedFilters({ value, onChange }: { value: FeedFilter; onChange: (filter: FeedFilter) => void }) {
+function LinkChip({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
   const styles = useStyles();
-  const { t } = useTranslation();
+  const Colors = useColors();
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
-      {FEED_FILTERS.map((option) => (
-        <Chip key={option} label={t(`feed.filters.${option}`)} selected={option === value} onPress={() => onChange(option)} />
-      ))}
-    </ScrollView>
+    <Pressable accessibilityRole="link" onPress={onPress} style={({ pressed }) => [styles.linkChip, pressed && styles.pressed]}>
+      <GlossyFill />
+      <Icon name={icon} size={18} color={Colors.text} />
+      <Text style={styles.linkChipText}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -706,7 +639,7 @@ function ListPanel({
 
   return (
     <ScrollView
-      contentContainerStyle={styles.sheetContent}
+      contentContainerStyle={styles.listContent}
       refreshControl={
         <RefreshControl
           refreshing={refreshing}
@@ -720,12 +653,17 @@ function ListPanel({
           tintColor={Colors.orange}
         />
       }>
-      <Text style={styles.sectionTitle}>{t('tables.openTables')}</Text>
-      <View style={styles.listFilters}>
-        <FeedFilters value={filter} onChange={onFilter} />
-      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.listFiltersOuter}
+        contentContainerStyle={styles.listFilters}>
+        {FEED_FILTERS.map((option) => (
+          <Chip key={option} label={t(`feed.filters.${option}`)} selected={option === filter} onPress={() => onFilter(option)} />
+        ))}
+      </ScrollView>
       {meetupsStatus === 'loading' ? (
-        <ActivityIndicator color={Colors.accent} style={styles.cardsSpinner} />
+        <ActivityIndicator color={Colors.accent} style={styles.spinner} />
       ) : meetups.length === 0 ? (
         <View style={styles.emptyCard}>
           <GlossyFill />
@@ -733,226 +671,202 @@ function ListPanel({
             {meetupsStatus === 'error' ? t('tables.errorLoad') : filter === 'all' ? t('tables.noTablesTitle') : t('feed.noMatch')}
           </Text>
           {meetupsStatus !== 'error' && filter === 'all' && <Text style={styles.emptyBody}>{t('tables.noTablesBody')}</Text>}
+          {meetupsStatus !== 'error' && filter === 'all' && <Text style={styles.tip}>{t('tables.pickAnyPlace')}</Text>}
         </View>
       ) : (
-        <View style={styles.list}>
-          {meetups.map((meetup) => (
-            <View key={meetup.id}>{renderMeetup(meetup)}</View>
-          ))}
-        </View>
+        meetups.map((meetup) => <View key={meetup.id}>{renderMeetup(meetup)}</View>)
       )}
-
     </ScrollView>
   );
 }
 
 const useStyles = makeStyles((Colors) => ({
   root: { flex: 1, backgroundColor: Colors.bg },
+  flex: { flex: 1 },
+  pressed: { opacity: 0.75 },
   top: { position: 'absolute', top: 0, left: 0, right: 0, paddingBottom: Spacing.xl },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-  },
-  topActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  brand: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  profileButton: {
-    width: 40,
-    height: 40,
+  topBar: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: Spacing.md },
+  profileRing: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    padding: 2,
     overflow: 'hidden',
-    borderRadius: Radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.violetTint,
-    borderWidth: 2,
-    borderColor: Colors.violet,
-    ...RaisedSmall,
+    ...Raised,
   },
-  profileInitial: { ...Type.heading, fontWeight: '800', color: Colors.text },
-  roundButton: {
-    width: 40,
-    height: 40,
-    borderRadius: Radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.surface,
-    overflow: 'hidden',
-    ...RaisedSmall,
-  },
-  roundButtonPressed: { opacity: 0.7 },
-  countBadge: {
-    position: 'absolute',
-    // Above the raised button's shadow layer on Android.
-    elevation: 10,
-    top: -4,
-    right: -4,
-    minWidth: 20,
-    height: 20,
-    paddingHorizontal: 4,
-    borderRadius: 10,
-    backgroundColor: Colors.pink,
+  profileInner: {
+    flex: 1,
+    borderRadius: 20,
     borderWidth: 2,
     borderColor: Colors.bg,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  countBadgeText: { fontSize: 11, lineHeight: 13, fontWeight: '800', color: Colors.white },
-  // New message requests waiting on the Travellers button.
-  dot: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: Colors.pink,
-    borderWidth: 2,
-    borderColor: Colors.bg,
-  },
+  profileInitials: { fontSize: 14, fontWeight: '800', color: Colors.onBrand },
+  logo: { flex: 1, marginLeft: 6, minWidth: 0 },
+  search: { marginTop: Spacing.md - 2 },
+  chipRow: { alignItems: 'center', gap: Spacing.sm, paddingHorizontal: Spacing.md, paddingTop: Spacing.md, paddingBottom: Spacing.sm },
+  emojiButton: { fontSize: 18 },
+  divider: { width: 1, alignSelf: 'stretch', marginVertical: 6, marginHorizontal: 2, backgroundColor: Colors.borderStrong },
   previewNotice: {
     ...Type.small,
     fontSize: 12,
     color: Colors.textSecondary,
     backgroundColor: Colors.surfaceRaised,
-    marginHorizontal: Spacing.lg,
-    marginTop: Spacing.sm,
+    marginHorizontal: Spacing.md,
+    marginTop: Spacing.xs,
     paddingVertical: 2,
     paddingHorizontal: Spacing.md,
     borderRadius: Radius.pill,
     alignSelf: 'flex-start',
     overflow: 'hidden',
   },
-  search: { marginTop: Spacing.md },
-  chips: { marginTop: Spacing.md, gap: Spacing.sm },
-  tip: { ...Type.small, color: Colors.glow, marginTop: Spacing.xs },
-  placeCard: {
-    marginHorizontal: Spacing.lg,
-    padding: Spacing.md,
-    gap: Spacing.md,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.overlay,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    overflow: 'hidden',
-    ...Raised,
-  },
-  placeHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
-  placeName: { ...Type.heading, color: Colors.text, flex: 1 },
-  closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: Radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.surfaceRaised,
-  },
-  closeText: { ...Type.label, color: Colors.textSecondary },
-  promoList: { gap: Spacing.sm },
-  promoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    padding: Spacing.sm,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.orangeTint,
-  },
-  promoEmoji: { fontSize: 20 },
-  promoBody: { flex: 1 },
-  promoTitle: { ...Type.label, color: Colors.glow },
-  promoMeta: { ...Type.small, color: Colors.textSecondary },
-  placeNote: { ...Type.body, color: Colors.textSecondary },
-  placeTables: { gap: Spacing.sm },
-  placeTable: { width: 300 },
-  placeActions: { flexDirection: 'row', gap: Spacing.sm },
   locationPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
     alignSelf: 'flex-start',
-    marginLeft: Spacing.lg,
-    marginTop: Spacing.sm,
+    marginLeft: Spacing.md,
+    marginTop: Spacing.xs,
     paddingHorizontal: Spacing.md,
-    minHeight: 34,
+    minHeight: 36,
     borderRadius: Radius.pill,
     backgroundColor: Colors.violetTint,
-    borderWidth: 1,
-    borderColor: Colors.violet,
   },
-  locationPillText: { ...Type.label, color: Colors.text },
+  locationPillText: { ...Type.label, fontSize: 13, color: Colors.text },
+  bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: Spacing.xl, gap: Spacing.sm + 2 },
+  cornerButtons: { flexDirection: 'row', justifyContent: 'flex-end', gap: Spacing.sm, paddingHorizontal: 14 },
+  pop: { paddingTop: 14, gap: Spacing.sm },
+  popSingle: { paddingHorizontal: 14 },
+  popRow: { gap: Spacing.md - 2, paddingHorizontal: 14 },
+  grabber: {
+    position: 'absolute',
+    top: 0,
+    alignSelf: 'center',
+    width: 64,
+    height: 24,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    elevation: 8,
+  },
+  grabberBar: { width: 28, height: 4, borderRadius: 2, backgroundColor: Colors.borderStrong },
   planRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
-    padding: Spacing.sm,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.violetTint,
+    marginHorizontal: 14,
+    padding: Spacing.md,
+    borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.violet,
-  },
-  planWrap: { alignSelf: 'flex-start', marginLeft: Spacing.lg, marginTop: Spacing.md },
-  // Taller than the 40 dp round header buttons, so it stands out.
-  planButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    minHeight: 52,
-    paddingLeft: Spacing.lg,
-    paddingRight: Spacing.xl,
-    borderRadius: Radius.pill,
-    backgroundColor: Colors.violet,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.35)',
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
     overflow: 'hidden',
     ...Raised,
   },
-  planButtonText: { ...Type.label, fontSize: 17, fontWeight: '800', color: Colors.white },
-  planStar: {
+  planTitle: { ...Type.label, color: Colors.text },
+  planStops: { ...Type.small, fontSize: 12, color: Colors.textSecondary },
+  actions: { flexDirection: 'row', gap: Spacing.md - 2, paddingHorizontal: 14 },
+  // Place sheet.
+  sheetFade: { position: 'absolute', top: 0, left: 0, right: 0 },
+  sheetBack: { position: 'absolute', left: Spacing.md },
+  sheet: {
     position: 'absolute',
-    // Above the raised button's shadow layer on Android.
-    elevation: 12,
-    top: -8,
-    right: -8,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: Colors.bg,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopLeftRadius: Radius.sheet,
+    borderTopRightRadius: Radius.sheet,
+    backgroundColor: Colors.overlay,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: Colors.border,
+    overflow: 'hidden',
+    elevation: 16,
+  },
+  sheetHandle: {
+    width: 40,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: Colors.borderStrong,
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: Spacing.sm,
+  },
+  sheetContent: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.lg, gap: Spacing.md },
+  sheetPhoto: { height: 132, borderRadius: 20, backgroundColor: Colors.surfaceRaised },
+  sheetTitleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.md - 2 },
+  placeBall: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 2,
-    borderColor: '#FFC83D',
+    borderColor: Colors.white,
     alignItems: 'center',
     justifyContent: 'center',
+    ...Raised,
   },
-  planStarText: { fontSize: 13, lineHeight: 16 },
-  bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, gap: Spacing.md },
-  cards: { gap: Spacing.md, paddingHorizontal: Spacing.lg },
-  filters: { gap: Spacing.sm, paddingHorizontal: Spacing.lg },
-  listFilters: { marginHorizontal: -Spacing.lg, marginBottom: Spacing.md },
-  cardsSpinner: { marginVertical: Spacing.lg },
-  actions: { flexDirection: 'row', gap: Spacing.sm, paddingHorizontal: Spacing.lg },
-  createButton: { flex: 1 },
-  // Square icon button (List, Open in Maps) next to the wide action buttons.
-  listButton: {
+  sheetName: { ...Type.title, color: Colors.text },
+  sheetType: { ...Type.small, fontWeight: '600', color: Colors.textSecondary },
+  okText: { color: Colors.ok },
+  partnerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 52,
-    minWidth: 52,
-    paddingHorizontal: Spacing.md,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.borderStrong,
+    gap: 4,
+    height: 28,
+    paddingHorizontal: Spacing.md - 2,
+    borderRadius: Radius.pill,
     overflow: 'hidden',
-    ...RaisedSmall,
   },
-  sheetContent: { padding: Spacing.lg, paddingBottom: Spacing.xxl * 2 },
-  sectionTitle: { ...Type.heading, color: Colors.text, marginBottom: Spacing.md },
-  sectionSpacing: { marginTop: Spacing.xl },
-  list: { gap: Spacing.md },
+  partnerText: { fontSize: 12, fontWeight: '800', color: Colors.onBrand },
+  sheetBody: { ...Type.body, fontSize: 14, color: Colors.textSecondary },
+  linkRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  linkChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 40,
+    paddingHorizontal: 14,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    overflow: 'hidden',
+    ...Raised,
+  },
+  linkChipText: { ...Type.label, color: Colors.text },
+  sheetSection: { ...Type.heading, fontSize: 16, fontWeight: '800', color: Colors.text, paddingTop: Spacing.xs },
+  promoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md - 2 },
+  promoBox: { flexGrow: 1, flexBasis: '45%', padding: Spacing.md, borderRadius: Radius.md, gap: 6 },
+  promoOrange: { backgroundColor: Colors.orangeTint },
+  promoViolet: { backgroundColor: Colors.violetTint },
+  promoKind: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  promoKindText: { fontSize: 12, fontWeight: '800' },
+  promoTitle: { ...Type.label, color: Colors.text },
+  promoMeta: { ...Type.small, fontSize: 12, color: Colors.textSecondary },
+  sheetBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md - 2,
+    paddingTop: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    backgroundColor: Colors.surface,
+  },
+  // List panel.
+  listContent: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xxl * 2, gap: Spacing.md },
+  listFiltersOuter: { marginHorizontal: -Spacing.lg, flexGrow: 0 },
+  listFilters: { gap: Spacing.sm, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.xs },
   emptyCard: {
     padding: Spacing.lg,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.overlay,
+    backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
     gap: Spacing.xs,
@@ -961,5 +875,6 @@ const useStyles = makeStyles((Colors) => ({
   },
   emptyTitle: { ...Type.heading, color: Colors.text },
   emptyBody: { ...Type.body, color: Colors.textSecondary },
-  retry: { marginTop: Spacing.md },
+  tip: { ...Type.small, color: Colors.accent, marginTop: Spacing.xs },
+  spinner: { marginVertical: Spacing.lg },
 }));

@@ -11,7 +11,7 @@ import { GlossyFill } from '@/components/glossy';
 import { Icon } from '@/components/icon';
 import { ScreenHeader } from '@/components/screen-header';
 import { Radius, RaisedSmall, Spacing, Type } from '@/constants/theme';
-import { currentLanguage, type Language } from '@/i18n';
+import { type Language, useLanguage } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { useCurrentLocation } from '@/lib/location';
 import { markNotificationsSeen, useNotifications, type AppNotification } from '@/lib/notifications';
@@ -88,7 +88,7 @@ export default function NotificationsScreen() {
 function NotificationRow({ item }: { item: AppNotification }) {
   const styles = useStyles();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const { title, detail } = notificationText(item, t, language);
   const emoji = item.kind === 'promotion' && item.promo_kind ? PROMOTION_EMOJI[item.promo_kind] : KIND_EMOJI[item.kind];
 

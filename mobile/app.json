@@ -32,6 +32,99 @@
     "plugins": [
       "expo-router",
       [
+        "expo-font",
+        {
+          "android": {
+            "fonts": [
+              {
+                "fontFamily": "Figtree",
+                "fontDefinitions": [
+                  {
+                    "path": "./assets/fonts/Figtree_400Regular.ttf",
+                    "weight": 400
+                  },
+                  {
+                    "path": "./assets/fonts/Figtree_500Medium.ttf",
+                    "weight": 500
+                  },
+                  {
+                    "path": "./assets/fonts/Figtree_600SemiBold.ttf",
+                    "weight": 600
+                  },
+                  {
+                    "path": "./assets/fonts/Figtree_700Bold.ttf",
+                    "weight": 700
+                  },
+                  {
+                    "path": "./assets/fonts/Figtree_800ExtraBold.ttf",
+                    "weight": 800
+                  }
+                ]
+              },
+              {
+                "fontFamily": "Bricolage Grotesque",
+                "fontDefinitions": [
+                  {
+                    "path": "./assets/fonts/BricolageGrotesque_500Medium.ttf",
+                    "weight": 500
+                  },
+                  {
+                    "path": "./assets/fonts/BricolageGrotesque_600SemiBold.ttf",
+                    "weight": 600
+                  },
+                  {
+                    "path": "./assets/fonts/BricolageGrotesque_700Bold.ttf",
+                    "weight": 700
+                  },
+                  {
+                    "path": "./assets/fonts/BricolageGrotesque_800ExtraBold.ttf",
+                    "weight": 800
+                  }
+                ]
+              },
+              {
+                "fontFamily": "Anuphan",
+                "fontDefinitions": [
+                  {
+                    "path": "./assets/fonts/Anuphan_400Regular.ttf",
+                    "weight": 400
+                  },
+                  {
+                    "path": "./assets/fonts/Anuphan_500Medium.ttf",
+                    "weight": 500
+                  },
+                  {
+                    "path": "./assets/fonts/Anuphan_600SemiBold.ttf",
+                    "weight": 600
+                  },
+                  {
+                    "path": "./assets/fonts/Anuphan_700Bold.ttf",
+                    "weight": 700
+                  }
+                ]
+              }
+            ]
+          },
+          "ios": {
+            "fonts": [
+              "./assets/fonts/Figtree_400Regular.ttf",
+              "./assets/fonts/Figtree_500Medium.ttf",
+              "./assets/fonts/Figtree_600SemiBold.ttf",
+              "./assets/fonts/Figtree_700Bold.ttf",
+              "./assets/fonts/Figtree_800ExtraBold.ttf",
+              "./assets/fonts/BricolageGrotesque_500Medium.ttf",
+              "./assets/fonts/BricolageGrotesque_600SemiBold.ttf",
+              "./assets/fonts/BricolageGrotesque_700Bold.ttf",
+              "./assets/fonts/BricolageGrotesque_800ExtraBold.ttf",
+              "./assets/fonts/Anuphan_400Regular.ttf",
+              "./assets/fonts/Anuphan_500Medium.ttf",
+              "./assets/fonts/Anuphan_600SemiBold.ttf",
+              "./assets/fonts/Anuphan_700Bold.ttf"
+            ]
+          }
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#0A0612",

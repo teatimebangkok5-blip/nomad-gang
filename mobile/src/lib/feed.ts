@@ -51,7 +51,7 @@ export type MeetupStatus =
   | null;
 
 // What to show first on a card: happening now, starting within the hour, full, or few seats left.
-export function meetupStatus(meetup: OpenMeetup, now: Date): MeetupStatus {
+export function meetupStatus(meetup: Pick<OpenMeetup, 'starts_at' | 'max_people' | 'member_count'>, now: Date): MeetupStatus {
   const start = new Date(meetup.starts_at).getTime();
   const seats = meetup.max_people - meetup.member_count;
   if (seats <= 0) return { type: 'full' };

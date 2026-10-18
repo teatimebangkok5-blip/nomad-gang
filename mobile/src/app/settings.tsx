@@ -8,7 +8,7 @@ import { GlossyFill } from '@/components/glossy';
 import { Icon, type IconName } from '@/components/icon';
 import { ScreenHeader } from '@/components/screen-header';
 import { Radius, Raised, Spacing, Type } from '@/constants/theme';
-import { currentLanguage, setLanguage, type Language } from '@/i18n';
+import { type Language, setLanguage, useLanguage } from '@/i18n';
 import { deleteAccount, signOut, useAuth } from '@/lib/auth';
 import { skipLogin } from '@/lib/preview';
 import { makeStyles, useColors, useTheme, type ThemeName } from '@/lib/theme';
@@ -20,7 +20,7 @@ export default function SettingsScreen() {
   const styles = useStyles();
   const { t } = useTranslation();
   const { name: theme, setTheme } = useTheme();
-  const language = currentLanguage();
+  const language = useLanguage();
   const Colors = useColors();
   const { session } = useAuth();
   const visibility = useDiscoverable(session?.user.id);
@@ -76,6 +76,7 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.group}>
           <GlossyFill />
+          <OptionRow icon="event" label={`🎫 ${t('passport.title')}`} onPress={() => router.push('/passport')} />
           <OptionRow icon="deal" label={`🎁 ${t('rewards.title')}`} onPress={() => router.push('/rewards')} />
         </View>
 

@@ -6,7 +6,7 @@ import { Alert, Pressable, Text, View } from 'react-native';
 import { GlossyFill, Shine } from '@/components/glossy';
 import { Icon } from '@/components/icon';
 import { BrandGradient, Radius, Raised, RaisedSmall, Spacing, Type } from '@/constants/theme';
-import { currentLanguage, localized } from '@/i18n';
+import { localized, useLanguage } from '@/i18n';
 import { formatDayLabel, bangkokDay, deviceZone } from '@/lib/bangkok-time';
 import { isSafeLink, openLink } from '@/lib/links';
 import { cityDealLinks, reportTravelDeal, type Reward, type TravelDeal, type TravelDealCategory } from '@/lib/rewards';
@@ -36,7 +36,7 @@ export function RewardCard({
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const city =
     reward.city ||
     (language === 'th' ? reward.venue_name_th || reward.place_name_th : reward.venue_name_en || reward.place_name_en) ||
@@ -98,7 +98,7 @@ function DealRow({ deal, example, onReported }: { deal: TravelDeal; example: boo
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const [copied, setCopied] = useState(false);
   const details = localized(deal, 'details', language);
 

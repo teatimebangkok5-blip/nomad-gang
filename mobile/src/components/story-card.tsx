@@ -11,7 +11,7 @@ import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { worldPercent } from '@/components/profile-tabs';
 import { BrandGradient, Radius, Spacing } from '@/constants/theme';
-import { currentLanguage } from '@/i18n';
+import { useLanguage } from '@/i18n';
 import { profilePhotoUrl } from '@/lib/photos';
 import { countryName, flagEmoji, interestEmoji, interestLabel, travelStyleLabel } from '@/lib/profile-options';
 import type { Profile } from '@/lib/profiles';
@@ -22,7 +22,7 @@ import { makeStyles } from '@/lib/theme';
 export function StoryShare({ profile, visible, onClose }: { profile: Profile; visible: boolean; onClose: () => void }) {
   const styles = useStyles();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const card = useRef<View>(null);
   const [sharing, setSharing] = useState(false);
 

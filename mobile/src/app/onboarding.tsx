@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
+import { ToneFill } from '@/components/glossy';
 import { Icon } from '@/components/icon';
 import { Logo } from '@/components/logo';
 import {
@@ -18,6 +20,7 @@ import {
   TravelStyleField,
   type ProfileDraft,
 } from '@/components/profile-form';
+import { RoundButton } from '@/components/round-button';
 import { Radius, Spacing, Type } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
 import { useOnboarding } from '@/lib/onboarding';
@@ -104,25 +107,31 @@ export default function OnboardingScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
+      {/* A soft violet glow in the top corner. */}
+      <LinearGradient
+        colors={[Colors.violetTint, 'transparent']}
+        start={{ x: 1, y: 0 }}
+        end={{ x: 0.35, y: 0.45 }}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.header}>
           {index > 0 ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('common.back')}
-              hitSlop={8}
-              onPress={() => setIndex(index - 1)}
-              style={({ pressed }) => [styles.back, pressed && styles.pressed]}>
-              <Icon name="back" size={22} color={Colors.text} />
-            </Pressable>
+            <RoundButton icon="back" label={t('common.back')} onPress={() => setIndex(index - 1)} />
           ) : (
-            <View style={styles.back} />
+            <Logo size={20} />
           )}
-          <Logo size={22} />
-          <Text style={styles.stepOf}>{t('onboarding.stepOf', { step: index + 1, total: STEPS.length })}</Text>
-        </View>
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${((index + 1) / STEPS.length) * 100}%` }]} />
+          <View style={styles.progress}>
+            <View style={styles.segments}>
+              {STEPS.map((name, i) => (
+                <View key={name} style={[styles.segment, i <= index && styles.segmentDone]}>
+                  {i <= index && <ToneFill tone="brand" shine={false} />}
+                </View>
+              ))}
+            </View>
+            <Text style={styles.stepOf}>{t('onboarding.stepOf', { step: index + 1, total: STEPS.length })}</Text>
+          </View>
         </View>
 
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -151,9 +160,10 @@ export default function OnboardingScreen() {
               <Button title={t('onboarding.skip')} variant="secondary" disabled={saving} onPress={next} />
             </View>
           )}
-          <View style={styles.flex}>
+          <View style={index > 0 ? styles.flex : styles.full}>
             <Button
               title={last ? t('onboarding.finish') : t('onboarding.next')}
+              trailingIcon={last ? undefined : <Icon name="forward" size={20} color={Colors.onBrand} />}
               loading={saving}
               disabled={step === 'basics' && !basicsValid(draft)}
               onPress={next}
@@ -169,28 +179,22 @@ const useStyles = makeStyles((Colors) => ({
   safe: { flex: 1, backgroundColor: Colors.bg },
   flex: { flex: 1 },
   spinner: { marginTop: Spacing.xxl * 2 },
+  full: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.sm,
+    gap: Spacing.md,
+    paddingHorizontal: 20,
     paddingTop: Spacing.sm,
     minHeight: 52,
   },
-  back: { width: 44, height: 44, borderRadius: Radius.pill, alignItems: 'center', justifyContent: 'center' },
-  pressed: { backgroundColor: Colors.pressed },
-  stepOf: { ...Type.small, color: Colors.textMuted, minWidth: 44, textAlign: 'right', marginRight: Spacing.sm },
-  progressTrack: {
-    height: 4,
-    marginHorizontal: Spacing.lg,
-    marginTop: Spacing.sm,
-    borderRadius: 2,
-    backgroundColor: Colors.surfaceRaised,
-    overflow: 'hidden',
-  },
-  progressFill: { height: 4, borderRadius: 2, backgroundColor: Colors.orange },
-  content: { padding: Spacing.lg, paddingBottom: Spacing.xxl },
-  title: { ...Type.display, fontSize: 26, lineHeight: 34, color: Colors.text, marginTop: Spacing.md },
+  progress: { flex: 1, gap: 6 },
+  segments: { flexDirection: 'row', gap: 4 },
+  segment: { flex: 1, height: 6, borderRadius: 3, overflow: 'hidden', backgroundColor: Colors.surfaceRaised },
+  segmentDone: { backgroundColor: Colors.orange },
+  stepOf: { ...Type.small, fontSize: 12, fontWeight: '700', color: Colors.textMuted },
+  content: { paddingHorizontal: 20, paddingTop: Spacing.lg, paddingBottom: Spacing.xxl },
+  title: { ...Type.display, color: Colors.text, marginTop: Spacing.md },
   body: { ...Type.body, color: Colors.textSecondary, marginTop: Spacing.sm },
   fields: { marginTop: Spacing.lg },
   error: {
@@ -204,9 +208,9 @@ const useStyles = makeStyles((Colors) => ({
   later: { ...Type.small, color: Colors.textMuted, marginTop: Spacing.xl, textAlign: 'center' },
   footer: {
     flexDirection: 'row',
-    gap: Spacing.sm,
-    padding: Spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    gap: Spacing.md - 2,
+    paddingHorizontal: 20,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.lg,
   },
 }));

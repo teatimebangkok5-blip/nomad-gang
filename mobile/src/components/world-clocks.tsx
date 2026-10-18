@@ -6,7 +6,7 @@ import { GlossyFill } from '@/components/glossy';
 import { Icon } from '@/components/icon';
 import { SearchPicker, useProfileOptions } from '@/components/profile-fields';
 import { Radius, Raised, RaisedSmall, Spacing, Type } from '@/constants/theme';
-import { currentLanguage } from '@/i18n';
+import { useLanguage } from '@/i18n';
 import { bangkokMinutes, formatClock, formatUtcOffset } from '@/lib/bangkok-time';
 import { clockCityName, MAX_CLOCKS } from '@/lib/profile-options';
 import { saveWorldClocks } from '@/lib/profiles';
@@ -18,7 +18,7 @@ export function WorldClocks({ zones, editable, onChanged }: { zones: string[]; e
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const options = useProfileOptions();
   const [now, setNow] = useState(() => new Date());
   const [picking, setPicking] = useState(false);

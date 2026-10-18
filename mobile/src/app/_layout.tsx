@@ -81,6 +81,10 @@ function RootNavigator() {
           <Stack.Screen name="notifications" />
           <Stack.Screen name="messages" />
           <Stack.Screen name="rewards" />
+          <Stack.Screen name="passport" />
+          <Stack.Screen name="gems" />
+          <Stack.Screen name="gem/[id]" />
+          <Stack.Screen name="suggest-gem" />
           <Stack.Screen name="new-group" />
           <Stack.Screen name="group/[id]" />
           <Stack.Screen name="group-info/[id]" />

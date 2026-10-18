@@ -5,7 +5,7 @@ import { Text, TextInput, View } from 'react-native';
 import { InstagramBadge } from '@/components/glossy';
 import { DateField, FieldLabel, OptionChips, PickerRow, SearchPicker, useProfileOptions } from '@/components/profile-fields';
 import { Radius, Spacing, Type } from '@/constants/theme';
-import { currentLanguage } from '@/i18n';
+import { useLanguage } from '@/i18n';
 import { ageOn, countryName, flagEmoji, languageLabel, MAX_INTERESTS, MAX_LANGUAGES } from '@/lib/profile-options';
 import type { ProfileDetails } from '@/lib/profiles';
 import { makeStyles, useColors } from '@/lib/theme';
@@ -88,7 +88,7 @@ export function BasicsFields({ draft, onChange }: FieldProps) {
 export function CountryField({ draft, onChange }: FieldProps) {
   const { t } = useTranslation();
   const options = useProfileOptions();
-  const language = currentLanguage();
+  const language = useLanguage();
   const [open, setOpen] = useState(false);
   const code = draft.home_country;
 
@@ -121,7 +121,7 @@ export function LanguagesField({ draft, onChange }: FieldProps) {
   const styles = useStyles();
   const { t } = useTranslation();
   const options = useProfileOptions();
-  const language = currentLanguage();
+  const language = useLanguage();
   const [open, setOpen] = useState(false);
 
   return (

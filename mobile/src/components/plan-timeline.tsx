@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { GlossyFill } from '@/components/glossy';
 import { Icon } from '@/components/icon';
 import { Radius, Raised, Spacing, Type } from '@/constants/theme';
-import { currentLanguage, type Language } from '@/i18n';
+import { type Language, useLanguage } from '@/i18n';
 import { formatClock } from '@/lib/bangkok-time';
 import { isSafeLink, openLink } from '@/lib/links';
 import { PLACE_ICON_IMAGES } from '@/lib/place-icons';
@@ -32,7 +32,7 @@ export function PlanTimeline({ stops, onRemove }: { stops: PlanStop[]; onRemove?
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
 
   return (
     <View style={styles.list}>

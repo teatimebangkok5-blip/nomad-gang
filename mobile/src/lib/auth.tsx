@@ -152,9 +152,11 @@ export async function deleteAccount(myId: string): Promise<boolean> {
   for (let i = 0; i < chatFiles.length; i += 100) {
     await supabase.storage.from('chat-media').remove(chatFiles.slice(i, i + 100));
   }
-  const { data: photos } = await supabase.storage.from('profile-photos').list(myId, { limit: 1000 });
-  if (photos?.length) {
-    await supabase.storage.from('profile-photos').remove(photos.map((photo) => `${myId}/${photo.name}`));
+  for (const bucket of ['profile-photos', 'gem-photos']) {
+    const { data: photos } = await supabase.storage.from(bucket).list(myId, { limit: 1000 });
+    if (photos?.length) {
+      await supabase.storage.from(bucket).remove(photos.map((photo) => `${myId}/${photo.name}`));
+    }
   }
 
   const { error } = await supabase.rpc('delete_my_account');

@@ -8,7 +8,7 @@ import { Icon } from '@/components/icon';
 import { ScreenHeader } from '@/components/screen-header';
 import { CATEGORY_EMOJI } from '@/components/venue-map';
 import { Radius, RaisedSmall, Spacing, Type } from '@/constants/theme';
-import { currentLanguage, localized } from '@/i18n';
+import { localized, useLanguage } from '@/i18n';
 import { removeFavorite, useFavorites, type Favorite } from '@/lib/favorites';
 import { directionsUrl } from '@/lib/meetups';
 import { placeCategory, placeEmoji, placeName } from '@/lib/places';
@@ -53,7 +53,7 @@ function FavoriteRow({ favorite }: { favorite: Favorite }) {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const { place, venue } = favorite;
   if (!place && !venue) return null;
 

@@ -67,6 +67,12 @@ export function useCurrentLocation() {
   return { state, refresh, request };
 }
 
+// Greater Bangkok (the same box the maps use). Tables can only be made here.
+export const BANGKOK_CENTER: Coords = { lat: 13.7466, lng: 100.5393 };
+export function inBangkok({ lat, lng }: Coords): boolean {
+  return lat >= 13.45 && lat <= 14.1 && lng >= 100.25 && lng <= 100.95;
+}
+
 // Straight-line distance in meters (haversine).
 export function distanceMeters(a: Coords, b: Coords): number {
   const R = 6371000;

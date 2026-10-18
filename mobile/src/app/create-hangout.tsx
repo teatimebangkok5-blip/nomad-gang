@@ -1,38 +1,27 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  KeyboardAvoidingView,
-  Linking,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FavoriteButton } from '@/components/favorite-button';
 import { GlossyFill } from '@/components/glossy';
 import { Button } from '@/components/button';
 import { Chip } from '@/components/chip';
+import { FormFooter, FormInput, FormSection, IconBadge, PlaceSummary, Stepper } from '@/components/form-parts';
 import { Icon } from '@/components/icon';
 import { MeetupExtras } from '@/components/meetup-extras';
 import { MapHeader } from '@/components/map-header';
 import { MapSearchBar, MapSearchResults } from '@/components/map-search';
 import { MeetupCard } from '@/components/meetup-card';
-import { PromoFilter } from '@/components/promo-filter';
+import { PROMOTION_ICON, PromoFilter } from '@/components/promo-filter';
+import { RoundButton } from '@/components/round-button';
 import { ScreenHeader } from '@/components/screen-header';
 import { SlideUpPanel } from '@/components/slide-up-panel';
 import { VenueCard } from '@/components/venue-card';
 import { CATEGORY_EMOJI, VenueMap, type MapFocus, type MapPin } from '@/components/venue-map';
-import { Radius, Raised, RaisedSmall, Spacing, Type } from '@/constants/theme';
-import { currentLanguage, localized } from '@/i18n';
+import { Radius, Raised, Spacing, Type } from '@/constants/theme';
+import { localized, useLanguage } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import {
   bangkokDay,
@@ -53,7 +42,6 @@ import { distanceMeters, useCurrentLocation } from '@/lib/location';
 import {
   createHangout,
   directionsUrl,
-  joinMeetup,
   meetupCoords,
   meetupLocationKey,
   meetupPlaceName,
@@ -77,6 +65,7 @@ import {
   type Venue,
   type VenueDeal,
 } from '@/lib/venues';
+import { setMeetupChallenge } from '@/lib/passport';
 import { makeStyles, useColors } from '@/lib/theme';
 
 // Tapped on the hangout map: a partner venue, a place, a pin dropped anywhere, or a pin of hangouts at a spot.
@@ -95,7 +84,8 @@ type Chosen =
 const DAYS_AHEAD = 14; // the server allows up to 14 days ahead
 const MIN_PEOPLE = 2;
 const MAX_PEOPLE = 30;
-const DURATIONS = [60, 120, 180, 240, 360, 480, 720]; // minutes
+const MIN_DURATION = 60; // minutes; the length stepper goes up by the hour
+const MAX_DURATION = 720;
 
 // Create a hangout anywhere in the world: 1) a full-screen map of places to hang out (Bangkok: temples, parks, malls,
 // markets, museums, attractions from the database, partner venues with ticket discounts, free entry and events;
@@ -103,11 +93,9 @@ const DURATIONS = [60, 120, 180, 240, 360, 480, 720]; // minutes
 // 2) Title, description, day, time (local time at the place), how long and how many people.
 export default function CreateHangoutScreen() {
   const styles = useStyles();
-  const Colors = useColors();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
-  const language = currentLanguage();
+  const language = useLanguage();
   const { session } = useAuth();
   const venues = useVenues();
   const meetups = useOpenMeetups(Boolean(session));
@@ -119,11 +107,22 @@ export default function CreateHangoutScreen() {
   const { places: mapPlaces, dots: placeDots, dotsMinZoom, onBoundsChange } = usePlacesInView('hangout', entry);
   // Opened for a venue (e.g. from a notification about its deal) or a place (from Favorites): its card shows first and
   // the map moves there.
-  const params = useLocalSearchParams<{ venueId?: string; placeId?: string }>();
+  // From a Hidden Gem: its place or its pin, with the gem's activity as the title (straight to the form).
+  const params = useLocalSearchParams<{
+    venueId?: string;
+    placeId?: string;
+    title?: string;
+    spotLat?: string;
+    spotLng?: string;
+    spotName?: string;
+  }>();
   const [selection, setSelection] = useState<Selection | null>(params.venueId ? { type: 'venue', venueId: params.venueId } : null);
-  const [chosen, setChosen] = useState<Chosen | null>(null);
+  const [chosen, setChosen] = useState<Chosen | null>(() =>
+    params.spotLat && params.spotLng && Number.isFinite(Number(params.spotLat)) && Number.isFinite(Number(params.spotLng))
+      ? { type: 'spot', lat: Number(params.spotLat), lng: Number(params.spotLng), name: params.spotName ?? '' }
+      : null,
+  );
   const [listOpen, setListOpen] = useState(false);
-  const [joiningId, setJoiningId] = useState<string | null>(null);
   const [topHeight, setTopHeight] = useState(0);
   const [bottomHeight, setBottomHeight] = useState(0);
 
@@ -144,10 +143,14 @@ export default function CreateHangoutScreen() {
     if (!params.placeId) return;
     fetchPlace(params.placeId).then((found) => {
       if (!found) return;
+      if (params.title) {
+        setChosen({ type: 'place', place: found });
+        return;
+      }
       setSelection({ type: 'place', place: found });
       setFocus({ lat: found.lat, lng: found.lng, zoom: PLACE_ZOOM, seq: Date.now() });
     });
-  }, [params.placeId]);
+  }, [params.placeId, params.title]);
   const shownVenueIds = new Set(hangoutVenues.map((venue) => venue.id));
   // With a filter on, only hangouts at venues that have that promotion.
   const hangouts = meetups.meetups.filter(
@@ -278,29 +281,18 @@ export default function CreateHangoutScreen() {
     }
   }
 
-  async function handleJoin(id: string) {
-    setJoiningId(id);
-    const { error } = await joinMeetup(id);
-    setJoiningId(null);
-    if (error) Alert.alert(t(`hangouts.errors.${error}`));
-    else meetups.reload();
-  }
-
   const renderHangout = (meetup: OpenMeetup) => (
     <MeetupCard
       meetup={meetup}
       venue={meetup.venue_id ? venueById.get(meetup.venue_id) : undefined}
-      joining={joiningId === meetup.id}
-      onJoin={() => handleJoin(meetup.id)}
       onPress={() => router.push({ pathname: '/table/[id]', params: { id: meetup.id } })}
     />
   );
 
   if (chosen) {
-    return <HangoutForm chosen={chosen} onChange={() => setChosen(null)} />;
+    return <HangoutForm chosen={chosen} initialTitle={params.title} onChange={() => setChosen(null)} />;
   }
 
-  const cardWidth = Math.min(width - Spacing.lg * 2 - Spacing.xl, 420);
   const partnerList = hangoutVenues
     .map((venue) => ({ venue, distance: coords ? distanceMeters(coords, venue) : null }))
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0));
@@ -323,11 +315,14 @@ export default function CreateHangoutScreen() {
         focus={focus ?? paramFocus}
       />
 
-      <MapHeader title={t('hangouts.mapTitle')} hint={t('hangouts.mapHint')} onHeight={setTopHeight}>
-        <View style={styles.searchRow}>
-          <MapSearchBar value={search.query} onChangeText={search.setQuery} placeholder={t('search.hangoutPlaceholder')} />
-        </View>
+      <MapHeader
+        title={t('hangouts.pickSpot')}
+        hint={t('common.stepOf', { step: 1, total: 2 })}
+        onHeight={setTopHeight}
+        right={<RoundButton icon="listBulleted" label={t('tables.showList')} onPress={() => setListOpen(true)} />}>
+        <MapSearchBar value={search.query} onChangeText={search.setQuery} placeholder={t('search.hangoutPlaceholder')} />
         <PromoFilter
+          tone="violet"
           kinds={HANGOUT_PROMOTION_KINDS}
           value={promo}
           onChange={(value) => {
@@ -338,7 +333,7 @@ export default function CreateHangoutScreen() {
       </MapHeader>
 
       <View
-        style={[styles.bottom, { paddingBottom: insets.bottom + Spacing.md }]}
+        style={[styles.bottom, { paddingBottom: insets.bottom + Spacing.lg }]}
         pointerEvents="box-none"
         onLayout={(e) => setBottomHeight(e.nativeEvent.layout.height)}>
         {selection ? (
@@ -350,39 +345,15 @@ export default function CreateHangoutScreen() {
             onCreate={() => createAt(selection)}
             onClose={() => setSelection(null)}
           />
-        ) : !session ? null : meetups.status === 'loading' ? (
-          <ActivityIndicator color={Colors.accent} style={styles.spinner} />
-        ) : hangouts.length === 0 ? (
-          <View style={[styles.emptyCard, styles.inset]}>
-            <GlossyFill />
-            <Text style={styles.emptyTitle}>
-              {meetups.status === 'error' ? t('tables.errorLoad') : t('hangouts.noHangoutsTitle')}
-            </Text>
-            {meetups.status !== 'error' && <Text style={styles.emptyBody}>{t('hangouts.noHangoutsBody')}</Text>}
-          </View>
         ) : (
-          <FlatList
-            horizontal
-            data={hangouts}
-            keyExtractor={(meetup) => meetup.id}
-            renderItem={({ item }) => <View style={{ width: cardWidth }}>{renderHangout(item)}</View>}
-            showsHorizontalScrollIndicator={false}
-            snapToInterval={cardWidth + Spacing.md}
-            decelerationRate="fast"
-            contentContainerStyle={styles.cards}
-          />
-        )}
-
-        {!selection && (
-          <View style={[styles.listRow, styles.inset]}>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => setListOpen(true)}
-              style={({ pressed }) => [styles.listButton, pressed && styles.pressed]}>
-              <GlossyFill />
-              <Icon name="list" size={20} color={Colors.text} />
-              <Text style={styles.listButtonText}>{t('tables.showList')}</Text>
-            </Pressable>
+          // Nothing tapped yet: how to start.
+          <View style={[styles.card, styles.hintCard, styles.inset]}>
+            <GlossyFill />
+            <IconBadge icon="touch" />
+            <View style={styles.flex}>
+              <Text style={styles.cardTitle}>{t('hangouts.dropHint')}</Text>
+              <Text style={styles.cardSub}>{t('hangouts.dropSub')}</Text>
+            </View>
           </View>
         )}
       </View>
@@ -391,14 +362,13 @@ export default function CreateHangoutScreen() {
         visible={search.active}
         searching={search.searching}
         results={search.results}
-        top={Math.max(topHeight - Spacing.lg, insets.top + 100)}
+        top={Math.max(topHeight - Spacing.xxl * 2, insets.top + 100)}
         onPick={handleSearchPick}
         onClose={search.clear}
       />
 
-      <SlideUpPanel open={listOpen} onClose={() => setListOpen(false)}>
+      <SlideUpPanel open={listOpen} onClose={() => setListOpen(false)} title={t('hangouts.openHangouts')}>
         <ScrollView contentContainerStyle={styles.sheetContent}>
-          <Text style={styles.sectionTitle}>{t('hangouts.openHangouts')}</Text>
           {hangouts.length === 0 ? (
             <View style={styles.emptyCard}>
               <GlossyFill />
@@ -460,23 +430,29 @@ function SelectionCard({
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
 
   let name = '';
   let note: string | null = null;
+  let sub: string | null = null;
+  let leading = <IconBadge icon="pushPin" />;
   let target: { lat: number; lng: number } | null = null;
   if (selection.type === 'venue' && venue) {
-    name = `${CATEGORY_EMOJI[venue.category]} ${localized(venue, 'name', language)}`;
+    name = localized(venue, 'name', language);
+    leading = <IconBadge icon={venue.category} tone="violetBall" />;
     target = venue;
   } else if (selection.type === 'place') {
-    name = `${placeEmoji(selection.place.kind)} ${placeName(selection.place, language)}`;
+    name = placeName(selection.place, language);
+    leading = <EmojiBadge emoji={placeEmoji(selection.place.kind)} />;
     note = t('hangouts.noDealHere');
     target = selection.place;
   } else if (selection.type === 'spot') {
-    name = `📍 ${t('hangouts.pinnedSpot')}`;
+    name = t('hangouts.droppedPin');
+    sub = `${selection.lat.toFixed(4)}, ${selection.lng.toFixed(4)}`;
     note = t('hangouts.pinnedSpotBody');
   } else if (hangouts[0]) {
-    name = `📍 ${meetupPlaceName(hangouts[0], language)}`;
+    name = meetupPlaceName(hangouts[0], language);
+    leading = <EmojiBadge emoji="🙌" />;
     target =
       hangouts[0].place_lat !== null && hangouts[0].place_lng !== null
         ? { lat: hangouts[0].place_lat, lng: hangouts[0].place_lng }
@@ -496,27 +472,24 @@ function SelectionCard({
         : null;
 
   return (
-    <View style={[styles.placeCard, styles.inset]}>
+    <View style={[styles.card, styles.placeCard, styles.inset]}>
       <GlossyFill />
       <View style={styles.placeHeader}>
-        <Text style={styles.placeName} numberOfLines={2}>
-          {name}
-        </Text>
+        {leading}
+        <View style={styles.flex}>
+          <Text style={styles.cardTitle} numberOfLines={2}>
+            {name}
+          </Text>
+          {sub ? <Text style={styles.cardSub}>{sub}</Text> : null}
+        </View>
         {favorite && <FavoriteButton target={favorite} size={36} />}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('common.back')}
-          hitSlop={10}
-          onPress={onClose}
-          style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}>
-          <Text style={styles.closeText}>✕</Text>
-        </Pressable>
+        <RoundButton size={36} icon="close" label={t('common.back')} onPress={onClose} />
       </View>
 
       {entry && (
         <View style={styles.entryRow}>
-          <Icon name={entry === 'free' ? 'check' : 'ticket'} size={16} color={entry === 'free' ? Colors.text : Colors.accent} />
-          <Text style={styles.entryText}>
+          <Icon name={entry === 'free' ? 'doorOpen' : 'ticket'} size={16} color={entry === 'free' ? Colors.ok : Colors.accent} />
+          <Text style={[styles.entryText, entry === 'free' && { color: Colors.ok }]}>
             {entry === 'free'
               ? t('hangouts.entryFree')
               : entry === 'ticket'
@@ -568,22 +541,29 @@ function SelectionCard({
 
       <View style={styles.placeActions}>
         <View style={styles.flex}>
-          <Button
-            title={t('hangouts.createHere')}
-            variant="violet"
-            icon={<Icon name="add" size={20} color={Colors.white} />}
-            onPress={onCreate}
-          />
+          {selection.type === 'spot' ? (
+            <Button
+              title={t('hangouts.useSpot')}
+              variant="violet"
+              trailingIcon={<Icon name="forward" size={20} color={Colors.white} />}
+              onPress={onCreate}
+            />
+          ) : (
+            <Button
+              title={t('hangouts.createHere')}
+              variant="violet"
+              icon={<Icon name="addCircle" size={22} color={Colors.white} />}
+              onPress={onCreate}
+            />
+          )}
         </View>
         {target && (
-          <Pressable
-            accessibilityRole="link"
-            accessibilityLabel={t('tables.openInMaps')}
-            onPress={() => Linking.openURL(directionsUrl({ ...target, name }))}
-            style={({ pressed }) => [styles.listButton, pressed && styles.pressed]}>
-            <GlossyFill />
-            <Icon name="map" size={20} color={Colors.text} />
-          </Pressable>
+          <RoundButton
+            size={56}
+            icon="map"
+            label={t('tables.openInMaps')}
+            onPress={() => target && Linking.openURL(directionsUrl({ ...target, name }))}
+          />
         )}
       </View>
     </View>
@@ -594,7 +574,7 @@ function PromotionRow({ promotion }: { promotion: VenueDeal }) {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const live = isHappeningNow(promotion);
   const meta = promotion.starts_at && promotion.ends_at
     ? formatWhenRange(promotion.starts_at, promotion.ends_at, t)
@@ -606,7 +586,7 @@ function PromotionRow({ promotion }: { promotion: VenueDeal }) {
 
   return (
     <View style={styles.promoRow}>
-      <Text style={styles.promoEmoji}>{PROMOTION_EMOJI[promotion.kind]}</Text>
+      <Icon name={PROMOTION_ICON[promotion.kind]} size={20} color={Colors.accent} />
       <View style={styles.flex}>
         <Text style={styles.promoTitle} numberOfLines={1}>
           {localized(promotion, 'title', language)}
@@ -638,11 +618,11 @@ function spotKey(at: { lat: number; lng: number }) {
 }
 
 // Step 2: what, when, how long and how many people.
-function HangoutForm({ chosen, onChange }: { chosen: Chosen; onChange: () => void }) {
+function HangoutForm({ chosen, initialTitle, onChange }: { chosen: Chosen; initialTitle?: string; onChange: () => void }) {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
 
   // Days and times are local time at the place: Bangkok for venues and places, the pin's zone for spots and world
   // places.
@@ -662,20 +642,35 @@ function HangoutForm({ chosen, onChange }: { chosen: Chosen; onChange: () => voi
   const [minutes, setMinutes] = useState<number | null>(null);
   const [duration, setDuration] = useState(120);
   const [maxPeople, setMaxPeople] = useState(6);
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState((initialTitle ?? '').slice(0, 80));
   const [description, setDescription] = useState('');
   const [cost, setCost] = useState<CostLevel | null>(null);
   const [meetingPoint, setMeetingPoint] = useState('');
+  const [challengeId, setChallengeId] = useState<string | null>(null);
   const [spotName, setSpotName] = useState(chosen.type === 'spot' ? chosen.name : '');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<MeetupErrorKey | null>(null);
 
   const placeLabel =
     chosen.type === 'venue'
-      ? `${CATEGORY_EMOJI[chosen.venue.category]} ${localized(chosen.venue, 'name', language)}`
+      ? localized(chosen.venue, 'name', language)
       : chosen.type === 'place'
-        ? `${placeEmoji(chosen.place.kind)} ${placeName(chosen.place, language)}`
-        : `📍 ${t('hangouts.pinnedSpot')}`;
+        ? placeName(chosen.place, language)
+        : spotName.trim() || t('hangouts.droppedPin');
+  const placeLeading =
+    chosen.type === 'venue' ? (
+      <IconBadge icon={chosen.venue.category} tone="violetBall" />
+    ) : chosen.type === 'place' ? (
+      <EmojiBadge emoji={placeEmoji(chosen.place.kind)} />
+    ) : (
+      <IconBadge icon="pushPin" tone="violetBall" />
+    );
+  const placeLine =
+    chosen.type === 'venue'
+      ? localized(chosen.venue, 'address', language) || t(`category.${chosen.venue.category}`)
+      : chosen.type === 'spot'
+        ? `${t('hangouts.droppedPin')} · ${chosen.lat.toFixed(4)}, ${chosen.lng.toFixed(4)}`
+        : null;
   const deals = chosen.type === 'venue' ? chosen.venue.promotions : [];
 
   const canCreate =
@@ -710,7 +705,7 @@ function HangoutForm({ chosen, onChange }: { chosen: Chosen; onChange: () => voi
       setError(result.error);
       return;
     }
-    await setMeetupDetails(result.data, cost, meetingPoint);
+    await Promise.all([setMeetupDetails(result.data, cost, meetingPoint), setMeetupChallenge(result.data, challengeId)]);
     setCreating(false);
     const found = await area;
     if (found) await setMeetupArea(result.data, found);
@@ -718,187 +713,156 @@ function HangoutForm({ chosen, onChange }: { chosen: Chosen; onChange: () => voi
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
-      <ScreenHeader title={t('hangouts.createHangout')} />
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <ScreenHeader
+        title={t('hangouts.newHangout')}
+        subtitle={t('common.stepOf', { step: 2, total: 2 })}
+        onBack={onChange}
+      />
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <View style={styles.pad}>
-            <View style={styles.placeRow}>
-              <Text style={styles.formPlace} numberOfLines={2}>
-                {placeLabel}
-              </Text>
-              <Pressable accessibilityRole="button" hitSlop={8} onPress={onChange}>
-                <Text style={styles.link}>{t('tables.change')}</Text>
-              </Pressable>
-            </View>
-            {deals.length > 0 && (
-              <View style={[styles.promoList, styles.formDeals]}>
-                {deals.map((promotion) => (
-                  <PromotionRow key={promotion.id} promotion={promotion} />
-                ))}
-                {deals.some((p) => p.kind === 'ticket') && <Text style={styles.hint}>{t('hangouts.ticketNote')}</Text>}
+        <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
+          <PlaceSummary leading={placeLeading} name={placeLabel} line={placeLine} lineTone="muted" onChange={onChange}>
+            {otherZone && (
+              <View style={styles.zoneNote}>
+                <Icon name="time" size={18} color={Colors.violetText} />
+                <Text style={styles.zoneText}>{t('hangouts.localTime', { offset: formatUtcOffset(zone, now) })}</Text>
               </View>
             )}
+          </PlaceSummary>
+          {deals.length > 0 && (
+            <View style={styles.promoList}>
+              {deals.map((promotion) => (
+                <PromotionRow key={promotion.id} promotion={promotion} />
+              ))}
+              {deals.some((p) => p.kind === 'ticket') && <Text style={styles.hint}>{t('hangouts.ticketNote')}</Text>}
+            </View>
+          )}
 
-            <Text style={styles.heading}>{t('hangouts.detailsTitle')}</Text>
-
-            {chosen.type === 'spot' && (
-              <>
-                <Text style={styles.label}>{t('hangouts.spotNameLabel')}</Text>
-                <TextInput
-                  value={spotName}
-                  onChangeText={setSpotName}
-                  placeholder={t('hangouts.spotNamePlaceholder')}
-                  placeholderTextColor={Colors.textMuted}
-                  selectionColor={Colors.violet}
-                  keyboardAppearance="dark"
-                  maxLength={80}
-                  style={styles.input}
-                />
-              </>
-            )}
-
-            <Text style={styles.label}>{t('hangouts.titleLabel')}</Text>
-            <TextInput
+          <FormSection label={t('hangouts.titleLabel')} required count={`${title.length}/80`}>
+            <FormInput
+              tone="violet"
+              highlight
               value={title}
               onChangeText={setTitle}
               placeholder={t('hangouts.titlePlaceholder')}
-              placeholderTextColor={Colors.textMuted}
-              selectionColor={Colors.violet}
-              keyboardAppearance="dark"
               maxLength={80}
-              style={styles.input}
             />
+          </FormSection>
 
-            <Text style={styles.label}>{t('hangouts.descriptionLabel')}</Text>
-            <TextInput
+          <FormSection label={t('hangouts.descriptionLabel')} note={t('common.optional')} count={`${description.length}/500`}>
+            <FormInput
+              tone="violet"
               value={description}
               onChangeText={setDescription}
               placeholder={t('hangouts.descriptionPlaceholder')}
-              placeholderTextColor={Colors.textMuted}
-              selectionColor={Colors.violet}
-              keyboardAppearance="dark"
               maxLength={500}
               multiline
-              textAlignVertical="top"
-              style={[styles.input, styles.multiline]}
             />
+          </FormSection>
 
-            <Text style={styles.label}>{t('tables.day')}</Text>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-            {days.map((option) => (
-              <Chip
-                key={option}
-                label={formatDayLabel(option, t, now, zone)}
-                selected={option === day}
-                onPress={() => {
-                  setDay(option);
-                  setMinutes(null);
-                }}
+          {chosen.type === 'spot' && (
+            <FormSection label={t('hangouts.spotNameLabel')} required>
+              <FormInput
+                tone="violet"
+                icon="pin"
+                value={spotName}
+                onChangeText={setSpotName}
+                placeholder={t('hangouts.spotNamePlaceholder')}
+                maxLength={80}
               />
-            ))}
-          </ScrollView>
+            </FormSection>
+          )}
 
-          <View style={styles.pad}>
-            <Text style={styles.label}>{t('tables.time')}</Text>
-            {otherZone && (
-              <Text style={[styles.hint, styles.zoneHint]}>{t('hangouts.localTime', { offset: formatUtcOffset(zone, now) })}</Text>
-            )}
+          <FormSection label={t('tables.day')}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.bleed} contentContainerStyle={styles.chipRow}>
+              {days.map((option) => (
+                <Chip
+                  key={option}
+                  tall
+                  tone="violet"
+                  label={formatDayLabel(option, t, now, zone)}
+                  selected={option === day}
+                  onPress={() => {
+                    setDay(option);
+                    setMinutes(null);
+                  }}
+                />
+              ))}
+            </ScrollView>
             {slots.length === 0 ? (
               <Text style={styles.hint}>{t('tables.noTimesLeft')}</Text>
             ) : (
-              <View style={styles.slotGrid}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.bleed} contentContainerStyle={styles.chipRow}>
                 {slots.map((slot) => (
-                  <Chip key={slot} label={formatClock(slot)} selected={slot === minutes} onPress={() => setMinutes(slot)} />
+                  <Chip
+                    key={slot}
+                    shape="tile"
+                    tone="violet"
+                    label={formatClock(slot)}
+                    selected={slot === minutes}
+                    onPress={() => setMinutes(slot)}
+                  />
                 ))}
-              </View>
+              </ScrollView>
             )}
+          </FormSection>
 
-            <Text style={styles.label}>{t('hangouts.duration')}</Text>
-            <View style={styles.slotGrid}>
-              {DURATIONS.map((option) => (
-                <Chip
-                  key={option}
-                  label={t('hangouts.durationHours', { hours: option / 60 })}
-                  selected={option === duration}
-                  onPress={() => setDuration(option)}
-                />
-              ))}
-            </View>
-
-            <Text style={styles.label}>{t('tables.groupSize')}</Text>
-            <View style={styles.stepper}>
-              <StepButton
-                icon="minus"
-                label={t('tables.decrease')}
-                disabled={maxPeople <= MIN_PEOPLE}
-                onPress={() => setMaxPeople((n) => Math.max(MIN_PEOPLE, n - 1))}
-              />
-              <Text style={styles.stepValue} accessibilityLiveRegion="polite">
-                {maxPeople}
-              </Text>
-              <StepButton
-                icon="plus"
-                label={t('tables.increase')}
-                disabled={maxPeople >= MAX_PEOPLE}
-                onPress={() => setMaxPeople((n) => Math.min(MAX_PEOPLE, n + 1))}
-              />
-            </View>
-            <Text style={styles.hint}>{t('hangouts.groupSizeHint')}</Text>
-
-            <MeetupExtras
-              cost={cost}
-              onCost={setCost}
-              meetingPoint={meetingPoint}
-              onMeetingPoint={setMeetingPoint}
-              accent={Colors.violet}
+          <View style={styles.steppers}>
+            <Stepper
+              stacked
+              tone="violet"
+              label={t('hangouts.length')}
+              hint="1–12"
+              value={t('hangouts.durationHours', { hours: duration / 60 })}
+              canDecrease={duration > MIN_DURATION}
+              canIncrease={duration < MAX_DURATION}
+              onDecrease={() => setDuration((d) => Math.max(MIN_DURATION, d - 60))}
+              onIncrease={() => setDuration((d) => Math.min(MAX_DURATION, d + 60))}
             />
-
-            {error && (
-              <Text accessibilityRole="alert" style={styles.error}>
-                {t(`hangouts.errors.${error}`)}
-              </Text>
-            )}
-            <View style={styles.submit}>
-              <Button
-                title={t('hangouts.create')}
-                variant="violet"
-                onPress={handleCreate}
-                loading={creating}
-                disabled={!canCreate}
-              />
-            </View>
+            <Stepper
+              stacked
+              tone="violet"
+              label={t('tables.people')}
+              hint={`${MIN_PEOPLE}–${MAX_PEOPLE}`}
+              value={String(maxPeople)}
+              canDecrease={maxPeople > MIN_PEOPLE}
+              canIncrease={maxPeople < MAX_PEOPLE}
+              onDecrease={() => setMaxPeople((n) => Math.max(MIN_PEOPLE, n - 1))}
+              onIncrease={() => setMaxPeople((n) => Math.min(MAX_PEOPLE, n + 1))}
+            />
           </View>
+
+          <MeetupExtras
+            cost={cost}
+            onCost={setCost}
+            meetingPoint={meetingPoint}
+            onMeetingPoint={setMeetingPoint}
+            challengeId={challengeId}
+            onChallenge={setChallengeId}
+            tone="violet"
+          />
+
+          {error && (
+            <Text accessibilityRole="alert" style={styles.error}>
+              {t(`hangouts.errors.${error}`)}
+            </Text>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
+      <FormFooter>
+        <Button title={t('hangouts.create')} variant="violet" onPress={handleCreate} loading={creating} disabled={!canCreate} />
+      </FormFooter>
     </SafeAreaView>
   );
 }
 
-function StepButton({
-  icon,
-  label,
-  disabled,
-  onPress,
-}: {
-  icon: 'plus' | 'minus';
-  label: string;
-  disabled: boolean;
-  onPress: () => void;
-}) {
+// A place's emoji on a violet tint (hangout places have no icon of their own).
+function EmojiBadge({ emoji }: { emoji: string }) {
   const styles = useStyles();
-  const Colors = useColors();
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ disabled }}
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [styles.stepButton, pressed && styles.stepPressed, disabled && styles.stepDisabled]}>
-      <Icon name={icon} size={22} color={disabled ? Colors.textMuted : Colors.text} />
-    </Pressable>
+    <View style={styles.emojiBadge}>
+      <Text style={styles.emoji}>{emoji}</Text>
+    </View>
   );
 }
 
@@ -906,31 +870,24 @@ const useStyles = makeStyles((Colors) => ({
   root: { flex: 1, backgroundColor: Colors.bg },
   safe: { flex: 1, backgroundColor: Colors.bg },
   flex: { flex: 1 },
-  inset: { marginHorizontal: Spacing.lg },
-  searchRow: { marginBottom: Spacing.sm },
+  inset: { marginHorizontal: 14 },
   pressed: { opacity: 0.7 },
-  spinner: { marginVertical: Spacing.lg },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, gap: Spacing.md },
-  cards: { gap: Spacing.md, paddingHorizontal: Spacing.lg },
-  listRow: { flexDirection: 'row', justifyContent: 'flex-end' },
-  listButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    minHeight: 52,
-    paddingHorizontal: Spacing.lg,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surface,
+  card: {
+    borderRadius: 24,
+    backgroundColor: Colors.overlay,
     borderWidth: 1,
-    borderColor: Colors.borderStrong,
+    borderColor: Colors.border,
     overflow: 'hidden',
-    ...RaisedSmall,
+    ...Raised,
   },
-  listButtonText: { ...Type.label, color: Colors.text },
+  hintCard: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingVertical: 14, paddingHorizontal: Spacing.lg },
+  cardTitle: { ...Type.heading, fontSize: 16, fontWeight: '800', color: Colors.text },
+  cardSub: { ...Type.small, fontSize: 12, color: Colors.textMuted },
   emptyCard: {
     padding: Spacing.lg,
     borderRadius: Radius.lg,
-    backgroundColor: Colors.overlay,
+    backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
     gap: Spacing.xs,
@@ -939,42 +896,31 @@ const useStyles = makeStyles((Colors) => ({
   },
   emptyTitle: { ...Type.heading, color: Colors.text },
   emptyBody: { ...Type.body, color: Colors.textSecondary },
-  placeCard: {
-    padding: Spacing.md,
-    gap: Spacing.md,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.overlay,
-    borderWidth: 1,
-    borderColor: Colors.violet,
-    overflow: 'hidden',
-    ...Raised,
-  },
-  placeHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
-  placeName: { ...Type.heading, color: Colors.text, flex: 1 },
-  placeNote: { ...Type.body, color: Colors.textSecondary },
-  closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: Radius.pill,
+  placeCard: { padding: Spacing.md, gap: Spacing.md },
+  placeHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  placeNote: { ...Type.small, color: Colors.textSecondary },
+  emojiBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.surfaceRaised,
+    backgroundColor: Colors.violetTint,
   },
-  closeText: { ...Type.label, color: Colors.textSecondary },
+  emoji: { fontSize: 22 },
   promoList: { gap: Spacing.sm },
   promoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
-    padding: Spacing.sm,
+    gap: Spacing.md - 2,
+    paddingVertical: Spacing.sm + 2,
+    paddingHorizontal: Spacing.md,
     borderRadius: Radius.md,
     backgroundColor: Colors.orangeTint,
   },
-  promoEmoji: { fontSize: 20 },
-  promoTitle: { ...Type.label, color: Colors.glow },
-  promoMeta: { ...Type.small, color: Colors.textSecondary },
+  promoTitle: { ...Type.label, color: Colors.text },
+  promoMeta: { ...Type.small, fontSize: 12, color: Colors.textSecondary },
   liveBadge: {
-    ...Type.small,
     fontSize: 11,
     fontWeight: '800',
     color: Colors.onBrand,
@@ -985,7 +931,7 @@ const useStyles = makeStyles((Colors) => ({
     overflow: 'hidden',
   },
   entryRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginTop: -Spacing.xs },
-  entryText: { ...Type.label, color: Colors.textSecondary, flex: 1 },
+  entryText: { ...Type.label, fontSize: 13, color: Colors.textSecondary, flex: 1 },
   rowLink: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -995,59 +941,36 @@ const useStyles = makeStyles((Colors) => ({
     borderRadius: Radius.pill,
     backgroundColor: Colors.surface,
   },
-  rowLinkText: { ...Type.label, color: Colors.accent },
+  rowLinkText: { ...Type.label, fontSize: 13, color: Colors.accent },
   placeHangouts: { gap: Spacing.sm },
   placeHangout: { width: 300 },
-  placeActions: { flexDirection: 'row', gap: Spacing.sm },
-  sheetContent: { padding: Spacing.lg, paddingBottom: Spacing.xxl * 2 },
-  sectionTitle: { ...Type.heading, color: Colors.text, marginBottom: Spacing.md },
+  placeActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md - 2 },
+  sheetContent: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xxl * 2 },
+  sectionTitle: { ...Type.heading, fontWeight: '800', color: Colors.text, marginBottom: Spacing.md },
   sectionSpacing: { marginTop: Spacing.xl },
   list: { gap: Spacing.md },
   // Step 2
-  content: { paddingBottom: Spacing.xxl * 2 },
-  pad: { paddingHorizontal: Spacing.lg },
-  placeRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: Spacing.sm },
-  formPlace: { ...Type.title, color: Colors.text, flex: 1 },
-  formDeals: { marginTop: Spacing.md },
-  link: { ...Type.label, color: Colors.accent },
-  heading: { ...Type.heading, color: Colors.text, marginTop: Spacing.xl },
-  label: { ...Type.label, color: Colors.textSecondary, marginTop: Spacing.lg, marginBottom: Spacing.sm },
-  chipRow: { gap: Spacing.sm, paddingHorizontal: Spacing.lg },
-  slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
-  hint: { ...Type.small, color: Colors.textMuted, marginTop: Spacing.sm },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: Spacing.lg },
-  stepButton: {
-    width: 48,
-    height: 48,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-    borderColor: Colors.borderStrong,
-    backgroundColor: Colors.surface,
+  form: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.xs, paddingBottom: Spacing.xl, gap: Spacing.lg },
+  zoneNote: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: 14,
+    backgroundColor: Colors.violetTint,
   },
-  stepPressed: { backgroundColor: Colors.surfaceRaised },
-  stepDisabled: { opacity: 0.5 },
-  stepValue: { ...Type.title, color: Colors.text, minWidth: 32, textAlign: 'center' },
-  input: {
-    minHeight: 52,
-    borderWidth: 1,
-    borderColor: Colors.borderStrong,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surface,
-    paddingHorizontal: Spacing.lg,
-    fontSize: 16,
-    color: Colors.text,
-  },
-  multiline: { minHeight: 110, paddingTop: Spacing.md, paddingBottom: Spacing.md },
+  zoneText: { ...Type.label, fontSize: 13, color: Colors.violetText, flex: 1 },
+  bleed: { marginHorizontal: -Spacing.lg },
+  chipRow: { gap: Spacing.sm, paddingHorizontal: Spacing.lg, paddingVertical: 2 },
+  steppers: { flexDirection: 'row', gap: Spacing.md - 2 },
+  hint: { ...Type.small, color: Colors.textMuted },
   error: {
     ...Type.small,
     color: Colors.danger,
     backgroundColor: Colors.dangerBg,
     padding: Spacing.md,
     borderRadius: Radius.sm,
-    marginTop: Spacing.lg,
+    overflow: 'hidden',
   },
-  submit: { marginTop: Spacing.xl },
-  zoneHint: { marginTop: -Spacing.xs, marginBottom: Spacing.sm },
 }));

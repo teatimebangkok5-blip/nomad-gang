@@ -10,7 +10,7 @@ import { planShareText } from '@/components/plan-timeline';
 import { MakeHangoutBox, PlanView } from '@/components/plan-view';
 import { ScreenHeader } from '@/components/screen-header';
 import { Spacing, Type } from '@/constants/theme';
-import { currentLanguage } from '@/i18n';
+import { useLanguage } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { formatClock, formatDayLabel } from '@/lib/bangkok-time';
 import { deletePlan, makePlanHangout, planDay, planHangoutError, usePlan } from '@/lib/plans';
@@ -22,7 +22,7 @@ export default function PlanScreen() {
   const Colors = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const { session } = useAuth();
   const plan = usePlan(id);
   const [working, setWorking] = useState(false);

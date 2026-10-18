@@ -1,7 +1,7 @@
 import 'expo-sqlite/localStorage/install';
 import { getLocales } from 'expo-localization';
 import { createInstance } from 'i18next';
-import { initReactI18next } from 'react-i18next';
+import { initReactI18next, useTranslation } from 'react-i18next';
 
 import en from './en';
 import th from './th';
@@ -26,8 +26,16 @@ i18n.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 
+// Outside components only (callbacks, plain functions). Components use useLanguage(): the React Compiler caches a
+// plain call like this one, so the screen would keep showing the old language.
 export function currentLanguage(): Language {
   return i18n.language === 'th' ? 'th' : 'en';
+}
+
+// The current language; re-renders the component when it changes.
+export function useLanguage(): Language {
+  const { i18n: instance } = useTranslation();
+  return instance.language === 'th' ? 'th' : 'en';
 }
 
 export function setLanguage(language: Language) {

@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChatView } from '@/components/chat-view';
 import { ScreenHeader } from '@/components/screen-header';
 import { Spacing, Type } from '@/constants/theme';
-import { currentLanguage, localized } from '@/i18n';
+import { localized, useLanguage } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { sendTableMessage, useTableChat } from '@/lib/chat';
 import { useMarkChatRead } from '@/lib/messages';
@@ -20,6 +20,7 @@ export default function TableChatScreen() {
   const styles = useStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t } = useTranslation();
+  const language = useLanguage();
   const { session } = useAuth();
   const myId = session?.user.id;
   const { messages, failed } = useTableChat(id);
@@ -33,7 +34,7 @@ export default function TableChatScreen() {
     meetup?.kind === 'hangout'
       ? meetup.title
       : venue
-        ? localized(venue, 'name', currentLanguage())
+        ? localized(venue, 'name', language)
         : (meetup?.place_name ?? '');
   const chatLabel = meetup?.kind === 'hangout' ? t('hangouts.chat') : t('chat.openChat');
   const isMember = Boolean(meetup?.members.some((m) => m.user_id === myId));

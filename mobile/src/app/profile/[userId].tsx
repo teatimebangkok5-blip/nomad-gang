@@ -12,8 +12,9 @@ import { AboutTab, EventsTab, TravelTab, TripsTab, worldPercent, type ProfileTab
 import { ScreenHeader } from '@/components/screen-header';
 import { StoryShare } from '@/components/story-card';
 import { Radius, Raised, RaisedSmall, Spacing, Type } from '@/constants/theme';
-import { currentLanguage } from '@/i18n';
+import { useLanguage } from '@/i18n';
 import { useAuth } from '@/lib/auth';
+import { usePassportSummary } from '@/lib/passport';
 import { deletePhotoFile, pickAndUploadPhoto, profilePhotoUrl, saveMyPhotos, type PhotoKind } from '@/lib/photos';
 import { countryName, flagEmoji } from '@/lib/profile-options';
 import {
@@ -38,13 +39,14 @@ export default function ProfileScreen() {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const { userId, preview } = useLocalSearchParams<{ userId: string; preview?: string }>();
   const { session } = useAuth();
   const myId = session?.user.id;
   const isOwner = myId === userId;
   const isMe = isOwner && preview !== '1';
   const { state, reload } = useProfile(userId);
+  const passport = usePassportSummary(userId);
   const [tab, setTab] = useState<ProfileTab>('about');
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState<'avatar' | number | null>(null);
@@ -289,6 +291,13 @@ export default function ProfileScreen() {
           <Stat icon="event" value={profile.tables + profile.hangouts} label={t('profile.metUp')} onPress={() => setTab('events')} />
           <Stat icon="heart" value={`👍 ${profile.thumbs_up}  👎 ${profile.thumbs_down}`} label={t('profile.feedbackBox')} small />
         </View>
+        {passport && (
+          <View style={styles.stats}>
+            <Stat icon="event" value={passport.points} label={t('passport.points')} onPress={isMe ? () => router.push('/passport') : undefined} />
+            <Stat icon="flag" value={passport.stamps} label={t('passport.stampsBox')} onPress={isMe ? () => router.push('/passport') : undefined} />
+            <Stat icon="check" value={passport.verified} label={t('passport.verifiedBox')} onPress={isMe ? () => router.push('/passport') : undefined} />
+          </View>
+        )}
 
         {error && (
           <Text accessibilityRole="alert" style={styles.error}>

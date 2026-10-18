@@ -14,9 +14,14 @@ export function profilePhotoUrl(path: string): string {
   return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
-// Opens the phone's photo picker (with cropping), shrinks and compresses the photo, and uploads it.
+// Opens the phone's photo picker (with cropping), shrinks and compresses the photo, and uploads it to my folder in
+// `bucket` (profile photos by default; Hidden Gems suggestions use "gem-photos").
 // Returns the new file's path, null if the person cancelled, or 'error'.
-export async function pickAndUploadPhoto(myId: string, kind: PhotoKind): Promise<string | null | 'error'> {
+export async function pickAndUploadPhoto(
+  myId: string,
+  kind: PhotoKind,
+  bucket: string = BUCKET,
+): Promise<string | null | 'error'> {
   const picked = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
     allowsEditing: true,
@@ -36,7 +41,7 @@ export async function pickAndUploadPhoto(myId: string, kind: PhotoKind): Promise
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
 
     const path = `${myId}/${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
-    const { error } = await supabase.storage.from(BUCKET).upload(path, bytes, { contentType: 'image/jpeg' });
+    const { error } = await supabase.storage.from(bucket).upload(path, bytes, { contentType: 'image/jpeg' });
     if (error) {
       console.warn('Photo upload failed', error.message);
       return 'error';

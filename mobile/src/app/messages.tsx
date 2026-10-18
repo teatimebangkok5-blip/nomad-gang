@@ -11,7 +11,7 @@ import { GlossyFill } from '@/components/glossy';
 import { Icon, type IconName } from '@/components/icon';
 import { ScreenHeader } from '@/components/screen-header';
 import { Radius, Raised, RaisedSmall, Spacing, Type } from '@/constants/theme';
-import { currentLanguage, type Language } from '@/i18n';
+import { type Language, useLanguage } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { bangkokDay, bangkokMinutes, deviceZone, formatClock, formatDayLabel } from '@/lib/bangkok-time';
 import { leaveChat, setChatFlag, useChats, type ChatKind, type ChatSummary } from '@/lib/messages';
@@ -28,7 +28,7 @@ export default function MessagesScreen() {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const { session } = useAuth();
   const myId = session?.user.id;
   const { chats, reload } = useChats(Boolean(session));
@@ -223,7 +223,7 @@ function ChatRow({
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const title = chatTitle(chat, t, language);
   const unread = chat.unread_count > 0;
 

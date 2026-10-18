@@ -9,7 +9,7 @@ import { Chip } from '@/components/chip';
 import { GlossyFill } from '@/components/glossy';
 import { Icon, type IconName } from '@/components/icon';
 import { Radius, RaisedSmall, Spacing, Type } from '@/constants/theme';
-import { currentLanguage } from '@/i18n';
+import { useLanguage } from '@/i18n';
 import { COUNTRIES, LANGUAGES } from '@/lib/countries';
 import {
   CLOCK_CITIES,
@@ -31,7 +31,7 @@ export type Option = { key: string; label: string; emoji?: string; search?: stri
 // The translated choices for every profile question.
 export function useProfileOptions() {
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const other = language === 'th' ? 'en' : 'th';
   const byLabel = (a: Option, b: Option) => a.label.localeCompare(b.label, language);
   return {
@@ -257,7 +257,7 @@ export function DateField({
   const Colors = useColors();
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const language = currentLanguage();
+  const language = useLanguage();
 
   return (
     <>

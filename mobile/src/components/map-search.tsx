@@ -7,7 +7,7 @@ import { GlossyFill } from '@/components/glossy';
 import { Icon } from '@/components/icon';
 import { CATEGORY_EMOJI } from '@/components/venue-map';
 import { Radius, Raised, Spacing, Type } from '@/constants/theme';
-import { currentLanguage, localized } from '@/i18n';
+import { localized, useLanguage } from '@/i18n';
 import { areaName, type SearchResult } from '@/lib/map-search';
 import { PLACE_ICON_IMAGES } from '@/lib/place-icons';
 import { placeIcon, placeName } from '@/lib/places';
@@ -31,7 +31,7 @@ export function MapSearchBar({
   return (
     <View style={styles.bar}>
       <GlossyFill />
-      <Icon name="search" size={20} color={Colors.textMuted} />
+      <Icon name="search" size={22} color={Colors.textSecondary} />
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -123,7 +123,7 @@ function ResultRow({ result, onPress }: { result: SearchResult; onPress: () => v
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
 
   let title = '';
   let subtitle = '';
@@ -189,18 +189,19 @@ const useStyles = makeStyles((Colors) => ({
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
-    minHeight: 46,
-    marginHorizontal: Spacing.lg,
-    paddingHorizontal: Spacing.md,
+    gap: 10,
+    minHeight: 52,
+    marginHorizontal: Spacing.md,
+    paddingLeft: 18,
+    paddingRight: Spacing.md,
     borderRadius: Radius.pill,
     backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.borderStrong,
+    borderColor: Colors.border,
     overflow: 'hidden',
     ...Raised,
   },
-  input: { flex: 1, fontSize: 16, color: Colors.text, paddingVertical: Spacing.sm },
+  input: { ...Type.body, flex: 1, color: Colors.text, paddingVertical: Spacing.sm },
   clear: {
     width: 28,
     height: 28,
@@ -213,8 +214,8 @@ const useStyles = makeStyles((Colors) => ({
   pressed: { opacity: 0.7 },
   panel: {
     position: 'absolute',
-    left: Spacing.lg,
-    right: Spacing.lg,
+    left: Spacing.md,
+    right: Spacing.md,
     maxHeight: 360,
     borderRadius: Radius.lg,
     backgroundColor: Colors.overlay,

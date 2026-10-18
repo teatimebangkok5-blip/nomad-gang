@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type PressableProps, type StyleProp, type ViewProps, type ViewStyle } from 'react-native';
 
 import { Icon } from '@/components/icon';
-import { Raised, RaisedSmall } from '@/constants/theme';
+import { Raised, RaisedSmall, Tones, type Tone } from '@/constants/theme';
 import { useColors } from '@/lib/theme';
 
 // The app's glossy 3D look. Drop these into a container that has a borderRadius and `overflow: 'hidden'`, plus a
@@ -11,7 +11,8 @@ import { useColors } from '@/lib/theme';
 // - <GlossyFill /> paints the surface gradient (light top → base bottom) and the shine.
 // - <Shine /> is only the shine, for containers that already have their own color or gradient (e.g. brand buttons).
 // `onColor`: a white shine for orange / violet / pink fills (the theme shine is faint on dark).
-const WHITE_SHINE = ['rgba(255, 255, 255, 0.42)', 'rgba(255, 255, 255, 0)'] as const;
+// The shine covers the top half and stops sharply, like a glossy button.
+const WHITE_SHINE = ['rgba(255, 255, 255, 0.36)', 'rgba(255, 255, 255, 0.07)'] as const;
 
 export function Shine({ strength = 1, onColor = false }: { strength?: number; onColor?: boolean }) {
   const Colors = useColors();
@@ -23,6 +24,25 @@ export function Shine({ strength = 1, onColor = false }: { strength?: number; on
       style={[styles.shine, { opacity: strength }]}
       pointerEvents="none"
     />
+  );
+}
+
+// A brand fill (orange, violet, lilac, plan, brand) with its shine, for buttons, selected chips and badges. Put it
+// first inside a container with a borderRadius and `overflow: 'hidden'`.
+export function ToneFill({ tone, shine = true }: { tone: Tone; shine?: boolean }) {
+  const fill = Tones[tone];
+  return (
+    <>
+      <LinearGradient
+        colors={fill.colors}
+        locations={fill.locations}
+        start={fill.horizontal ? { x: 0, y: 0.5 } : { x: 0.5, y: 0 }}
+        end={fill.horizontal ? { x: 1, y: 0.5 } : { x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+      {shine && <Shine onColor />}
+    </>
   );
 }
 
@@ -100,7 +120,7 @@ export function InstagramBadge({ size = 30 }: { size?: number }) {
 
 const styles = StyleSheet.create({
   clip: { overflow: 'hidden' },
-  shine: { position: 'absolute', top: 0, left: 0, right: 0, height: '55%' },
+  shine: { position: 'absolute', top: 0, left: 0, right: 0, height: '50%' },
   badge: {
     alignItems: 'center',
     justifyContent: 'center',

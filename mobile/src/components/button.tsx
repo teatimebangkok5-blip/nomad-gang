@@ -1,13 +1,13 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import type { ReactNode } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
-import { Shine } from '@/components/glossy';
-import { BrandGradient, Radius, RaisedSmall, Spacing, Type } from '@/constants/theme';
+import { GlossyFill, ToneFill } from '@/components/glossy';
+import { Fonts, Radius, RaisedSmall, Spacing, ToneShadow } from '@/constants/theme';
 import { makeStyles, useColors } from '@/lib/theme';
 
-// violet: the Hangout action, next to the orange "Create table".
-type Variant = 'primary' | 'violet' | 'secondary' | 'text';
+// primary: orange (tables, the main action). violet: the Hangout action. secondary: glossy surface. danger: outlined
+// red text (Leave). text: a plain link-style button.
+type Variant = 'primary' | 'violet' | 'secondary' | 'danger' | 'text';
 
 export function Button({
   title,
@@ -16,6 +16,7 @@ export function Button({
   loading = false,
   disabled = false,
   icon,
+  trailingIcon,
   compact = false,
 }: {
   title: string;
@@ -24,12 +25,15 @@ export function Button({
   loading?: boolean;
   disabled?: boolean;
   icon?: ReactNode;
+  // After the label (an arrow on "Continue").
+  trailingIcon?: ReactNode;
   // Less side padding and a label that shrinks to fit, for buttons that share a row.
   compact?: boolean;
 }) {
   const styles = useStyles();
   const Colors = useColors();
   const inactive = disabled || loading;
+  const brand = variant === 'primary' || variant === 'violet';
   const textColor =
     variant === 'primary'
       ? Colors.onBrand
@@ -37,7 +41,9 @@ export function Button({
         ? Colors.white
         : variant === 'secondary'
           ? Colors.text
-          : Colors.accent;
+          : variant === 'danger'
+            ? Colors.danger
+            : Colors.accent;
 
   return (
     <Pressable
@@ -45,27 +51,22 @@ export function Button({
       accessibilityState={{ disabled: inactive, busy: loading }}
       disabled={inactive}
       onPress={onPress}
-      android_ripple={variant === 'text' ? undefined : { color: 'rgba(255,255,255,0.12)' }}
+      android_ripple={variant === 'text' ? undefined : { color: 'rgba(255,255,255,0.14)' }}
       style={({ pressed }) => [
         styles.base,
-        variant !== 'text' && styles.raised,
         compact && styles.compact,
         styles[variant],
-        inactive && (variant === 'primary' || variant === 'violet') && styles.primaryDisabled,
-        pressed && variant !== 'primary' && styles.pressed,
+        variant === 'primary' && !inactive && ToneShadow.orange,
+        variant === 'violet' && !inactive && ToneShadow.violet,
+        variant === 'secondary' && RaisedSmall,
+        disabled && !loading && styles.disabled,
+        pressed && styles.pressed,
       ]}>
-      {variant === 'primary' && !inactive && (
-        // The orange → pink gradient from the icon's location pin.
-        <LinearGradient
-          colors={BrandGradient}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={StyleSheet.absoluteFill}
-        />
-      )}
-      {variant !== 'text' && <Shine onColor={(variant === 'primary' || variant === 'violet') && !inactive} />}
+      {variant === 'primary' && <ToneFill tone="orange" />}
+      {variant === 'violet' && <ToneFill tone="violet" />}
+      {variant === 'secondary' && <GlossyFill />}
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' || variant === 'violet' ? Colors.textSecondary : textColor} />
+        <ActivityIndicator color={brand ? textColor : Colors.accent} />
       ) : (
         <View style={[styles.content, compact && styles.contentCompact]}>
           {icon}
@@ -73,9 +74,10 @@ export function Button({
             numberOfLines={compact ? 1 : undefined}
             adjustsFontSizeToFit={compact}
             minimumFontScale={0.8}
-            style={[styles.label, compact && styles.labelCompact, { color: textColor }, inactive && styles.labelDisabled]}>
+            style={[styles.label, compact && styles.labelCompact, { color: textColor }]}>
             {title}
           </Text>
+          {trailingIcon}
         </View>
       )}
     </Pressable>
@@ -84,24 +86,23 @@ export function Button({
 
 const useStyles = makeStyles((Colors) => ({
   base: {
-    minHeight: 52,
-    borderRadius: Radius.md,
+    minHeight: 56,
+    borderRadius: Radius.pill,
     paddingHorizontal: Spacing.xl,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
   compact: { paddingHorizontal: Spacing.md },
-  raised: { ...RaisedSmall },
   primary: { backgroundColor: Colors.orange },
   violet: { backgroundColor: Colors.violet },
-  primaryDisabled: { backgroundColor: Colors.surfaceRaised },
-  secondary: { backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.borderStrong },
+  secondary: { backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
+  danger: { borderWidth: 1, borderColor: Colors.borderStrong },
   text: { minHeight: 44, paddingHorizontal: Spacing.md },
-  pressed: { opacity: 0.6 },
+  disabled: { opacity: 0.45 },
+  pressed: { opacity: 0.85 },
   content: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  contentCompact: { gap: Spacing.xs, flexShrink: 1 },
-  label: { ...Type.heading, fontWeight: '700' },
+  contentCompact: { gap: 6, flexShrink: 1 },
+  label: { fontFamily: Fonts.body, fontSize: 16, lineHeight: 21, fontWeight: '800' },
   labelCompact: { fontSize: 15, flexShrink: 1 },
-  labelDisabled: { color: Colors.textMuted },
 }));

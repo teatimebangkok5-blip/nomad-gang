@@ -6,7 +6,7 @@ import { Pressable, Text, View } from 'react-native';
 import { Icon } from '@/components/icon';
 import { GlossyFill } from '@/components/glossy';
 import { Radius, Raised, Spacing, Type } from '@/constants/theme';
-import { currentLanguage, localized } from '@/i18n';
+import { localized, useLanguage } from '@/i18n';
 import { venuePhotoUrl } from '@/lib/supabase';
 import type { Venue } from '@/lib/venues';
 import { makeStyles, useColors } from '@/lib/theme';
@@ -26,7 +26,7 @@ export function VenueCard({
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const name = localized(venue, 'name', language);
   const address = localized(venue, 'address', language);
 

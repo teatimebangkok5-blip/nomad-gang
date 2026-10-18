@@ -28,8 +28,22 @@ export type CouponState = {
   me_checked_in: boolean;
   // From 15 minutes before the start until the end (not cancelled).
   window_open: boolean;
+  // Where to check in: the partner venue (its radius), else the place or dropped pin (100 m).
   venue: { lat: number; lng: number; radius_m: number } | null;
   deals: CouponDeal[];
+  // Rewards Passport (supabase/migrations/*_rewards_passport.sql).
+  passport?: {
+    needed: number;
+    ended: boolean;
+    verified: boolean;
+    method: 'gps' | 'code' | null;
+    code_status: 'none' | 'collecting' | 'pending' | 'approved' | 'rejected';
+    confirmations: number;
+    me_confirmed: boolean;
+    // Host only.
+    code: string | null;
+    code_open: boolean;
+  };
 };
 
 const KNOWN_ERRORS = [
@@ -100,6 +114,39 @@ export function useCouponState(meetupId: string, enabled: boolean) {
   }, [enabled, meetupId, load]);
 
   return { state: enabled ? state : null, reload: load };
+}
+
+// Who in a table / hangout has checked in (members can read them), kept live. Empty while not enabled.
+export function useCheckedIn(meetupId: string, enabled: boolean): ReadonlySet<string> {
+  const [ids, setIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let active = true;
+    const load = () =>
+      supabase
+        .from('meetup_checkins')
+        .select('user_id')
+        .eq('meetup_id', meetupId)
+        .then(({ data }) => {
+          if (active && data) setIds(data.map((row: { user_id: string }) => row.user_id));
+        });
+    load();
+    const channel = supabase
+      .channel(uniqueChannelName(`checked-in-${meetupId}`))
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'meetup_checkins', filter: `meetup_id=eq.${meetupId}` },
+        () => load(),
+      )
+      .subscribe();
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
+  }, [enabled, meetupId]);
+
+  return new Set(enabled ? ids : []);
 }
 
 export type DistanceState =

@@ -9,13 +9,15 @@ Product spec and tech stack below are agreed. Built so far:
   (**full-screen map** of the open tables and hangouts people created (👥 / 🙌 pins, also at partner venues) and
   Bangkok food place icons; **no partner venue pins and no Discount/Offer/Event/Party buttons on home** (founder,
   2026-10-16: those are on the Create table map). My profile (avatar, top left), logo, language, Travellers,
-  settings and the search bar float on top over a fade; a swipeable row of cards, "Create table", "Create hangout"
-  and a "List" button float at the bottom; "List" slides up the open tables and hangouts), the Create table flow and the
-  table screen (join / leave / cancel) (`mobile/`). `VenueMap` takes `fullScreen` + `mapPadding` (measured overlay
-  heights) so centering and the map attribution stay clear of the floating UI.
-  There is no place-type (cafe/restaurant/rooftop/bar) filter any more (removed 2026-10-16 at the founder's request); tapping a place
-  dot or a pin opens a place card (promotions, tables there, "Create table here", Open in Maps → the phone's maps
-  app via a `geo:` link). Admin: per-venue **Promotions** editor and **Find the place on the map** (server action
+  settings and the search bar float on top over a fade, then a row with Plan my day / Gems / Passport and the feed
+  filter chips; List and Messages, the tapped pin's pop-up card(s), "Create table" and "Create hangout" float at the
+  bottom; "List" slides up the open tables and hangouts; no cards row since the 2026-10-18 redesign), the Create
+  table flow and the table screen (join / leave / cancel) (`mobile/`). `VenueMap` takes `fullScreen` + `mapPadding`
+  (measured overlay heights) so centering and the map attribution stay clear of the floating UI.
+  There is no place-type (cafe/restaurant/rooftop/bar) filter any more (removed 2026-10-16 at the founder's request);
+  tapping a 👥 / 🙌 pin opens its pop-up card(s) (tap a card → table screen); tapping a place dot opens the **place
+  sheet** (photo for partner venues, Open in Maps → the phone's maps app via a `geo:` link, website, partner offers,
+  what's happening there, "Create table here", ♥). Admin: per-venue **Promotions** editor and **Find the place on the map** (server action
   `searchPlaces` → RPC `search_places`).
 - **Chat and Travellers** (added 2026-10-16): table group chat for members (`src/app/table-chat/[id].tsx`), a
   **Travellers** screen (top-right button on the map, `src/app/travellers.tsx`) with Nearby (opt-in, people within
@@ -32,8 +34,8 @@ Product spec and tech stack below are agreed. Built so far:
   `src/app/create-hangout.tsx`: step 1 is a **full-screen Hangout map** (violet dots = OSM hangout places, partner
   hangout venues with Tickets/Free entry/Event/Party filter buttons, 🙌 pins for open hangouts, **tap anywhere to drop
   a pin**), step 2 the form (title required, description ≤ 500, meeting-point name for a dropped pin, 14 days of day
-  chips, 30-min slots, length 1–12 h, 2–30 people). Open hangouts also show on home (🙌 pins; one hangout opens
-  directly, several open a card). Hangouts are `meetups` with `kind = 'hangout'`, so `table/[id].tsx` (adapts its
+  chips, 30-min slots, length 1–12 h, 2–30 people). Open hangouts also show on home (🙌 pins open a pop-up card;
+  a day hangout's pin also draws its route). Hangouts are `meetups` with `kind = 'hangout'`, so `table/[id].tsx` (adapts its
   wording), join/leave/cancel and the group chat are shared. Create table step 1 is now a full-screen map too.
   Shared full-screen-map UI: `MapHeader` (`src/components/map-header.tsx`) and `SlideUpPanel`
   (`src/components/slide-up-panel.tsx`). `VenueMap` also takes `onMapPress`.
@@ -132,7 +134,7 @@ Product spec and tech stack below are agreed. Built so far:
   `bangkok-time.ts` take an optional `zone` (default Bangkok; others via Intl), with "Local time at this place (UTC+2)"
   where it differs from the phone. Chat / message times use the phone's zone. **Search**: home and the Hangout map
   also query **Photon** (photon.komoot.io, free OSM search, no key) after the Bangkok results (`type: 'world'` in
-  `useMapSearch(…, { near })`); create-table and the planner stay Bangkok-only. Home's cards row and List show
+  `useMapSearch(…, { near })`); create-table and the planner stay Bangkok-only. Home's List shows
   tables / hangouts within 50 km of me (or central Bangkok); the map pins all of them. `my_notifications(limit, lat,
   lng)`: new tables / hangouts only within 50 km of that point (Bangkok box without one). Day planner, partner venues,
   promotions and areas are still Bangkok-only.
@@ -243,12 +245,30 @@ Product spec and tech stack below are agreed. Built so far:
   `src/components/meetup-extras.tsx` on Create table / Create hangout). `list_open_meetups` also returns `place_kind`,
   cost, meeting point and `area_name(_en/_th)` = nearest neighbourhood / subdistrict from `public.areas`
   (`area_near`). Home: filter chips All / Today / Tonight (from 17:00 local) / Food / Drinks (bar/rooftop venues,
-  bar/pub/biergarten/nightclub places) / Explore (hangouts) / Budget-friendly (cost ≤ 1) on the pins, cards and List
+  bar/pub/biergarten/nightclub places) / Explore (hangouts) / Budget-friendly (cost ≤ 1) on the pins and List
   (`src/lib/feed.ts`); each `MeetupCard` shows a status (Happening now / Starts in N min / Full / N seats left), a
   pulse line from real counts ("3 going for dinner near Asok") and the cost; the table screen shows meeting point and
   cost. Planned next (founder, 2026-10-18, in this order): Rewards Passport (stamps / points / milestones 3-5-10,
   completion by GPS check-in or host code + admin review), Hidden Gems (founder supplies the list), Locals + Safety +
   Invites, and map "stories" on home instead of a posts feed.
+- **Design refresh** (2026-10-18, from the founder's Claude Design project "TableMeet Screen", layout variant a):
+  fonts **Bricolage Grotesque** (headings) + **Figtree** (text), **Anuphan** in Thai (`assets/fonts/`, embedded by the
+  `expo-font` plugin in `app.json` with one Android family per typeface; **needs a prebuild + new native build**,
+  older builds fall back to the system font). `Type` tokens carry the font; `makeStyles` gives Figtree to any text
+  style without a font and swaps both for Anuphan in Thai (sheets cached per theme + language). New tokens:
+  `violetText`, `pinkText`, `ok`, `field`, `Tones` (orange / violet / lilac / plan / brand fills, drawn with
+  `<ToneFill />` from `glossy.tsx`), `ToneShadow` (colored elevation), `avatarColor(id)`, `Radius.sheet`; radii are
+  rounder (md 18, lg 22). Buttons are 56 dp pills (orange or violet gradient, `danger` outline variant,
+  `trailingIcon`); `Chip` takes `tone`, `icon`, `shape="tile"`, `tall`. New shared pieces: `RoundButton` (44 dp
+  glossy circle, `tone`, `badge`, `star`), `form-parts.tsx` (`FormSection`, `FormInput`, `Stepper`, `PlaceSummary`,
+  `IconBadge`, `FormFooter`), `LanguageSegment` (EN | ไทย, welcome). `MeetupCard` is compact (kind / status / deal
+  tags, title, where · when · cost, count + pulse) or full (`compact={false}`); it has **no Join button** (join on the
+  table screen). Pins: tables orange → pink, hangouts violet, count = people, selected = bigger. Create table / hangout:
+  "Step 1 of 2" map headers with a List button, hint card, "Choose this place →" / "Use this spot →", step-2 forms
+  with a sticky create button; a hangout's length is a 1–12 h stepper. Table screen: small map of the place on top
+  (`VenueMap` `center` + `interactive={false}`), tags, details card, check-in box with a brand-gradient frame,
+  members with "Checked in ✓" (`useCheckedIn`), chat + leave / cancel / join in a bottom bar, Share. Welcome: the
+  icon artwork as hero until a photo is supplied. Phone code: six boxes over one hidden input.
 - **Not started:** web push to the founder's phone for redemptions, tables/users in the admin panel, Apple token
   revocation on account deletion. Places missing from OpenStreetMap can be added by the founder (admin insert into `places`; no UI yet).
 - Running on the founder's Redmi as a local release APK, connected to the real Supabase project
@@ -430,6 +450,8 @@ How the key rules map onto this:
     (→ `contentInset`). Keep `attribution` on (OSM licence).
   - `src/i18n/`: i18next with `en.ts` (source, typed keys) and `th.ts` (must match). `localized(row, 'name', lang)`
     picks `name_th`/`name_en` columns. The language choice is saved on the phone; the default follows the phone language.
+    In components read the language with the `useLanguage()` hook; `currentLanguage()` is for callbacks and plain
+    functions only (the React Compiler caches a plain call, so a screen kept showing the old language).
   - `src/components/`: `Button`, `Icon` (expo-symbols: Material names on Android, SF Symbols for iOS; add new icons
     to the map), `LanguageToggle`, `VenueCard`, `PromoFilter`, `Logo` (white "Table", orange "M", pink "eet", as on the
     icon). **Two themes, Dark (default) and Light**, chosen in `src/app/settings.tsx` and saved on the phone (`src/lib/theme.tsx`: `ThemeProvider`, `useTheme`, `useColors`). Colors live in `src/constants/theme.ts` as `darkColors` / `lightColors` with the same **semantic tokens** (`bg`, `surface`, `surfaceRaised`, `border`, `overlay`, `text`, `textSecondary`, `textMuted`, `orange`/`pink` for fills, `accent` for orange text and icons, `glow` for warm text on `orangeTint`, `onBrand`, `*Tint`, `fade`). **Never import colors statically:** write `const useStyles = makeStyles((Colors) => ({ ... }))` at module level and call `const styles = useStyles()` (and `const Colors = useColors()` for inline colors) in each component. Text on orange/pink fills is always `onBrand`; orange text/icons on plain backgrounds use `accent` (darker in Light so it passes 4.5:1). `BrandGradient` (orange → coral → pink) is the same in both themes. The map is always OpenFreeMap **Liberty** (blue water, green parks, yellow main roads; founder, 2026-10-18), in both themes, so labels / dots the app draws on it use light-map colors (`PLACE_ICON_COLORS` as-is, white halos, `lightColors.accent` / `violet` for pin names) in `venue-map.tsx`. `app.json` stays `userInterfaceStyle: "dark"` (native dialogs/keyboard); changing it needs a prebuild. The admin panel shares the brand colors but stays light.

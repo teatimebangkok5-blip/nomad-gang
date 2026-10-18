@@ -8,7 +8,7 @@ import { GlossyFill } from '@/components/glossy';
 import { RewardCard } from '@/components/reward-card';
 import { ScreenHeader } from '@/components/screen-header';
 import { Radius, Raised, Spacing, Type } from '@/constants/theme';
-import { currentLanguage, localized } from '@/i18n';
+import { localized, useLanguage } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { formatDayLabel, bangkokDay, deviceZone } from '@/lib/bangkok-time';
 import { EXAMPLE_REWARD, REWARD_MIN_PEOPLE, useRewards } from '@/lib/rewards';
@@ -20,7 +20,7 @@ export default function RewardsScreen() {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const { session } = useAuth();
   const { rewards, reload } = useRewards(Boolean(session));
   const [showExample, setShowExample] = useState(false);

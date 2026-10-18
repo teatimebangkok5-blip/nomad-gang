@@ -13,7 +13,7 @@ import { planShareText } from '@/components/plan-timeline';
 import { MakeHangoutBox, PlanView } from '@/components/plan-view';
 import { ScreenHeader } from '@/components/screen-header';
 import { Radius, Raised, Spacing, Type } from '@/constants/theme';
-import { currentLanguage, localized } from '@/i18n';
+import { localized, useLanguage } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { bangkokDay, bangkokMinutes, formatClock, formatDayLabel, parseClock, type BangkokDay } from '@/lib/bangkok-time';
 import { useCurrentLocation } from '@/lib/location';
@@ -80,7 +80,7 @@ export default function PlanDayScreen() {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const { session } = useAuth();
   const venues = useVenues();
   const location = useCurrentLocation();
@@ -414,7 +414,7 @@ function ResultScreen({
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const { session } = useAuth();
   const [title, setTitle] = useState(
     result.areaLabel ? t('plan.defaultTitle', { area: result.areaLabel }) : t('plan.defaultTitleNoArea'),

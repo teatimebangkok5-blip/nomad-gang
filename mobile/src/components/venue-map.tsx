@@ -16,7 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { lightColors, Radius } from '@/constants/theme';
-import { currentLanguage } from '@/i18n';
+import { useLanguage } from '@/i18n';
 import type { Coords } from '@/lib/location';
 import { PLACE_ICON_IMAGES } from '@/lib/place-icons';
 import {
@@ -139,6 +139,8 @@ export function VenueMap({
   route,
   routeStops,
   initialZoom = 13,
+  center,
+  interactive = true,
 }: {
   pins: MapPin[];
   onPinPress: (key: string) => void;
@@ -170,12 +172,16 @@ export function VenueMap({
   routeStops?: { lat: number; lng: number; label: string }[];
   // Starting zoom.
   initialZoom?: number;
+  // Start here instead of the user (e.g. the table screen's small map of its place).
+  center?: Coords | null;
+  // false: a picture of the map that doesn't pan or zoom (inside a scrolling screen).
+  interactive?: boolean;
 }) {
   const styles = useStyles();
   const Colors = useColors();
   // Re-renders the labels when the language changes.
   useTranslation();
-  const language = currentLanguage();
+  const language = useLanguage();
   const cameraRef = useRef<CameraRef>(null);
   const mapRef = useRef<MapRef>(null);
 
@@ -191,12 +197,15 @@ export function VenueMap({
   // A tap on a pin can also reach the map; ignore map taps right after a pin tap.
   const lastPinPress = useRef(0);
 
-  // Move to the user once their location arrives (only the first time, so we don't fight their panning).
-  useEffect(() => {
-    if (!userCoords || centeredOnUser.current) return;
+  // Move to the user once their location arrives (only the first time, so we don't fight their panning). The
+  // camera ignores moves before the map has loaded, so a location that arrives earlier waits for the load.
+  const mapLoaded = useRef(false);
+  function centerOnUser() {
+    if (!userCoords || center || centeredOnUser.current || !mapLoaded.current) return;
     centeredOnUser.current = true;
     cameraRef.current?.easeTo({ center: [userCoords.lng, userCoords.lat], zoom: 15, duration: 600 });
-  }, [userCoords]);
+  }
+  useEffect(centerOnUser);
 
   // Fit the route in view when it changes (the first one is framed by the initial camera).
   const routeBounds = boundsOf(route);
@@ -279,8 +288,8 @@ export function VenueMap({
     circleStrokeWidth: 1,
   });
 
-  // A route opens on its first point; otherwise the user, else central Bangkok.
-  const start = route?.[0] ?? userCoords ?? BANGKOK;
+  // A route opens on its first point; otherwise the given center, the user, else central Bangkok.
+  const start = route?.[0] ?? center ?? userCoords ?? BANGKOK;
   const frameStyle = fullScreen ? StyleSheet.absoluteFill : [styles.frame, { height }];
 
   return (
@@ -288,6 +297,8 @@ export function VenueMap({
       <Map
         ref={mapRef}
         onDidFinishLoadingMap={() => {
+          mapLoaded.current = true;
+          centerOnUser();
           reportInitialBounds().catch(() => {});
         }}
         style={StyleSheet.absoluteFill}
@@ -297,6 +308,10 @@ export function VenueMap({
         attribution
         attributionPosition={{ bottom: (mapPadding?.bottom ?? 0) + 8, right: 8 }}
         compass={false}
+        dragPan={interactive}
+        touchZoom={interactive}
+        doubleTapZoom={interactive}
+        doubleTapHoldZoom={interactive}
         touchRotate={false}
         touchPitch={false}
         onRegionDidChange={(event) => {
@@ -516,16 +531,15 @@ function routePadding(mapPadding: { top: number; right: number; bottom: number; 
 }
 
 // 3D pin: glossy gradient ball (light top -> deep bottom) with a white rim, a shine, the tail, and a soft shadow on
-// the ground. Orange for partner venues, violet for tables / hangouts / travellers, pink when selected.
+// the ground. Orange → pink for tables and partner venues, violet for hangouts / travellers. A selected pin is bigger.
 const PIN_GRADIENTS = {
-  orange: ['#FFC266', '#FF9A1B', '#D96A00'],
-  violet: ['#A88BFF', '#7B4DFF', '#4F25C9'],
-  pink: ['#FF7AAE', '#FF1F78', '#C4004F'],
+  orange: ['#FFB547', '#FE593B', '#FF1F78'],
+  violet: ['#B79DFF', '#7B4DFF', '#4B22C9'],
 } as const;
 
 function PinView({ pin }: { pin: MapPin }) {
   const styles = useStyles();
-  const tone = pin.selected ? 'pink' : pin.tone === 'violet' ? 'violet' : 'orange';
+  const tone = pin.tone === 'violet' ? 'violet' : 'orange';
   const gradient = PIN_GRADIENTS[tone];
   return (
     <View style={styles.pinWrap}>
@@ -584,7 +598,7 @@ const useStyles = makeStyles((Colors) => ({
     shadowRadius: 5,
     shadowOffset: { width: 0, height: 4 },
   },
-  pinSelected: { transform: [{ scale: 1.15 }] },
+  pinSelected: { transform: [{ scale: 1.2 }] },
   shine: { position: 'absolute', top: 2, left: 7, right: 7, height: PIN * 0.42, borderRadius: PIN },
   emoji: { fontSize: 25, textShadowColor: 'rgba(0,0,0,0.35)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 3 },
   tail: {
@@ -612,12 +626,12 @@ const useStyles = makeStyles((Colors) => ({
     height: 22,
     paddingHorizontal: 5,
     borderRadius: 11,
-    backgroundColor: Colors.pink,
+    backgroundColor: '#0A0612',
     borderWidth: 2,
     borderColor: Colors.white,
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 9,
   },
-  badgeText: { fontSize: 12, lineHeight: 14, fontWeight: '800', color: Colors.white },
+  badgeText: { fontSize: 11, lineHeight: 14, fontWeight: '800', color: Colors.white },
 }));

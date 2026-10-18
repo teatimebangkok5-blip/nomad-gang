@@ -15,7 +15,7 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Radius } from '@/constants/theme';
+import { lightColors, Radius } from '@/constants/theme';
 import { currentLanguage } from '@/i18n';
 import type { Coords } from '@/lib/location';
 import { PLACE_ICON_IMAGES } from '@/lib/place-icons';
@@ -33,7 +33,7 @@ import {
   type Place,
   type PlaceDot,
 } from '@/lib/places';
-import { makeStyles, useColors, useTheme } from '@/lib/theme';
+import { makeStyles, useColors } from '@/lib/theme';
 import type { VenueCategory } from '@/lib/venues';
 
 // Prefixed so they can't clash with the map style's own images.
@@ -46,16 +46,10 @@ const MAP_IMAGES = Object.fromEntries(
 const PLACE_ICON_SIZE = 0.32;
 // The label font must be one the map style's font server has (OpenFreeMap: Noto Sans, with Thai).
 const LABEL_FONT = ['Noto Sans Bold'];
-
-// Lighter label colors on the dark map so they stay readable.
-function lighten(hex: string, amount: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  const channel = (shift: number) => {
-    const c = (n >> shift) & 255;
-    return Math.round(c + (255 - c) * amount);
-  };
-  return `rgb(${channel(16)}, ${channel(8)}, ${channel(0)})`;
-}
+// The map is light in both app themes, so what we draw on it uses light-map colors: white halos and rings, and the
+// Light theme's accent / violet for pin names.
+const MAP_HALO = '#FFFFFF';
+const MAP_LAND = '#F8F4F0';
 
 // The world places layer (Hangout map) reads OpenFreeMap's vector tiles directly: OpenStreetMap's "poi" layer,
 // filtered to places to hang out. Bangkok is left out there: its places come from the database (public.places).
@@ -90,11 +84,9 @@ function worldMatch(value: (kind: string) => string, fallback: string) {
 }
 
 // Free map: MapLibre with OpenFreeMap tiles (OpenStreetMap data). No API key, no billing.
+// "Liberty" is the colorful style (blue water, green parks, yellow main roads), used in both app themes.
 // The style includes the required "© OpenStreetMap" credit, shown via the map's attribution button.
-const MAP_STYLES = {
-  dark: 'https://tiles.openfreemap.org/styles/dark',
-  light: 'https://tiles.openfreemap.org/styles/positron',
-} as const;
+const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 
 export type MapPin = {
   key: string;
@@ -181,11 +173,9 @@ export function VenueMap({
 }) {
   const styles = useStyles();
   const Colors = useColors();
-  const { name: themeName } = useTheme();
   // Re-renders the labels when the language changes.
   useTranslation();
   const language = currentLanguage();
-  const labelColor = (hex: string) => (themeName === 'dark' ? lighten(hex, 0.3) : hex);
   const cameraRef = useRef<CameraRef>(null);
   const mapRef = useRef<MapRef>(null);
 
@@ -240,7 +230,7 @@ export function VenueMap({
         id: place.id,
         icon: `tm-${placeIcon(place.kind)}`,
         name: placeName(place, language),
-        color: labelColor(PLACE_ICON_COLORS[placeIcon(place.kind)]),
+        color: PLACE_ICON_COLORS[placeIcon(place.kind)],
       },
     })),
   };
@@ -270,7 +260,7 @@ export function VenueMap({
         type: 'Feature',
         id: pin.key,
         geometry: { type: 'Point', coordinates: [pin.lng, pin.lat] },
-        properties: { name: pin.label, color: pin.tone === 'violet' ? labelColor(Colors.violet) : Colors.accent },
+        properties: { name: pin.label, color: pin.tone === 'violet' ? lightColors.violet : lightColors.accent },
       })),
   };
 
@@ -285,7 +275,7 @@ export function VenueMap({
   const dotStyle = (color: unknown) => ({
     circleColor: color as never,
     circleRadius: ['interpolate', ['linear'], ['zoom'], 10, 2.5, ICON_ZOOM, 5] as never,
-    circleStrokeColor: Colors.bg,
+    circleStrokeColor: MAP_HALO,
     circleStrokeWidth: 1,
   });
 
@@ -301,7 +291,7 @@ export function VenueMap({
           reportInitialBounds().catch(() => {});
         }}
         style={StyleSheet.absoluteFill}
-        mapStyle={MAP_STYLES[themeName]}
+        mapStyle={MAP_STYLE}
         contentInset={mapPadding}
         logo={false}
         attribution
@@ -423,7 +413,7 @@ export function VenueMap({
                 textMaxWidth: 9,
                 textOptional: true,
                 textColor: ['get', 'color'],
-                textHaloColor: Colors.bg,
+                textHaloColor: MAP_HALO,
                 textHaloWidth: 1.5,
               }}
             />
@@ -468,8 +458,8 @@ export function VenueMap({
                 textOffset: [1.6, -0.1],
                 textMaxWidth: 9,
                 textOptional: true,
-                textColor: worldMatch((kind) => labelColor(PLACE_ICON_COLORS[placeIcon(kind)]), labelColor(PLACE_ICON_COLORS.temple)) as never,
-                textHaloColor: Colors.bg,
+                textColor: worldColor,
+                textHaloColor: MAP_HALO,
                 textHaloWidth: 1.5,
               }}
             />
@@ -491,7 +481,7 @@ export function VenueMap({
                 textOffset: [2.2, -2.9],
                 textMaxWidth: 9,
                 textColor: ['get', 'color'],
-                textHaloColor: Colors.bg,
+                textHaloColor: MAP_HALO,
                 textHaloWidth: 1.5,
               }}
             />
@@ -573,7 +563,8 @@ const useStyles = makeStyles((Colors) => ({
     borderColor: Colors.border,
     backgroundColor: Colors.surface,
   },
-  mapBackground: { backgroundColor: Colors.surface },
+  // Shown until the tiles load; the map's land color, so Dark theme doesn't flash black first.
+  mapBackground: { backgroundColor: MAP_LAND },
   pinWrap: { alignItems: 'center', paddingTop: 6, paddingRight: 10, paddingLeft: 2 },
   pinBody: { alignItems: 'center' },
   pin: {

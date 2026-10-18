@@ -251,6 +251,11 @@ Product spec and tech stack below are agreed. Built so far:
   cost. Planned next (founder, 2026-10-18, in this order): Rewards Passport (stamps / points / milestones 3-5-10,
   completion by GPS check-in or host code + admin review), Hidden Gems (founder supplies the list), Locals + Safety +
   Invites, and map "stories" on home instead of a posts feed.
+- **Hidden Gems list** (`*_hidden_gems.sql` + `*_more_hidden_gems.sql`): the founder's numbered list of 100 (2026-10-18:
+  1–30 places by type, 31–65 cafés, 66–100 food) is gems 1–100; the first 32 gems not on it are 101+ (still
+  published). Areas are free text and become the map's area chips. Places not in OpenStreetMap or chains without a
+  clear branch are drafts at an approximate pin with a `check_note` (20 drafts); the founder fixes and publishes them
+  in the admin panel.
 - **Design refresh** (2026-10-18, from the founder's Claude Design project "TableMeet Screen", layout variant a):
   fonts **Bricolage Grotesque** (headings) + **Figtree** (text), **Anuphan** in Thai (`assets/fonts/`, embedded by the
   `expo-font` plugin in `app.json` with one Android family per typeface; **needs a prebuild + new native build**,

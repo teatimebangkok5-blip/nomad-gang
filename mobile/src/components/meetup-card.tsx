@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
@@ -5,6 +6,7 @@ import { GlossyFill } from '@/components/glossy';
 import { Radius, Raised, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { bangkokDay, bangkokMinutes, formatClock, formatDayLabel } from '@/lib/bangkok-time';
+import { meetupStatus, pulseLine, statusLabel } from '@/lib/feed';
 import { meetupPlaceName, type OpenMeetup } from '@/lib/meetups';
 import type { Venue } from '@/lib/venues';
 import { makeStyles, useColors } from '@/lib/theme';
@@ -30,6 +32,10 @@ export function MeetupCard({
   const full = meetup.member_count >= meetup.max_people;
   const hangout = meetup.kind === 'hangout';
   const placeLabel = venue ? localized(venue, 'name', language) : meetupPlaceName(meetup, language);
+  const [now] = useState(() => new Date());
+  const status = meetupStatus(meetup, now);
+  const statusText = statusLabel(status, t);
+  const cost = typeof meetup.cost_level === 'number' ? t(`feed.cost.${meetup.cost_level}`) : null;
 
   return (
     <Pressable
@@ -45,6 +51,12 @@ export function MeetupCard({
       </View>
 
       <View style={styles.body}>
+        {statusText && (
+          <Text style={[styles.status, status?.type === 'live' && styles.statusLive]} numberOfLines={1}>
+            {status?.type === 'live' ? '● ' : ''}
+            {statusText}
+          </Text>
+        )}
         {hangout ? (
           // Hangouts lead with what's happening, then where.
           <>
@@ -68,7 +80,13 @@ export function MeetupCard({
             ) : null}
           </>
         )}
-        <Text style={styles.people}>{t('tables.peopleCount', { count: meetup.member_count, max: meetup.max_people })}</Text>
+        <Text style={styles.pulse} numberOfLines={1}>
+          {pulseLine(meetup, venue, t, language)}
+        </Text>
+        <Text style={styles.people} numberOfLines={1}>
+          {t('tables.peopleCount', { count: meetup.member_count, max: meetup.max_people })}
+          {cost ? `  ·  ${cost}` : ''}
+        </Text>
         {venue?.deal && (
           <Text style={styles.deal} numberOfLines={1}>
             {localized(venue.deal, 'title', language)}
@@ -130,6 +148,9 @@ const useStyles = makeStyles((Colors) => ({
   venue: { ...Type.heading, color: Colors.text },
   title: { ...Type.small, color: Colors.textSecondary },
   people: { ...Type.small, color: Colors.textMuted },
+  pulse: { ...Type.small, color: Colors.text, fontWeight: '600' },
+  status: { ...Type.small, fontSize: 11, fontWeight: '800', color: Colors.accent, textTransform: 'uppercase' },
+  statusLive: { color: Colors.danger },
   deal: { ...Type.small, color: Colors.accent, fontWeight: '600' },
   action: {
     minWidth: 72,

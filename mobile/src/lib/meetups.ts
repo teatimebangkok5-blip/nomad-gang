@@ -34,7 +34,19 @@ export type OpenMeetup = MeetupPlace & {
   max_people: number;
   member_count: number;
   joined: boolean;
+  // OpenStreetMap kind of the place (restaurant, bar, …), for the Food / Drinks filters.
+  place_kind: string | null;
+  cost_level: CostLevel | null;
+  meeting_point: string | null;
+  // Nearest named Bangkok neighbourhood / subdistrict ("near Ari"); null outside Bangkok.
+  area_name: string | null;
+  area_name_en: string | null;
+  area_name_th: string | null;
 };
+
+// Expected cost per person: 0 free, 1 under ฿300, 2 ฿300–700, 3 ฿700–1,500, 4 over ฿1,500.
+export const COST_LEVELS = [0, 1, 2, 3, 4] as const;
+export type CostLevel = (typeof COST_LEVELS)[number];
 
 export type MeetupMember = { user_id: string; joined_at: string; display_name: string; avatar_path: string | null };
 
@@ -49,6 +61,8 @@ export type MeetupDetail = MeetupPlace & {
   ends_at: string;
   max_people: number;
   status: 'open' | 'cancelled';
+  cost_level: CostLevel | null;
+  meeting_point: string | null;
   members: MeetupMember[];
   // The place's official website (OpenStreetMap), if any.
   place_website: string | null;
@@ -183,6 +197,17 @@ export function directionsUrl(place: { lat: number; lng: number; name?: string |
   return `geo:${place.lat},${place.lng}?q=${place.lat},${place.lng}${label}`;
 }
 
+// Expected cost and meeting point, set by the host right after creating (best effort: the table exists either way).
+export async function setMeetupDetails(id: string, costLevel: CostLevel | null, meetingPoint: string) {
+  if (costLevel === null && !meetingPoint.trim()) return;
+  const { error } = await supabase.rpc('set_meetup_details', {
+    p_meetup_id: id,
+    p_cost_level: costLevel,
+    p_meeting_point: meetingPoint.trim() || null,
+  });
+  if (error) console.warn('Saving cost / meeting point failed', error.message);
+}
+
 export async function joinMeetup(id: string): Promise<Result<null>> {
   const { error } = await supabase.rpc('join_meetup', { p_meetup_id: id });
   return result(null, error);
@@ -279,7 +304,7 @@ async function fetchMeetup(id: string): Promise<MeetupDetail | null | 'error'> {
     .from('meetups')
     .select(
       'id, kind, time_zone, venue_id, place_id, place:places(name, name_en, name_th, lat, lng, website), spot_name, spot_lat, spot_lng, ' +
-        'host_id, title, description, starts_at, ends_at, max_people, status, ' +
+        'host_id, title, description, starts_at, ends_at, max_people, status, cost_level, meeting_point, ' +
         'meetup_members(user_id, joined_at, profiles(display_name, avatar_path))',
     )
     .eq('id', id)

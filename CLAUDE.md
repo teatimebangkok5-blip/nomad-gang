@@ -212,8 +212,45 @@ Product spec and tech stack below are agreed. Built so far:
   false) and `EXPO_PUBLIC_REQUIRE_PHONE` (default false) let Google accounts in without the phone check; turn both on
   once SMS is set up. With `EXPO_PUBLIC_SKIP_LOGIN=false`, a leftover anonymous guest session is signed out on start.
   Google sign-in still needs the founder's Google Cloud OAuth clients (README; local APK SHA-1 is listed there).
-- **Not started:** check-ins (50 m), QR codes and redemptions, staff QR page, redemption feed and push
-  notifications, tables/users in the admin panel. Places missing from OpenStreetMap can be added by the founder (admin insert into `places`; no UI yet).
+- **Check-ins, coupon QR, staff page, redemptions, account deletion, Terms / Privacy** (added 2026-10-18,
+  `*_checkins_redemptions_account_deletion.sql`). Table screen (members, venue tables / hangouts, not ended):
+  `CouponBox` (`src/components/coupon-box.tsx`, data `src/lib/coupons.ts`): the Check in button shows only within the
+  venue's `checkin_radius_m` (50 m) by the phone's GPS, `check_in(meetup, lat, lng)` re-checks with PostGIS and the
+  time window (15 min before start → end); `meetup_checkins` (members read, Realtime). `meetup_coupon_state` lists the
+  usable promotions (tables: discount / offer, needs 3 checked in; hangouts: ticket, needs 1) and the QR token for
+  checked-in members; `issue_redemption_qr` makes a 48-hex token in `redemption_qrs` (no API access), valid 15 min,
+  one redemption per meetup + promotion. QR drawn by `src/components/qr-code.tsx` (qrcode-generator, plain views),
+  holding `EXPO_PUBLIC_WEB_URL/r/<token>`. **Staff page** `web/src/app/r/[token]` (Thai + English): venue login
+  (`staff_sign_in`, per-login lock + 20 failures / IP / 15 min) → session cookie `tm_staff` (path /r, 90 days, hash
+  in `venue_staff_sessions`) → `staff_check_qr` (no use-up) → "Show coupon code" → `staff_redeem` (marks used,
+  writes `redemptions` with names copied, returns the code). Another venue's login → `wrong_venue`, code not used.
+  All `staff_*` functions are service-role only: the web uses `SUPABASE_SECRET_KEY` via `src/lib/supabase/service.ts`.
+  Admin **/admin/redemptions**: filter by venue + Bangkok dates, visits per venue, history, Realtime "new redemption"
+  banner. **Delete account** (Settings): `deleteAccount()` in `src/lib/auth.tsx` removes my chat files
+  (`my_account_files`) and profile photos, then `delete_my_account()` (groups pass on via `leave_group`, hosted
+  meetups with others are cancelled if upcoming and passed to the longest other member, then `auth.users` row deleted;
+  everything else cascades). **Terms / Privacy**: one source `mobile/src/legal/content.ts` (EN + TH draft, PDPA),
+  copied to `web/src/lib/legal-content.ts` by `npm run sync:legal` (`check:legal` compares); app screen
+  `src/app/legal/[doc].tsx` (outside the sign-in guards; linked on welcome and Settings → About), web `/terms`,
+  `/privacy`, `/delete-account` (`?lang=th`). Business name / contact email: `EXPO_PUBLIC_BUSINESS_NAME`,
+  `EXPO_PUBLIC_CONTACT_EMAIL` (app), `NEXT_PUBLIC_*` (web); empty = generic wording. **iOS ready**: bundle ID
+  `com.tablemeet.app`, Sign in with Apple (`signInWithApple`, expo-apple-authentication + expo-crypto nonce, button on
+  welcome on iOS only); no Apple Developer account yet. **EAS Submit**: Android → internal track, draft, key
+  `mobile/google-play-service-account.json` (git-ignored). Steps in README.
+- **Activity feed + live pulse** (added 2026-10-18, `*_feed_cost_meeting_point_area.sql`): `meetups.cost_level`
+  (0 free, 1 < ฿300, 2 ฿300–700, 3 ฿700–1,500, 4 ฿1,500+; null = not given) and `meetups.meeting_point` (≤ 120),
+  set by the host right after creating via `set_meetup_details` (`setMeetupDetails`; form piece
+  `src/components/meetup-extras.tsx` on Create table / Create hangout). `list_open_meetups` also returns `place_kind`,
+  cost, meeting point and `area_name(_en/_th)` = nearest neighbourhood / subdistrict from `public.areas`
+  (`area_near`). Home: filter chips All / Today / Tonight (from 17:00 local) / Food / Drinks (bar/rooftop venues,
+  bar/pub/biergarten/nightclub places) / Explore (hangouts) / Budget-friendly (cost ≤ 1) on the pins, cards and List
+  (`src/lib/feed.ts`); each `MeetupCard` shows a status (Happening now / Starts in N min / Full / N seats left), a
+  pulse line from real counts ("3 going for dinner near Asok") and the cost; the table screen shows meeting point and
+  cost. Planned next (founder, 2026-10-18, in this order): Rewards Passport (stamps / points / milestones 3-5-10,
+  completion by GPS check-in or host code + admin review), Hidden Gems (founder supplies the list), Locals + Safety +
+  Invites, and map "stories" on home instead of a posts feed.
+- **Not started:** web push to the founder's phone for redemptions, tables/users in the admin panel, Apple token
+  revocation on account deletion. Places missing from OpenStreetMap can be added by the founder (admin insert into `places`; no UI yet).
 - Running on the founder's Redmi as a local release APK, connected to the real Supabase project
   (`zxghiilryqzexzvacbrl`, migrations applied by Supabase's GitHub integration on push to `main`).
 - **Google sign-in is on** (2026-10-16): the founder created the Google Cloud OAuth clients (Web client ID in

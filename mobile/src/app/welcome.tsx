@@ -1,7 +1,9 @@
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { Image } from 'expo-image';
-import { useState } from 'react';
+import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ScrollView, Text, View } from 'react-native';
+import { Platform, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
@@ -9,17 +11,33 @@ import { Icon, type IconName } from '@/components/icon';
 import { LanguageToggle } from '@/components/language-toggle';
 import { Logo } from '@/components/logo';
 import { Radius, Spacing, Type } from '@/constants/theme';
-import { requirePhoneVerification, signInWithGoogle } from '@/lib/auth';
+import { requirePhoneVerification, signInWithApple, signInWithGoogle } from '@/lib/auth';
 import { supabaseConfigured } from '@/lib/supabase';
-import { makeStyles, useColors } from '@/lib/theme';
+import { makeStyles, useColors, useTheme } from '@/lib/theme';
 
-// First screen: what TableMeet is, and sign in with Google.
+// First screen: what TableMeet is, and sign in with Google (and Apple on iPhone). Signing in means agreeing to the
+// Terms of Use and Privacy Policy, linked below the buttons.
 export default function WelcomeScreen() {
   const styles = useStyles();
   const Colors = useColors();
+  const { name: themeName } = useTheme();
   const { t } = useTranslation();
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [appleAvailable, setAppleAvailable] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    AppleAuthentication.isAvailableAsync()
+      .then(setAppleAvailable)
+      .catch(() => {});
+  }, []);
+
+  async function handleApple() {
+    setError(null);
+    const result = await signInWithApple();
+    if (result === 'error') setError(t('welcome.errorSignIn'));
+  }
 
   async function handleGoogle() {
     setError(null);
@@ -78,8 +96,38 @@ export default function WelcomeScreen() {
             {error}
           </Text>
         )}
+        {appleAvailable && (
+          <AppleAuthentication.AppleAuthenticationButton
+            buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+            buttonStyle={
+              themeName === 'dark'
+                ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+            }
+            cornerRadius={Radius.md}
+            style={styles.appleButton}
+            onPress={handleApple}
+          />
+        )}
         <Button title={t('welcome.continueWithGoogle')} onPress={handleGoogle} loading={signingIn} />
         {requirePhoneVerification && <Text style={styles.note}>{t('welcome.nextStepNote')}</Text>}
+        <Text style={styles.note}>
+          {t('welcome.agreePrefix')}
+          <Text
+            accessibilityRole="link"
+            style={styles.link}
+            onPress={() => router.push({ pathname: '/legal/[doc]', params: { doc: 'terms' } })}>
+            {t('legal.terms')}
+          </Text>
+          {t('welcome.agreeAnd')}
+          <Text
+            accessibilityRole="link"
+            style={styles.link}
+            onPress={() => router.push({ pathname: '/legal/[doc]', params: { doc: 'privacy' } })}>
+            {t('legal.privacy')}
+          </Text>
+          {t('welcome.agreeSuffix')}
+        </Text>
       </View>
     </SafeAreaView>
   );
@@ -133,6 +181,8 @@ const useStyles = makeStyles((Colors) => ({
     borderRadius: Radius.sm,
   },
   note: { ...Type.small, color: Colors.textMuted, textAlign: 'center' },
+  link: { color: Colors.accent, textDecorationLine: 'underline' },
+  appleButton: { height: 52 },
   previewNotice: {
     ...Type.small,
     color: Colors.textSecondary,

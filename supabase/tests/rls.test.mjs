@@ -1217,5 +1217,166 @@ await tryQuery("authenticated", user, `select public.set_chat_flag('dm', $1, 'ar
 inbox = await chats(user);
 check("unarchive", inbox.find((c) => c.chat_id === g2ThreadId)?.archived === false);
 
+// --- Check-ins, redemption QR, venue staff page, redemptions
+const [c1, c2, c3, c4, outsider] = [
+  "55555555-5555-5555-5555-555555555551", "55555555-5555-5555-5555-555555555552", "55555555-5555-5555-5555-555555555553",
+  "55555555-5555-5555-5555-555555555554", "55555555-5555-5555-5555-555555555555",
+];
+await db.exec(`insert into auth.users (id, email, raw_user_meta_data, phone_confirmed_at) values
+  ${[c1, c2, c3, c4, outsider].map((id, i) => `('${id}', 'c${i}@x.com', '{"full_name": "Diner ${i + 1}"}', now())`).join(", ")}`);
+r = await tryQuery("authenticated", admin,
+  `insert into public.venues (name_en, name_th, category, lat, lng, is_active) values ('Check Cafe', 'เช็คคาเฟ่', 'cafe', 13.80, 100.55, true) returning id`);
+const cafeId = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", admin,
+  `select public.admin_save_promotion($1, null, 'discount', '10% off', 'ลด 10%', '', '', 'percent', 10, 'CAFE10', null, null, true) as id`, [cafeId]);
+const cafeDealId = r.rows?.[0]?.id;
+await tryQuery("authenticated", admin, `select public.admin_create_venue_account($1, 'cafe-staff', 'cafepass1')`, [cafeId]);
+r = await tryQuery("authenticated", admin,
+  `insert into public.venues (name_en, name_th, category, lat, lng, is_active) values ('Other Bar', 'บาร์อื่น', 'bar', 13.81, 100.56, true) returning id`);
+await tryQuery("authenticated", admin, `select public.admin_create_venue_account($1, 'other-staff', 'otherpass1')`, [r.rows?.[0]?.id]);
+
+r = await tryQuery("authenticated", c1, `select public.create_meetup($1, now(), 6) as id`, [cafeId]);
+check("table starting now at a partner venue", !r.error);
+const liveTable = r.rows?.[0]?.id;
+for (const who of [c2, c3, c4]) await tryQuery("authenticated", who, `select public.join_meetup($1)`, [liveTable]);
+const atCafe = [13.8001, 100.5501];
+r = await tryQuery("authenticated", outsider, `select public.check_in($1, $2, $3)`, [liveTable, ...atCafe]);
+check("non-members can't check in", /not_member/.test(r.error ?? ""));
+r = await tryQuery("authenticated", c1, `select public.check_in($1, 13.81, 100.55)`, [liveTable]);
+check("check-in more than 50 m away rejected by the server", /too_far/.test(r.error ?? ""));
+r = await tryQuery("authenticated", c1, `select public.check_in($1, $2, $3) as n`, [liveTable, ...atCafe]);
+check("check-in at the venue", r.rows?.[0]?.n === 1);
+r = await tryQuery("authenticated", c2, `select public.create_meetup($1, $2, 3) as id`, [cafeId, inHours(3)]);
+r = await tryQuery("authenticated", c2, `select public.check_in($1, $2, $3)`, [r.rows?.[0]?.id, ...atCafe]);
+check("can't check in long before the table starts", /not_now/.test(r.error ?? ""));
+r = await tryQuery("authenticated", c1, `insert into public.meetup_checkins (meetup_id, user_id) values ($1, $2)`, [liveTable, c4]);
+check("check-ins can't be written directly", !!r.error);
+
+const couponState = async (who) => (await tryQuery("authenticated", who, `select public.meetup_coupon_state($1) as s`, [liveTable])).rows?.[0]?.s;
+let state = await couponState(c1);
+check("coupon state: 1 checked in, the discount needs 3", state?.checked_in === 1 && state.me_checked_in === true && state.window_open === true
+  && state.deals.length === 1 && state.deals[0].needed === 3 && state.venue?.radius_m === 50);
+r = await tryQuery("authenticated", outsider, `select public.meetup_coupon_state($1)`, [liveTable]);
+check("non-members can't see the coupon state", /not_member/.test(r.error ?? ""));
+r = await tryQuery("authenticated", c1, `select * from public.issue_redemption_qr($1, $2)`, [liveTable, cafeDealId]);
+check("no QR with fewer than 3 checked in", /need_more_people/.test(r.error ?? ""));
+r = await tryQuery("authenticated", c4, `select * from public.issue_redemption_qr($1, $2)`, [liveTable, cafeDealId]);
+check("members who aren't checked in can't get the QR", /not_checked_in/.test(r.error ?? ""));
+await tryQuery("authenticated", c2, `select public.check_in($1, $2, $3)`, [liveTable, ...atCafe]);
+await tryQuery("authenticated", c3, `select public.check_in($1, $2, $3)`, [liveTable, ...atCafe]);
+r = await tryQuery("authenticated", c1, `select * from public.issue_redemption_qr($1, $2)`, [liveTable, cafeDealId]);
+const qrToken = r.rows?.[0]?.token;
+check("QR issued once 3 are checked in, valid 15 minutes", /^[0-9a-f]{48}$/.test(qrToken ?? "")
+  && Math.abs(new Date(r.rows[0].expires_at) - Date.now() - 15 * 60_000) < 60_000);
+r = await tryQuery("authenticated", c2, `select * from public.issue_redemption_qr($1, $2)`, [liveTable, cafeDealId]);
+check("asking again gives the same code", r.rows?.[0]?.token === qrToken);
+check("checked-in members see the QR", (await couponState(c3))?.deals[0].qr_token === qrToken);
+check("members who aren't checked in don't", (await couponState(c4))?.deals[0].qr_token === null);
+for (const [what, sql] of [
+  ["QR tokens", "select * from public.redemption_qrs"], ["redemptions", "select * from public.redemptions"],
+  ["staff sessions", "select * from public.venue_staff_sessions"],
+]) {
+  r = await tryQuery("authenticated", c1, sql);
+  check(`app users can't read ${what}`, !!r.error || r.rows.length === 0);
+}
+r = await tryQuery("authenticated", c1, `select public.staff_redeem('x', $1)`, [qrToken]);
+check("app users can't call staff_redeem", !!r.error);
+r = await tryQuery("anon", null, `select * from public.staff_sign_in('cafe-staff', 'cafepass1', null)`);
+check("anon can't call staff_sign_in", !!r.error);
+
+r = await tryQuery("service_role", null, `select * from public.staff_sign_in('cafe-staff', 'wrong', '1.2.3.4')`);
+check("wrong staff password: no session", r.rows?.length === 0);
+r = await tryQuery("service_role", null, `select * from public.staff_sign_in('Cafe-Staff', 'cafepass1', '1.2.3.4')`);
+const cafeSession = r.rows?.[0]?.session_token;
+check("staff log in and get a session for their venue", !!cafeSession && r.rows[0].venue_id === cafeId);
+r = await tryQuery("service_role", null, `select * from public.staff_session($1)`, [cafeSession]);
+check("the session is remembered", r.rows?.[0]?.venue_id === cafeId);
+r = await tryQuery("service_role", null, `select session_token from public.staff_sign_in('other-staff', 'otherpass1', null)`);
+const otherSession = r.rows?.[0]?.session_token;
+r = await tryQuery("service_role", null, `select public.staff_redeem($1, $2) as r`, [otherSession, qrToken]);
+check("another venue's login is rejected", r.rows?.[0]?.r?.status === "wrong_venue");
+r = await tryQuery("service_role", null, `select public.staff_check_qr($1, $2) as r`, [cafeSession, qrToken]);
+check("staff see what the QR is for (3 checked in)", r.rows?.[0]?.r?.status === "ok" && r.rows[0].r.checked_in === 3);
+r = await tryQuery("service_role", null, `select public.staff_redeem($1, $2) as r`, [cafeSession, qrToken]);
+const redeemed = r.rows?.[0]?.r;
+check("right venue login gets the coupon code", redeemed?.status === "ok" && redeemed.coupon_code === "CAFE10" && redeemed.member_names.length === 3);
+r = await tryQuery("service_role", null, `select public.staff_redeem($1, $2) as r`, [cafeSession, qrToken]);
+check("a QR works only once", r.rows?.[0]?.r?.status === "used");
+r = await tryQuery("authenticated", c1, `select * from public.issue_redemption_qr($1, $2)`, [liveTable, cafeDealId]);
+check("one redemption per table and promotion", /already_redeemed/.test(r.error ?? ""));
+check("the group sees it was redeemed", !!(await couponState(c1))?.deals[0].redeemed_at);
+r = await tryQuery("authenticated", admin, `select venue_name, deal_title, checked_in_count, staff_login, member_names from public.redemptions where meetup_id = $1`, [liveTable]);
+check("founder sees the redemption (venue, group, staff login)", r.rows?.length === 1 && r.rows[0].venue_name === "Check Cafe"
+  && r.rows[0].checked_in_count === 3 && r.rows[0].staff_login === "cafe-staff" && r.rows[0].member_names.includes("Diner 1"));
+r = await tryQuery("service_role", null, `select public.staff_redeem($1, 'nonexistent') as r`, [cafeSession]);
+check("unknown QR is invalid", r.rows?.[0]?.r?.status === "invalid");
+
+// Expired code (a ticket discount at a hangout venue needs only 1 person).
+r = await tryQuery("authenticated", admin,
+  `insert into public.venues (name_en, name_th, category, lat, lng, is_active) values ('Zoo', 'สวนสัตว์', 'attraction', 13.70, 100.60, true) returning id`);
+const zooId = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", admin,
+  `select public.admin_save_promotion($1, null, 'ticket', '20% off', 'ลด 20%', '', '', 'percent', 20, 'ZOO20', null, null, true) as id`, [zooId]);
+const zooDealId = r.rows?.[0]?.id;
+r = await hangout(c4, { venueId: zooId, startsAt: new Date().toISOString() });
+const zooHangout = r.rows?.[0]?.id;
+await tryQuery("authenticated", c4, `select public.check_in($1, 13.7001, 100.6001)`, [zooHangout]);
+r = await tryQuery("authenticated", c4, `select * from public.issue_redemption_qr($1, $2)`, [zooHangout, zooDealId]);
+const zooToken = r.rows?.[0]?.token;
+check("ticket discount: one checked-in member gets the QR", !!zooToken);
+r = await tryQuery("authenticated", c4, `select * from public.issue_redemption_qr($1, $2)`, [zooHangout, cafeDealId]);
+check("a promotion of another venue can't be used", /no_coupon/.test(r.error ?? ""));
+await db.exec(`update public.redemption_qrs set expires_at = now() - interval '1 minute' where token = '${zooToken}'`);
+await tryQuery("authenticated", admin, `select public.admin_create_venue_account($1, 'zoo-staff', 'zoopass12')`, [zooId]);
+r = await tryQuery("service_role", null, `select session_token from public.staff_sign_in('zoo-staff', 'zoopass12', null)`);
+r = await tryQuery("service_role", null, `select public.staff_redeem($1, $2) as r`, [r.rows?.[0]?.session_token, zooToken]);
+check("an expired QR can't be used", r.rows?.[0]?.r?.status === "expired");
+
+await tryQuery("service_role", null, `select public.staff_sign_out($1)`, [cafeSession]);
+r = await tryQuery("service_role", null, `select public.staff_check_qr($1, $2) as r`, [cafeSession, qrToken]);
+check("signed-out staff must log in again", r.rows?.[0]?.r?.status === "signed_out");
+for (let i = 0; i < 20; i++) await tryQuery("service_role", null, `select * from public.staff_sign_in('nobody${i}', 'x', '9.9.9.9')`);
+r = await tryQuery("service_role", null, `select * from public.staff_sign_in('cafe-staff', 'cafepass1', '9.9.9.9')`);
+check("20 failed staff logins from one IP: blocked for 15 minutes", /too_many_attempts/.test(r.error ?? ""));
+
+// --- Deleting your own account
+const [d1, d2] = ["66666666-6666-6666-6666-666666666661", "66666666-6666-6666-6666-666666666662"];
+await db.exec(`insert into auth.users (id, email, phone_confirmed_at) values ('${d1}', 'd1@x.com', now()), ('${d2}', 'd2@x.com', now())`);
+r = await tryQuery("authenticated", d1, `select public.create_meetup($1, $2, 4) as id`, [cafeId, inHours(5)]);
+const d1Table = r.rows?.[0]?.id;
+await tryQuery("authenticated", d2, `select public.join_meetup($1)`, [d1Table]);
+r = await tryQuery("authenticated", d1, `select public.create_meetup($1, $2, 4) as id`, [cafeId, inHours(6)]);
+const d1Alone = r.rows?.[0]?.id;
+await tryQuery("authenticated", d1, `insert into public.meetup_messages (meetup_id, sender_id, body) values ($1, $2, 'hi')`, [d1Table, d1]);
+r = await tryQuery("authenticated", d1, `select * from public.my_account_files()`);
+check("my_account_files works", !r.error);
+r = await tryQuery("anon", null, `select public.delete_my_account()`);
+check("anon can't delete accounts", !!r.error);
+r = await tryQuery("authenticated", d1, `select public.delete_my_account()`);
+check("delete my account", !r.error);
+r = await db.query(`select (select count(*)::int from auth.users where id = $1) u, (select count(*)::int from public.profiles where id = $1) p`, [d1]);
+check("login and profile are gone", r.rows?.[0]?.u === 0 && r.rows[0].p === 0);
+r = await tryQuery("service_role", null, `select host_id, status from public.meetups where id = $1`, [d1Table]);
+check("their table with others is cancelled and passes to another member", r.rows?.[0]?.host_id === d2 && r.rows[0].status === "cancelled");
+r = await tryQuery("service_role", null, `select count(*)::int n from public.meetups where id = $1`, [d1Alone]);
+check("their table nobody joined is deleted", r.rows?.[0]?.n === 0);
+r = await tryQuery("service_role", null, `select count(*)::int n from public.meetup_messages where sender_id = $1`, [d1]);
+check("their messages are deleted", r.rows?.[0]?.n === 0);
+
+// --- Feed: expected cost, meeting point, area
+r = await tryQuery("authenticated", c1, `select public.create_meetup($1, $2, 4) as id`, [cafeId, inHours(4)]);
+const feedTable = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", c1, `select public.set_meetup_details($1, 1::smallint, '  At the counter  ')`, [feedTable]);
+check("host sets expected cost and meeting point", !r.error);
+r = await tryQuery("authenticated", c2, `select public.set_meetup_details($1, 4::smallint, 'x')`, [feedTable]);
+check("only the host sets them", /not_host/.test(r.error ?? ""));
+r = await tryQuery("authenticated", c1, `select public.set_meetup_details($1, 9::smallint, null)`, [feedTable]);
+check("cost band out of range rejected", /invalid_cost/.test(r.error ?? ""));
+r = await tryQuery("authenticated", c2, `select cost_level, meeting_point, area_name from public.list_open_meetups() where id = $1`, [feedTable]);
+check("list shows cost, trimmed meeting point and a Bangkok area", r.rows?.[0]?.cost_level === 1
+  && r.rows[0].meeting_point === "At the counter" && typeof r.rows[0].area_name === "string");
+r = await tryQuery("authenticated", c1, `update public.meetups set cost_level = 0 where id = $1 returning id`, [feedTable]);
+check("meetups still can't be changed directly", !!r.error || r.rows.length === 0);
+
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

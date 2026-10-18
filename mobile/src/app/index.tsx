@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FavoriteButton } from '@/components/favorite-button';
 import { GlossyFill, Shine } from '@/components/glossy';
 import { Button } from '@/components/button';
+import { Chip } from '@/components/chip';
 import { Icon } from '@/components/icon';
 import { LanguageToggle } from '@/components/language-toggle';
 import { Logo } from '@/components/logo';
@@ -34,6 +35,7 @@ import { Radius, Raised, RaisedSmall, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, localized } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { formatWhen } from '@/lib/bangkok-time';
+import { FEED_FILTERS, matchesFilter, type FeedFilter } from '@/lib/feed';
 import type { FavoriteTarget } from '@/lib/favorites';
 import { distanceMeters, useCurrentLocation } from '@/lib/location';
 import {
@@ -98,7 +100,16 @@ export default function HomeScreen() {
   const me = useMyName(session?.user.id);
   const notifications = useNotifications(Boolean(session), coords);
   const [focus, setFocus] = useState<MapFocus | null>(null);
-  const visibleMeetups = meetups.meetups;
+  // Feed filters (Today, Tonight, Food, Drinks, Explore, Budget-friendly) apply to the pins, cards and List.
+  const [filter, setFilter] = useState<FeedFilter>('all');
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  const visibleMeetups = meetups.meetups.filter((meetup) =>
+    matchesFilter(meetup, filter, meetup.venue_id ? venueById.get(meetup.venue_id) : undefined, now),
+  );
   // Hangouts can be anywhere in the world: the map pins them all, but the cards row and the List only show the ones
   // near me (or near central Bangkok without my location).
   const listCenter = coords ?? BANGKOK_CENTER;
@@ -167,7 +178,7 @@ export default function HomeScreen() {
       const group = hangoutGroups.get(key.slice(2)) ?? [];
       // A single hangout opens straight away, unless it's a day plan: then the card and its route show first.
       if (group.length === 1 && !dayPlans.has(group[0].id)) openTable(group[0]);
-      else if (group.length > 1) setSelection({ type: 'hangouts', key: key.slice(2) });
+      else if (group.length > 0) setSelection({ type: 'hangouts', key: key.slice(2) });
       return;
     }
     if (key.startsWith('v:')) {
@@ -406,7 +417,7 @@ export default function HomeScreen() {
           />
         ) : !session ? null : meetups.status === 'loading' ? (
           <ActivityIndicator color={Colors.accent} style={styles.cardsSpinner} />
-        ) : nearbyMeetups.length === 0 ? (
+        ) : nearbyMeetups.length === 0 && filter === 'all' ? (
           <View style={[styles.emptyCard, { marginHorizontal: Spacing.lg }]}>
             <GlossyFill />
             <Text style={styles.emptyTitle}>
@@ -416,6 +427,14 @@ export default function HomeScreen() {
             {meetups.status !== 'error' && <Text style={styles.tip}>{t('tables.pickAnyPlace')}</Text>}
           </View>
         ) : (
+          <>
+            <FeedFilters value={filter} onChange={setFilter} />
+            {nearbyMeetups.length === 0 ? (
+              <View style={[styles.emptyCard, { marginHorizontal: Spacing.lg }]}>
+                <GlossyFill />
+                <Text style={styles.emptyBody}>{t('feed.noMatch')}</Text>
+              </View>
+            ) : (
           <FlatList
             horizontal
             data={nearbyMeetups}
@@ -426,6 +445,8 @@ export default function HomeScreen() {
             decelerationRate="fast"
             contentContainerStyle={styles.cards}
           />
+            )}
+          </>
         )}
 
         <View style={styles.actions}>
@@ -486,6 +507,8 @@ export default function HomeScreen() {
 
       <SlideUpPanel open={listOpen} onClose={() => setListOpen(false)}>
         <ListPanel
+          filter={filter}
+          onFilter={setFilter}
           meetups={nearbyMeetups}
           meetupsStatus={session ? meetups.status : 'ready'}
           renderMeetup={renderMeetup}
@@ -648,12 +671,29 @@ function PlaceCard({
   );
 }
 
+// Today / Tonight / Food / Drinks / Explore / Budget-friendly.
+function FeedFilters({ value, onChange }: { value: FeedFilter; onChange: (filter: FeedFilter) => void }) {
+  const styles = useStyles();
+  const { t } = useTranslation();
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
+      {FEED_FILTERS.map((option) => (
+        <Chip key={option} label={t(`feed.filters.${option}`)} selected={option === value} onPress={() => onChange(option)} />
+      ))}
+    </ScrollView>
+  );
+}
+
 function ListPanel({
+  filter,
+  onFilter,
   meetups,
   meetupsStatus,
   renderMeetup,
   onRefresh,
 }: {
+  filter: FeedFilter;
+  onFilter: (filter: FeedFilter) => void;
   meetups: OpenMeetup[];
   meetupsStatus: 'loading' | 'ready' | 'error';
   renderMeetup: (meetup: OpenMeetup) => React.ReactNode;
@@ -681,13 +721,18 @@ function ListPanel({
         />
       }>
       <Text style={styles.sectionTitle}>{t('tables.openTables')}</Text>
+      <View style={styles.listFilters}>
+        <FeedFilters value={filter} onChange={onFilter} />
+      </View>
       {meetupsStatus === 'loading' ? (
         <ActivityIndicator color={Colors.accent} style={styles.cardsSpinner} />
       ) : meetups.length === 0 ? (
         <View style={styles.emptyCard}>
           <GlossyFill />
-          <Text style={styles.emptyTitle}>{meetupsStatus === 'error' ? t('tables.errorLoad') : t('tables.noTablesTitle')}</Text>
-          {meetupsStatus !== 'error' && <Text style={styles.emptyBody}>{t('tables.noTablesBody')}</Text>}
+          <Text style={styles.emptyTitle}>
+            {meetupsStatus === 'error' ? t('tables.errorLoad') : filter === 'all' ? t('tables.noTablesTitle') : t('feed.noMatch')}
+          </Text>
+          {meetupsStatus !== 'error' && filter === 'all' && <Text style={styles.emptyBody}>{t('tables.noTablesBody')}</Text>}
         </View>
       ) : (
         <View style={styles.list}>
@@ -880,6 +925,8 @@ const useStyles = makeStyles((Colors) => ({
   planStarText: { fontSize: 13, lineHeight: 16 },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, gap: Spacing.md },
   cards: { gap: Spacing.md, paddingHorizontal: Spacing.lg },
+  filters: { gap: Spacing.sm, paddingHorizontal: Spacing.lg },
+  listFilters: { marginHorizontal: -Spacing.lg, marginBottom: Spacing.md },
   cardsSpinner: { marginVertical: Spacing.lg },
   actions: { flexDirection: 'row', gap: Spacing.sm, paddingHorizontal: Spacing.lg },
   createButton: { flex: 1 },

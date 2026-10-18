@@ -5,6 +5,8 @@ import {
   statusCodes,
 } from '@react-native-google-signin/google-signin';
 import type { Session } from '@supabase/supabase-js';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
 import { createContext, use, useEffect, useState, type ReactNode } from 'react';
 
 import { skipLogin } from '@/lib/preview';
@@ -101,8 +103,68 @@ export async function signInWithGoogle(): Promise<GoogleSignInResult> {
   }
 }
 
+export type AppleSignInResult = 'signed-in' | 'cancelled' | 'error';
+
+// Sign in with Apple (iPhone only; App Store rules expect it next to Google). Apple gets a hashed nonce and Supabase
+// checks the raw one. Needs the Apple provider set up in Supabase (README).
+export async function signInWithApple(): Promise<AppleSignInResult> {
+  try {
+    const rawNonce = Crypto.randomUUID();
+    const hashedNonce = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, rawNonce);
+    const credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+      nonce: hashedNonce,
+    });
+    if (!credential.identityToken) return 'error';
+    const { error } = await supabase.auth.signInWithIdToken({
+      provider: 'apple',
+      token: credential.identityToken,
+      nonce: rawNonce,
+    });
+    if (error) {
+      console.warn('Supabase Apple sign-in failed', error.message);
+      return 'error';
+    }
+    return 'signed-in';
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ERR_REQUEST_CANCELED') return 'cancelled';
+    console.warn('Apple sign-in failed', error);
+    return 'error';
+  }
+}
+
 export async function signOut() {
   await supabase.auth.signOut();
   // Forget the Google account too, so the account picker shows next time.
   await GoogleSignin.signOut().catch(() => {});
+}
+
+// Deletes my account for good: first my files (chat photos / voice notes and profile photos, which only I can
+// delete), then everything else in one database call (delete_my_account), then signs out on this phone.
+export async function deleteAccount(myId: string): Promise<boolean> {
+  const { data: files } = await supabase.rpc('my_account_files');
+  const chatFiles = ((files ?? []) as { bucket: string; path: string }[])
+    .filter((file) => file.bucket === 'chat-media')
+    .map((file) => file.path);
+  for (let i = 0; i < chatFiles.length; i += 100) {
+    await supabase.storage.from('chat-media').remove(chatFiles.slice(i, i + 100));
+  }
+  const { data: photos } = await supabase.storage.from('profile-photos').list(myId, { limit: 1000 });
+  if (photos?.length) {
+    await supabase.storage.from('profile-photos').remove(photos.map((photo) => `${myId}/${photo.name}`));
+  }
+
+  const { error } = await supabase.rpc('delete_my_account');
+  if (error) {
+    console.warn('Deleting the account failed', error.message);
+    return false;
+  }
+  // The account is gone on the server, so only forget the session here.
+  await supabase.auth.signOut({ scope: 'local' });
+  await GoogleSignin.revokeAccess().catch(() => {});
+  await GoogleSignin.signOut().catch(() => {});
+  return true;
 }

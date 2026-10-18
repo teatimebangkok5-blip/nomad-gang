@@ -129,10 +129,65 @@ npx eas-cli@latest credentials    # Android -> development: note the SHA-1 finge
 
 Rebuild (step 3) only when you add a library with native code. Normal code changes appear instantly.
 
+## Website on Vercel (staff QR page, Terms, Privacy, Delete account)
+
+Redemption QR codes open `<website>/r/<code>`, so the website must be online before coupons work.
+
+1. On vercel.com: **Add New → Project**, import this GitHub repo, set **Root Directory** to `web`.
+2. Environment variables (Production): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
+   `SUPABASE_SECRET_KEY` (Supabase → Project Settings → API Keys → **Secret keys**; server only, never
+   `NEXT_PUBLIC_`), and once you have them `NEXT_PUBLIC_BUSINESS_NAME` and `NEXT_PUBLIC_CONTACT_EMAIL`.
+3. Deploy. Note the address (e.g. `https://tablemeet.vercel.app`) and set it as `EXPO_PUBLIC_WEB_URL` in
+   `mobile/.env.local` and in the EAS environment variables (below), then rebuild the app.
+4. Public pages for the store listings: `<website>/privacy` (Privacy Policy URL), `<website>/delete-account`
+   (Google Play "Delete account URL"), `<website>/terms`. Add `?lang=th` for Thai.
+
+The Terms / Privacy text lives in `mobile/src/legal/content.ts`. After editing it run `cd mobile && npm run sync:legal`
+(copies it to `web/src/lib/legal-content.ts`). It is a draft: have it checked (ideally by a Thai lawyer) before launch.
+
+## Release builds with EAS (Google Play, later App Store)
+
+Cloud builds don't see `.env.local`. Add every `EXPO_PUBLIC_*` value from `mobile/.env.example` on expo.dev →
+your project → **Environment variables**, for the `preview` and `production` environments (or
+`npx eas-cli@latest env:create`).
+
+### Google Play
+
+1. Play Console: create the app (package `com.tablemeet.app`), fill in the store listing, content rating, data safety
+   (use the Privacy Policy as the guide) and the Privacy Policy / Delete account URLs above.
+2. The first upload must be done by hand: `npx eas-cli@latest build --profile production --platform android`,
+   download the `.aab` and upload it to **Testing → Internal testing** in Play Console.
+3. For automatic uploads after that: Google Cloud → a service account with a JSON key, invited in Play Console →
+   **Users and permissions** with release rights. Save the key as `mobile/google-play-service-account.json` (it's
+   git-ignored; never commit it). Then:
+
+   ```bash
+   npx eas-cli@latest build --profile production --platform android --auto-submit
+   # or, for an existing build:
+   npx eas-cli@latest submit --profile production --platform android
+   ```
+
+   Builds go to the **internal** track as a **draft** (`eas.json`); promote them in Play Console.
+4. App signing: Google Play App Signing creates a new SHA-1. Add it (Play Console → App integrity) as another
+   **Android** OAuth client in Google Cloud, or Google sign-in fails in the Play build.
+
+### iPhone (needs an Apple Developer account, $99/year)
+
+The app is ready for iOS (`ios.bundleIdentifier` `com.tablemeet.app`, Sign in with Apple, no Mac needed). When you
+have the account:
+
+1. Supabase → Authentication → Sign In / Providers → **Apple**: turn on and add the bundle ID `com.tablemeet.app`.
+2. Google Cloud: create an **iOS** OAuth client (bundle ID `com.tablemeet.app`) and add the Google Sign-In config
+   plugin to `app.json` with its `iosUrlScheme` (see CLAUDE.md).
+3. `npx eas-cli@latest build --profile production --platform ios` (EAS creates the certificates), then
+   `npx eas-cli@latest submit --platform ios` (asks for your Apple ID and creates the App Store Connect app).
+4. Before review: Apple also expects deleting an account to revoke its Sign in with Apple token (needs a small
+   server function with your Apple key), and a way to filter objectionable content in chats.
+
 ## Checks
 
 ```bash
 cd web && npm run lint && npm run build     # admin panel
 cd supabase/tests && npm install && npm test # database security rules (no Docker needed)
-cd mobile && npm run typecheck && npm run lint # Android app
+cd mobile && npm run typecheck && npm run lint && npm run check:legal # app (+ legal texts match the website)
 ```

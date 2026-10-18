@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GlossyFill } from '@/components/glossy';
 import { Button } from '@/components/button';
+import { CouponBox } from '@/components/coupon-box';
 import { Icon } from '@/components/icon';
 import { PlanTimeline } from '@/components/plan-timeline';
 import { RewardCard } from '@/components/reward-card';
@@ -171,6 +172,20 @@ export default function TableScreen() {
                 {!cancelled && !ended && seatsLeft > 0 ? ` · ${t('tables.seatsLeft', { count: seatsLeft })}` : ''}
               </Text>
             </View>
+            {meetup.meeting_point ? (
+              <View style={styles.fact}>
+                <Icon name="pin" size={18} color={Colors.accent} />
+                <Text style={styles.factText}>{t('feed.meetAt', { place: meetup.meeting_point })}</Text>
+              </View>
+            ) : null}
+            {typeof meetup.cost_level === 'number' ? (
+              <View style={styles.fact}>
+                <Text style={styles.factEmoji}>฿</Text>
+                <Text style={styles.factText}>
+                  {t('feed.costPerPerson', { cost: t(`feed.cost.${meetup.cost_level}`) })}
+                </Text>
+              </View>
+            ) : null}
             {venue?.address_en || venue?.address_th ? (
               <View style={styles.fact}>
                 <Icon name="location" size={18} color={Colors.accent} />
@@ -235,6 +250,11 @@ export default function TableScreen() {
                   </View>
                 </View>
               )}
+
+          {/* Group coupon at a partner venue: check in, then the QR for the staff. */}
+          {isMember && meetup.venue_id && !cancelled && !ended && (
+            <CouponBox meetupId={id} timeZone={meetup.time_zone} />
+          )}
 
           {(cancelled || ended) && (
             <Text style={styles.status}>
@@ -422,6 +442,7 @@ const useStyles = makeStyles((Colors) => ({
   facts: { marginTop: Spacing.lg, gap: Spacing.sm },
   fact: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   factText: { ...Type.body, color: Colors.text, flex: 1 },
+  factEmoji: { width: 18, textAlign: 'center', fontSize: 16, fontWeight: '800', color: Colors.accent },
   mapsLink: { ...Type.body, color: Colors.accent, fontWeight: '600' },
   deal: {
     flexDirection: 'row',

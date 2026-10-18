@@ -22,6 +22,7 @@ import { GlossyFill } from '@/components/glossy';
 import { Button } from '@/components/button';
 import { Chip } from '@/components/chip';
 import { Icon } from '@/components/icon';
+import { MeetupExtras } from '@/components/meetup-extras';
 import { MapHeader } from '@/components/map-header';
 import { MapSearchBar, MapSearchResults } from '@/components/map-search';
 import { MeetupCard } from '@/components/meetup-card';
@@ -56,7 +57,9 @@ import {
   meetupCoords,
   meetupLocationKey,
   meetupPlaceName,
+  setMeetupDetails,
   useOpenMeetups,
+  type CostLevel,
   type HangoutWhere,
   type MeetupErrorKey,
   type OpenMeetup,
@@ -661,6 +664,8 @@ function HangoutForm({ chosen, onChange }: { chosen: Chosen; onChange: () => voi
   const [maxPeople, setMaxPeople] = useState(6);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [cost, setCost] = useState<CostLevel | null>(null);
+  const [meetingPoint, setMeetingPoint] = useState('');
   const [spotName, setSpotName] = useState(chosen.type === 'spot' ? chosen.name : '');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<MeetupErrorKey | null>(null);
@@ -700,11 +705,13 @@ function HangoutForm({ chosen, onChange }: { chosen: Chosen; onChange: () => voi
       title: title.trim(),
       description: description.trim(),
     });
-    setCreating(false);
     if (result.error) {
+      setCreating(false);
       setError(result.error);
       return;
     }
+    await setMeetupDetails(result.data, cost, meetingPoint);
+    setCreating(false);
     const found = await area;
     if (found) await setMeetupArea(result.data, found);
     router.replace({ pathname: '/table/[id]', params: { id: result.data } });
@@ -839,6 +846,14 @@ function HangoutForm({ chosen, onChange }: { chosen: Chosen; onChange: () => voi
               />
             </View>
             <Text style={styles.hint}>{t('hangouts.groupSizeHint')}</Text>
+
+            <MeetupExtras
+              cost={cost}
+              onCost={setCost}
+              meetingPoint={meetingPoint}
+              onMeetingPoint={setMeetingPoint}
+              accent={Colors.violet}
+            />
 
             {error && (
               <Text accessibilityRole="alert" style={styles.error}>

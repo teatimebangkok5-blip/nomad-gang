@@ -8,6 +8,7 @@ import { GlossyFill } from '@/components/glossy';
 import { Button } from '@/components/button';
 import { Chip } from '@/components/chip';
 import { Icon } from '@/components/icon';
+import { MeetupExtras } from '@/components/meetup-extras';
 import { MapHeader } from '@/components/map-header';
 import { MapSearchBar, MapSearchResults } from '@/components/map-search';
 import { PromoFilter } from '@/components/promo-filter';
@@ -20,7 +21,7 @@ import { currentLanguage, localized } from '@/i18n';
 import { bangkokDay, formatClock, formatDayLabel, fromBangkok, timeSlots, type BangkokDay } from '@/lib/bangkok-time';
 import { distanceMeters, useCurrentLocation } from '@/lib/location';
 import { AREA_ZOOM, PLACE_ZOOM, useMapSearch, type SearchResult } from '@/lib/map-search';
-import { createMeetup, createMeetupAtPlace, type MeetupErrorKey } from '@/lib/meetups';
+import { createMeetup, createMeetupAtPlace, setMeetupDetails, type CostLevel, type MeetupErrorKey } from '@/lib/meetups';
 import { fetchPlace, placeName, usePlacesInView, type Place } from '@/lib/places';
 import { isHangoutVenue, PROMOTION_EMOJI, useVenues, type PromotionKind } from '@/lib/venues';
 import { makeStyles, useColors } from '@/lib/theme';
@@ -67,6 +68,8 @@ export default function CreateTableScreen() {
   const [minutes, setMinutes] = useState<number | null>(null);
   const [maxPeople, setMaxPeople] = useState(6);
   const [title, setTitle] = useState('');
+  const [cost, setCost] = useState<CostLevel | null>(null);
+  const [meetingPoint, setMeetingPoint] = useState('');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<MeetupErrorKey | null>(null);
 
@@ -122,11 +125,13 @@ export default function CreateTableScreen() {
     const result = chosen
       ? await createMeetup({ venueId: chosen.id, ...common })
       : await createMeetupAtPlace({ placeId: (place as Place).id, ...common });
-    setCreating(false);
     if (result.error) {
+      setCreating(false);
       setError(result.error);
       return;
     }
+    await setMeetupDetails(result.data, cost, meetingPoint);
+    setCreating(false);
     router.replace({ pathname: '/table/[id]', params: { id: result.data } });
   }
 
@@ -323,6 +328,14 @@ export default function CreateTableScreen() {
               keyboardAppearance="dark"
               maxLength={80}
               style={styles.input}
+            />
+
+            <MeetupExtras
+              cost={cost}
+              onCost={setCost}
+              meetingPoint={meetingPoint}
+              onMeetingPoint={setMeetingPoint}
+              accent={Colors.orange}
             />
 
             {error && (

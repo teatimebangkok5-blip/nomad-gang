@@ -19,6 +19,9 @@ export default function PanelLayout({ children }: { children: ReactNode }) {
               <Link href="/admin/venues" className="font-medium text-ink-700 hover:text-brand-700">
                 Venues
               </Link>
+              <Link href="/admin/redemptions" className="font-medium text-ink-700 hover:text-brand-700">
+                Redemptions
+              </Link>
               <Link href="/admin/travel-deals" className="font-medium text-ink-700 hover:text-brand-700">
                 Travel deals
               </Link>

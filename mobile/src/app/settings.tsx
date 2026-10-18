@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Alert, Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GlossyFill } from '@/components/glossy';
@@ -8,12 +9,13 @@ import { Icon, type IconName } from '@/components/icon';
 import { ScreenHeader } from '@/components/screen-header';
 import { Radius, Raised, Spacing, Type } from '@/constants/theme';
 import { currentLanguage, setLanguage, type Language } from '@/i18n';
-import { signOut, useAuth } from '@/lib/auth';
+import { deleteAccount, signOut, useAuth } from '@/lib/auth';
 import { skipLogin } from '@/lib/preview';
 import { makeStyles, useColors, useTheme, type ThemeName } from '@/lib/theme';
 import { useDiscoverable } from '@/lib/travellers';
 
-// Settings: my rewards, appearance (dark / light), language, visibility to travellers, and sign out.
+// Settings: my rewards, appearance (dark / light), language, visibility to travellers, Terms / Privacy, sign out and
+// delete account.
 export default function SettingsScreen() {
   const styles = useStyles();
   const { t } = useTranslation();
@@ -22,6 +24,7 @@ export default function SettingsScreen() {
   const Colors = useColors();
   const { session } = useAuth();
   const visibility = useDiscoverable(session?.user.id);
+  const [deleting, setDeleting] = useState(false);
 
   const themes: { value: ThemeName; label: string; icon: IconName }[] = [
     { value: 'dark', label: t('settings.dark'), icon: 'darkMode' },
@@ -37,6 +40,33 @@ export default function SettingsScreen() {
     Alert.alert(t('home.signOutConfirm'), undefined, [
       { text: t('common.cancel'), style: 'cancel' },
       { text: t('home.signOut'), style: 'destructive', onPress: () => signOut() },
+    ]);
+  }
+
+  // Two steps, because it can't be undone. On success the root layout moves to the welcome screen by itself.
+  function confirmDelete() {
+    const myId = session?.user.id;
+    if (!myId) return;
+    Alert.alert(t('settings.deleteTitle'), t('settings.deleteBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('settings.deleteContinue'),
+        style: 'destructive',
+        onPress: () =>
+          Alert.alert(t('settings.deleteFinalTitle'), t('settings.deleteFinalBody'), [
+            { text: t('common.cancel'), style: 'cancel' },
+            {
+              text: t('settings.deleteConfirm'),
+              style: 'destructive',
+              onPress: async () => {
+                setDeleting(true);
+                const ok = await deleteAccount(myId);
+                setDeleting(false);
+                if (!ok) Alert.alert(t('settings.deleteFailed'));
+              },
+            },
+          ]),
+      },
     ]);
   }
 
@@ -99,16 +129,38 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        <Text style={styles.sectionTitle}>{t('settings.about')}</Text>
+        <View style={styles.group}>
+          <GlossyFill />
+          <OptionRow
+            icon="document"
+            label={t('legal.terms')}
+            onPress={() => router.push({ pathname: '/legal/[doc]', params: { doc: 'terms' } })}
+          />
+          <OptionRow
+            icon="privacy"
+            label={t('legal.privacy')}
+            onPress={() => router.push({ pathname: '/legal/[doc]', params: { doc: 'privacy' } })}
+          />
+        </View>
+
         {!skipLogin && (
           <>
             <Text style={styles.sectionTitle}>{t('settings.account')}</Text>
             <View style={styles.group}>
               <GlossyFill />
               <OptionRow icon="logout" label={t('home.signOut')} danger onPress={confirmSignOut} />
+              <OptionRow icon="delete" label={t('settings.deleteAccount')} danger onPress={confirmDelete} />
             </View>
           </>
         )}
       </ScrollView>
+      {deleting && (
+        <View style={styles.overlay} accessibilityLiveRegion="polite">
+          <ActivityIndicator color={Colors.accent} size="large" />
+          <Text style={styles.overlayText}>{t('settings.deleting')}</Text>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -175,4 +227,16 @@ const useStyles = makeStyles((Colors) => ({
   rowDanger: { color: Colors.danger },
   switchText: { flex: 1, paddingVertical: Spacing.sm },
   rowHint: { ...Type.small, color: Colors.textMuted },
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.md,
+    backgroundColor: Colors.overlay,
+  },
+  overlayText: { ...Type.body, color: Colors.text },
 }));

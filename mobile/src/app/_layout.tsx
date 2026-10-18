@@ -85,6 +85,8 @@ function RootNavigator() {
           <Stack.Screen name="group/[id]" />
           <Stack.Screen name="group-info/[id]" />
         </Stack.Protected>
+        {/* Terms / Privacy: open signed in or not. */}
+        <Stack.Screen name="legal/[doc]" />
       </Stack>
     </>
   );

@@ -76,6 +76,8 @@ const ICONS = {
   pushPin: { android: 'push_pin', ios: 'pin.fill' },
   archive: { android: 'archive', ios: 'archivebox.fill' },
   unarchive: { android: 'unarchive', ios: 'archivebox' },
+  document: { android: 'description', ios: 'doc.text' },
+  privacy: { android: 'privacy_tip', ios: 'hand.raised.fill' },
 } satisfies Record<string, { android: AndroidName; ios: IosName }>;
 
 export type IconName = keyof typeof ICONS;

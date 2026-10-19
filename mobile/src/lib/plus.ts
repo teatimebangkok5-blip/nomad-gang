@@ -21,9 +21,11 @@ export type PlusState =
       endsAt: string | null;
     };
 
-// One shared copy for every screen, per signed-in user.
-let cache: { userId: string; state: PlusState } | null = null;
-const listeners = new Set<() => void>();
+// One shared copy for every screen, per signed-in user. Screens get it through React state (setState with the new
+// value), never by reading `cache` while rendering: the React Compiler would keep showing the first value.
+type Cached = { userId: string; state: PlusState };
+let cache: Cached | null = null;
+const listeners = new Set<(value: Cached) => void>();
 
 async function fetchPlus(userId: string) {
   const { data, error } = await supabase.rpc('my_plus');
@@ -32,7 +34,7 @@ async function fetchPlus(userId: string) {
     return;
   }
   const value = (data ?? {}) as { member?: boolean; unlocked?: boolean; plan?: PlusPlan | null; ends_at?: string | null };
-  cache = {
+  const next: Cached = {
     userId,
     state: {
       status: 'ready',
@@ -42,7 +44,8 @@ async function fetchPlus(userId: string) {
       endsAt: value.ends_at ?? null,
     },
   };
-  listeners.forEach((listener) => listener());
+  cache = next;
+  listeners.forEach((listener) => listener(next));
 }
 
 export function reloadPlus() {
@@ -53,23 +56,23 @@ export function reloadPlus() {
 export function usePlus(): PlusState & { reload: () => void } {
   const { session } = useAuth();
   const userId = session?.user.id ?? null;
-  const [, setVersion] = useState(0);
+  const [current, setCurrent] = useState<Cached | null>(cache);
 
   useEffect(() => {
     if (!userId) return;
-    const listener = () => setVersion((version) => version + 1);
-    listeners.add(listener);
-    if (cache?.userId !== userId) fetchPlus(userId);
+    listeners.add(setCurrent);
+    if (cache?.userId === userId) Promise.resolve(cache).then(setCurrent);
+    else fetchPlus(userId);
     // The founder may give Plus while the app is open in the background.
     const appState = AppState.addEventListener('change', (next) => {
       if (next === 'active') fetchPlus(userId);
     });
     return () => {
-      listeners.delete(listener);
+      listeners.delete(setCurrent);
       appState.remove();
     };
   }, [userId]);
 
-  const state: PlusState = userId && cache?.userId === userId ? cache.state : { status: 'loading' };
+  const state: PlusState = userId && current?.userId === userId ? current.state : { status: 'loading' };
   return { ...state, reload: () => userId && fetchPlus(userId) };
 }

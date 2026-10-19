@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { chatError, type ChatErrorKey } from '@/lib/chat';
 import { liveSharesChanged } from '@/lib/live-location';
 import type { ChatKind } from '@/lib/messages';
+import { skipNextOpenAd } from '@/lib/ads';
 import { supabase } from '@/lib/supabase';
 
 // Photos, voice notes and live location in chats. Files go to the private "chat-media" bucket at
@@ -75,6 +76,8 @@ export async function sendPhoto(
     if (!permission.granted) return 'permission';
   }
   const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 1 };
+  // Coming back from the camera or gallery isn't "opening the app" (no app open ad).
+  skipNextOpenAd();
   const picked =
     source === 'camera' ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
   const asset = picked.canceled ? null : picked.assets[0];

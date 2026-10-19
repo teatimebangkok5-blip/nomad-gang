@@ -1,6 +1,7 @@
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 
+import { skipNextOpenAd } from '@/lib/ads';
 import { supabase } from '@/lib/supabase';
 
 // Profile picture and up to 3 "best photos". Files go to the public "profile-photos" bucket under <user id>/…
@@ -22,6 +23,8 @@ export async function pickAndUploadPhoto(
   kind: PhotoKind,
   bucket: string = BUCKET,
 ): Promise<string | null | 'error'> {
+  // Coming back from the gallery isn't "opening the app" (no app open ad).
+  skipNextOpenAd();
   const picked = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
     allowsEditing: true,

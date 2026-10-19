@@ -5,6 +5,7 @@ import * as Location from 'expo-location';
 import { useCallback, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 
+import { skipNextOpenAd } from '@/lib/ads';
 import { supabase, uniqueChannelName } from '@/lib/supabase';
 
 // Map stories: a photo with an optional caption, pinned on the home map near where it was posted, for 24 hours.
@@ -110,6 +111,8 @@ export async function pickStoryPhoto(source: StoryPhotoSource): Promise<string |
     if (!permission.granted) return 'permission';
   }
   const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 1 };
+  // Coming back from the camera or gallery isn't "opening the app" (no app open ad).
+  skipNextOpenAd();
   const picked =
     source === 'camera' ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
   const asset = picked.canceled ? null : picked.assets[0];

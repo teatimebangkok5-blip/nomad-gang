@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -51,7 +51,7 @@ import { usePlansForMeetups, type DayPlan } from '@/lib/plans';
 import { useChats } from '@/lib/messages';
 import { useNotifications } from '@/lib/notifications';
 import { useMyName } from '@/lib/profiles';
-import { prepareAds, withAd } from '@/lib/ads';
+import { onAppReopened, showLaunchAd, showOpenAd } from '@/lib/ads';
 import { usePlus } from '@/lib/plus';
 import { clearMyExpiredStories, groupStories, useStories } from '@/lib/stories';
 import { makeStyles, useColors } from '@/lib/theme';
@@ -133,9 +133,23 @@ export default function HomeScreen() {
   const plus = usePlus();
   const plusMember = plus.status === 'ready' && plus.member;
   const plusUnlocked = plus.status === 'ready' && plus.unlocked;
-  // Ads load only for signed-in people without Plus.
+  // App open ad (people without Plus): when the app starts, and whenever it comes back to home after a while in the
+  // background (src/lib/ads.ts). Google's close button returns to home.
+  const homeFocused = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      homeFocused.current = true;
+      return () => {
+        homeFocused.current = false;
+      };
+    }, []),
+  );
   useEffect(() => {
-    if (session && plus.status === 'ready' && !plusMember) prepareAds();
+    if (!session || plus.status !== 'ready' || plusMember) return;
+    showLaunchAd(false);
+    return onAppReopened(() => {
+      if (homeFocused.current) showOpenAd(false);
+    });
   }, [session, plus.status, plusMember]);
 
   // Stories: one pin per person (their profile picture in a brand ring) at their latest story. Key s:<user id>.
@@ -208,13 +222,7 @@ export default function HomeScreen() {
     setSelection(venue ? { type: 'venue', venueId: venue.id } : { type: 'place', place });
   }
 
-  // Opening a hangout, Create table / Create hangout and stories can show a pop-up ad first (once per app opening,
-  // never for Plus members).
-  const openTable = (meetup: OpenMeetup) => {
-    const open = () => router.push({ pathname: '/table/[id]', params: { id: meetup.id } });
-    if (meetup.kind === 'hangout') withAd(plusMember, open);
-    else open();
-  };
+  const openTable = (meetup: OpenMeetup) => router.push({ pathname: '/table/[id]', params: { id: meetup.id } });
   // Plan my day, Hidden Gems and the Passport are for Plus members: others see the Plus page.
   const openPlus = (path: '/plan-day' | '/gems' | '/passport') => router.push(plusUnlocked ? path : '/plus');
 
@@ -243,7 +251,7 @@ export default function HomeScreen() {
         userCoords={coords}
         onPinPress={(key) =>
           key.startsWith('s:')
-            ? withAd(plusMember, () => router.push({ pathname: '/story/[userId]', params: { userId: key.slice(2) } }))
+            ? router.push({ pathname: '/story/[userId]', params: { userId: key.slice(2) } })
             : setSelection((current) => (current?.type === 'pin' && current.key === key ? null : { type: 'pin', key }))
         }
         onMapPress={() => selection?.type === 'pin' && setSelection(null)}
@@ -415,7 +423,7 @@ export default function HomeScreen() {
                   compact
                   title={t('tables.createTable')}
                   icon={<Icon name="addCircle" size={22} color={Colors.onBrand} />}
-                  onPress={() => withAd(plusMember, () => router.push('/create-table'))}
+                  onPress={() => router.push('/create-table')}
                 />
               </View>
               <View style={styles.flex}>
@@ -424,7 +432,7 @@ export default function HomeScreen() {
                   variant="violet"
                   title={t('hangouts.createHangout')}
                   icon={<Icon name="addCircle" size={22} color={Colors.white} />}
-                  onPress={() => withAd(plusMember, () => router.push('/create-hangout'))}
+                  onPress={() => router.push('/create-hangout')}
                 />
               </View>
             </View>

@@ -131,16 +131,16 @@ Rebuild (step 3) only when you add a library with native code. Normal code chang
 
 ### 6. Ads (Google AdMob) and TableMeet Plus
 
-People without Plus see one pop-up ad each time they open the app (on opening a hangout from home, Create table,
-Create hangout or a story). Until you set up AdMob, the app shows Google's **test ads**, which is fine for testing
+People without Plus see a full-screen **app open ad** with a close button over the home screen every time they open
+the app, including after closing it from the recent apps, and when they come back to it after 30 seconds or more. Until you set up AdMob, the app shows Google's **test ads**, which is fine for testing
 but earns nothing. Never tap your own real ads.
 
 1. Create a free account at <https://admob.google.com> and add the app: Android, then **"No, it's not listed on a
    supported app store"** until TableMeet is on Google Play (link it to the Play listing later).
 2. Copy the **App ID** (`ca-app-pub-…~…`) into `mobile/app.json` → `react-native-google-mobile-ads` →
    `androidAppId`, replacing Google's sample ID.
-3. In the app, go to **Ad units → Add ad unit → Interstitial**, then copy its ID (`ca-app-pub-…/…`) into
-   `mobile/.env.local` as `EXPO_PUBLIC_ADMOB_INTERSTITIAL_ID`.
+3. In the app, go to **Ad units → Add ad unit → App open**, then copy its ID (`ca-app-pub-…/…`) into
+   `mobile/.env.local` as `EXPO_PUBLIC_ADMOB_APP_OPEN_ID`.
 4. **Privacy & messaging → GDPR**: create and publish the consent message. Travellers from Europe are shown it
    automatically before any ad.
 5. Rebuild the app (`npx expo prebuild --platform android`, then the release APK), because the App ID is native.

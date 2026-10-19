@@ -1629,7 +1629,7 @@ check("register this phone for notifications", !r.error);
 r = await tryQuery("authenticated", s2, `select public.register_push_device('not-a-token', 'android', 'en', null, null)`);
 check("only Expo push tokens are accepted", /invalid_device/.test(r.error ?? ""));
 r = await db.query(`select area_lat, area_lng from public.push_devices where token = $1`, [pushToken(2)]);
-check("only a rough area (0.1°) is kept", r.rows[0]?.area_lat === 13.8 && r.rows[0]?.area_lng === 100.5);
+check("only a rough area (0.05°) is kept", r.rows[0]?.area_lat === 13.75 && r.rows[0]?.area_lng === 100.5);
 r = await tryQuery("authenticated", s3, `select * from public.push_devices`);
 check("phones can't be read through the API", !!r.error);
 await tryQuery("authenticated", s3, `select public.register_push_device($1, 'android', 'th', null, null)`, [pushToken(3)]);
@@ -1653,7 +1653,7 @@ check("nothing across a block", !(await pushesTo(pushToken(3))).some((push) => p
 await db.query(`insert into public.meetups (kind, spot_name, spot_lat, spot_lng, host_id, title, starts_at, ends_at, max_people)
   values ('hangout', 'Lumphini', 13.73, 100.54, $1, 'Morning run', now() + interval '1 day', now() + interval '1 day 2 hours', 5)`, [s6]);
 pushes = await pushesTo(pushToken(2));
-check("a new hangout within 50 km of my area", pushes.length === 1 && pushes[0].title === "New hangout near you" && pushes[0].body.startsWith("Morning run · "));
+check("a new hangout within 20 km of my area, with who made it and the title", pushes.length === 1 && pushes[0].title === "New hangout near you" && pushes[0].body.startsWith("Story 5 created \"Morning run\" · "));
 for (let i = 0; i < 3; i++) {
   await db.query(`insert into public.meetups (kind, spot_name, spot_lat, spot_lng, host_id, title, starts_at, ends_at, max_people)
     values ('hangout', 'x', 13.74, 100.55, $1, 'More ' || $2, now() + interval '1 day', now() + interval '1 day 2 hours', 5)`, [s6, i]);
@@ -1668,6 +1668,66 @@ await pushDm("still there?");
 check("turned off: nothing reaches the phone", (await pushesTo(pushToken(2))).length === 0);
 r = await tryQuery("authenticated", s4, `select public.push_send($1, 'chat', 'x', 'x', 'x', 'x', '/')`, [s3]);
 check("nobody can send notifications through the API", !!r.error);
+
+// --- Private tables / hangouts (join requests)
+await db.exec(`truncate net.calls`);
+await tryQuery("authenticated", s6, `select public.register_push_device($1, 'android', 'en', null, null)`, [pushToken(6)]);
+await tryQuery("authenticated", s4, `select public.register_push_device($1, 'android', 'en', null, null)`, [pushToken(4)]);
+const privateId = (await db.query(`insert into public.meetups (kind, spot_name, spot_lat, spot_lng, host_id, title, starts_at, ends_at, max_people)
+  values ('hangout', 'Rooftop', 13.74, 100.53, $1, 'Sunset crew', now() + interval '1 day', now() + interval '1 day 2 hours', 2) returning id`, [s6])).rows[0].id;
+await db.query(`insert into public.meetup_members (meetup_id, user_id) values ($1, $2)`, [privateId, s6]);
+r = await tryQuery("authenticated", s4, `select public.set_meetup_join_mode($1, 'private')`, [privateId]);
+check("only the host makes a hangout private", /not_host/.test(r.error ?? ""));
+r = await tryQuery("authenticated", s6, `select public.set_meetup_join_mode($1, 'private')`, [privateId]);
+check("host makes it private", !r.error);
+r = await tryQuery("authenticated", s4, `select public.join_meetup($1)`, [privateId]);
+check("a private hangout can't be joined directly", /approval_required/.test(r.error ?? ""));
+r = await tryQuery("authenticated", s4, `select public.request_to_join($1)`, [privateId]);
+check("ask to join a private hangout", !r.error);
+pushes = await pushesTo(pushToken(6));
+check("the host's phone gets the join request", pushes.length === 1 && pushes[0].title === "Join request" && pushes[0].body.startsWith("Story 3 asked to join"));
+r = await tryQuery("authenticated", s4, `select join_mode, my_request, joined from public.list_open_meetups() where id = $1`, [privateId]);
+check("the list shows it's private and my request is waiting", r.rows?.[0]?.join_mode === "private" && r.rows[0].my_request === "pending" && r.rows[0].joined === false);
+r = await tryQuery("authenticated", s5, `select * from public.meetup_join_requests where meetup_id = $1`, [privateId]);
+check("other people can't see join requests", !r.error && r.rows.length === 0);
+r = await tryQuery("authenticated", s6, `select user_id from public.meetup_join_requests where meetup_id = $1`, [privateId]);
+check("the host sees the requests", r.rows?.length === 1 && r.rows[0].user_id === s4);
+r = await tryQuery("authenticated", s6, `select kind from public.my_notifications(60, null, null) where kind = 'join_request'`);
+check("the request is in the host's bell", r.rows?.length === 1);
+r = await tryQuery("authenticated", s4, `insert into public.meetup_join_requests (meetup_id, user_id, status) values ($1, $2, 'approved')`, [privateId, s4]);
+check("requests can't be written directly", !!r.error);
+r = await tryQuery("authenticated", s4, `select public.decide_join_request($1, $2, true)`, [privateId, s4]);
+check("only the host approves", /not_host/.test(r.error ?? ""));
+r = await tryQuery("authenticated", s6, `select public.decide_join_request($1, $2, true)`, [privateId, s4]);
+r = await db.query(`select count(*)::int n from public.meetup_members where meetup_id = $1 and user_id = $2`, [privateId, s4]);
+check("approving adds the member", r.rows[0].n === 1);
+pushes = await pushesTo(pushToken(4));
+check("the person's phone hears they're in", pushes.some((push) => push.title === "You're in!"));
+r = await tryQuery("authenticated", s4, `select kind from public.my_notifications(60, null, null) where kind = 'request_approved'`);
+check("and their bell too", r.rows?.length === 1);
+r = await tryQuery("authenticated", s5, `select public.request_to_join($1)`, [privateId]);
+check("no requests once it's full", /meetup_full/.test(r.error ?? ""));
+await db.query(`update public.meetups set max_people = 5 where id = $1`, [privateId]);
+await tryQuery("authenticated", s5, `select public.request_to_join($1)`, [privateId]);
+await tryQuery("authenticated", s6, `select public.decide_join_request($1, $2, false)`, [privateId, s5]);
+r = await tryQuery("authenticated", s5, `select public.request_to_join($1)`, [privateId]);
+check("a declined person can't ask again", /request_declined/.test(r.error ?? ""));
+
+// --- Story audience (friends / everyone)
+await db.query(`insert into public.follows (follower_id, followee_id) values ($1, $2), ($2, $1)`, [s5, s6]);
+r = await tryQuery("authenticated", s5, `select public.post_story($1, 'Friends only', 13.75, 100.5, 'friends') as id`, [`${s5}/friends.jpg`]);
+check("post a friends-only story", !r.error);
+const friendsStory = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", s6, `select id, audience from public.map_stories() where id = $1`, [friendsStory]);
+check("friends see a friends-only story", r.rows?.length === 1 && r.rows[0].audience === "friends");
+r = await tryQuery("authenticated", s4, `select id from public.map_stories() where id = $1`, [friendsStory]);
+check("others don't", !r.error && r.rows.length === 0);
+r = await tryQuery("authenticated", s5, `select public.post_story($1, 'For all', 13.75, 100.5) as id`, [`${s5}/all.jpg`]);
+const everyoneStory = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", s4, `select audience from public.map_stories() where id = $1`, [everyoneStory]);
+check("stories are for everyone by default", r.rows?.[0]?.audience === "everyone");
+r = await tryQuery("authenticated", s5, `select public.post_story($1, '', 13.75, 100.5, 'nobody')`, [`${s5}/x.jpg`]);
+check("only everyone / friends", /invalid_audience/.test(r.error ?? ""));
 
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

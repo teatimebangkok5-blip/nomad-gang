@@ -23,6 +23,8 @@ const KIND_EMOJI: Record<AppNotification['kind'], string> = {
   new_table: '👥',
   new_hangout: '🙌',
   joined: '👋',
+  join_request: '🔒',
+  request_approved: '✅',
   chat_message: '💬',
   direct_message: '✉️',
   dm_request: '✉️',
@@ -134,6 +136,8 @@ function openNotification(item: AppNotification) {
     case 'new_table':
     case 'new_hangout':
     case 'joined':
+    case 'join_request':
+    case 'request_approved':
       if (item.meetup_id) router.push({ pathname: '/table/[id]', params: { id: item.meetup_id } });
       return;
     case 'chat_message':
@@ -178,6 +182,13 @@ function notificationText(item: AppNotification, t: TFunction, language: Languag
         title: item.meetup_kind === 'hangout' ? t('notifications.joinedHangout', { name }) : t('notifications.joinedTable', { name }),
         detail: meetupLabel || null,
       };
+    case 'join_request':
+      return {
+        title: item.meetup_kind === 'hangout' ? t('notifications.joinRequestHangout', { name }) : t('notifications.joinRequestTable', { name }),
+        detail: meetupLabel || null,
+      };
+    case 'request_approved':
+      return { title: t('notifications.requestApproved', { name }), detail: meetupLabel || null };
     case 'chat_message':
       return { title: t('notifications.chatMessage', { name, chat: meetupLabel }), detail: item.body };
     case 'direct_message':

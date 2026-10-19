@@ -13,6 +13,8 @@ export type NotificationKind =
   | 'new_table'
   | 'new_hangout'
   | 'joined'
+  | 'join_request'
+  | 'request_approved'
   | 'chat_message'
   | 'direct_message'
   | 'dm_request'

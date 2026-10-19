@@ -6,6 +6,7 @@ import { Alert, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
+import { Chip } from '@/components/chip';
 import { GlossyFill } from '@/components/glossy';
 import { Icon } from '@/components/icon';
 import { ScreenHeader } from '@/components/screen-header';
@@ -17,6 +18,7 @@ import {
   postStory,
   STORY_CAPTION_MAX,
   type PostStoryError,
+  type StoryAudience,
   type StoryPhotoSource,
 } from '@/lib/stories';
 import { makeStyles, useColors } from '@/lib/theme';
@@ -31,6 +33,7 @@ export default function PostStoryScreen() {
   const location = useCurrentLocation();
   const [photo, setPhoto] = useState<string | null>(null);
   const [caption, setCaption] = useState('');
+  const [audience, setAudience] = useState<StoryAudience>('everyone');
   const [picking, setPicking] = useState(false);
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<PostStoryError | null>(null);
@@ -49,7 +52,7 @@ export default function PostStoryScreen() {
     if (!session || !photo) return;
     setError(null);
     setPosting(true);
-    const problem = await postStory(session.user.id, photo, caption);
+    const problem = await postStory(session.user.id, photo, caption, audience);
     setPosting(false);
     if (problem) {
       setError(problem);
@@ -97,6 +100,19 @@ export default function PostStoryScreen() {
           <Text style={styles.counter}>
             {caption.length}/{STORY_CAPTION_MAX}
           </Text>
+
+          <Text style={styles.label}>{t('stories.audienceLabel')}</Text>
+          <View style={styles.audience}>
+            {(['everyone', 'friends'] as const).map((option) => (
+              <Chip
+                key={option}
+                label={t(`stories.audience.${option}`)}
+                selected={audience === option}
+                onPress={() => setAudience(option)}
+              />
+            ))}
+          </View>
+          <Text style={styles.audienceHint}>{t(`stories.audienceHint.${audience}`)}</Text>
 
           <View style={styles.note}>
             <Icon name="pin" size={18} color={Colors.violetText} />
@@ -171,6 +187,8 @@ const useStyles = makeStyles((Colors) => ({
   },
   previewImage: { width: '100%', height: '100%' },
   sources: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.lg },
+  audience: { flexDirection: 'row', gap: Spacing.sm },
+  audienceHint: { ...Type.small, color: Colors.textMuted, marginTop: Spacing.xs },
   source: {
     flex: 1,
     alignItems: 'center',

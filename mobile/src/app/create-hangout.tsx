@@ -46,9 +46,11 @@ import {
   meetupLocationKey,
   meetupPlaceName,
   setMeetupDetails,
+  setMeetupJoinMode,
   useOpenMeetups,
   type CostLevel,
   type HangoutWhere,
+  type JoinMode,
   type MeetupErrorKey,
   type OpenMeetup,
 } from '@/lib/meetups';
@@ -647,6 +649,7 @@ function HangoutForm({ chosen, initialTitle, onChange }: { chosen: Chosen; initi
   const [cost, setCost] = useState<CostLevel | null>(null);
   const [meetingPoint, setMeetingPoint] = useState('');
   const [challengeId, setChallengeId] = useState<string | null>(null);
+  const [joinMode, setJoinMode] = useState<JoinMode>('open');
   const [spotName, setSpotName] = useState(chosen.type === 'spot' ? chosen.name : '');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<MeetupErrorKey | null>(null);
@@ -705,7 +708,11 @@ function HangoutForm({ chosen, initialTitle, onChange }: { chosen: Chosen; initi
       setError(result.error);
       return;
     }
-    await Promise.all([setMeetupDetails(result.data, cost, meetingPoint), setMeetupChallenge(result.data, challengeId)]);
+    await Promise.all([
+      setMeetupDetails(result.data, cost, meetingPoint),
+      setMeetupChallenge(result.data, challengeId),
+      setMeetupJoinMode(result.data, joinMode),
+    ]);
     setCreating(false);
     const found = await area;
     if (found) await setMeetupArea(result.data, found);
@@ -839,6 +846,8 @@ function HangoutForm({ chosen, initialTitle, onChange }: { chosen: Chosen; initi
             onMeetingPoint={setMeetingPoint}
             challengeId={challengeId}
             onChallenge={setChallengeId}
+            joinMode={joinMode}
+            onJoinMode={setJoinMode}
             tone="violet"
           />
 

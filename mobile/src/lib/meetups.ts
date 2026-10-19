@@ -44,7 +44,13 @@ export type OpenMeetup = MeetupPlace & {
   area_name_th: string | null;
   // Group challenge picked by the host (Rewards Passport).
   challenge_id?: string | null;
+  // Open: anyone joins. Private: people send a join request and the host approves.
+  join_mode?: JoinMode;
+  // My join request to a private one that isn't approved yet.
+  my_request?: 'pending' | 'declined' | null;
 };
+
+export type JoinMode = 'open' | 'private';
 
 // Expected cost per person: 0 free, 1 under ฿300, 2 ฿300–700, 3 ฿700–1,500, 4 over ฿1,500.
 export const COST_LEVELS = [0, 1, 2, 3, 4] as const;
@@ -66,6 +72,7 @@ export type MeetupDetail = MeetupPlace & {
   cost_level: CostLevel | null;
   meeting_point: string | null;
   challenge_id: string | null;
+  join_mode: JoinMode;
   members: MeetupMember[];
   // The place's official website (OpenStreetMap), if any.
   place_website: string | null;
@@ -91,6 +98,11 @@ const KNOWN_ERRORS = [
   'meetup_ended',
   'meetup_cancelled',
   'not_host',
+  'approval_required',
+  'not_private',
+  'already_member',
+  'blocked',
+  'request_declined',
 ] as const;
 export type MeetupErrorKey = (typeof KNOWN_ERRORS)[number] | 'generic';
 
@@ -211,6 +223,79 @@ export async function setMeetupDetails(id: string, costLevel: CostLevel | null, 
   if (error) console.warn('Saving cost / meeting point failed', error.message);
 }
 
+// Private (join requests, host approves) or open. Set by the host right after creating, like the details above.
+export async function setMeetupJoinMode(id: string, mode: JoinMode) {
+  if (mode === 'open') return;
+  const { error } = await supabase.rpc('set_meetup_join_mode', { p_meetup_id: id, p_mode: mode });
+  if (error) console.warn('Making the table private failed', error.message);
+}
+
+export async function requestToJoin(id: string): Promise<Result<null>> {
+  const { error } = await supabase.rpc('request_to_join', { p_meetup_id: id });
+  return result(null, error);
+}
+
+export async function cancelJoinRequest(id: string): Promise<Result<null>> {
+  const { error } = await supabase.rpc('cancel_join_request', { p_meetup_id: id });
+  return result(null, error);
+}
+
+export async function decideJoinRequest(id: string, userId: string, approve: boolean): Promise<Result<null>> {
+  const { error } = await supabase.rpc('decide_join_request', { p_meetup_id: id, p_user_id: userId, p_approve: approve });
+  return result(null, error);
+}
+
+export type JoinRequest = {
+  user_id: string;
+  status: 'pending' | 'approved' | 'declined';
+  created_at: string;
+  display_name: string;
+  avatar_path: string | null;
+};
+
+// Join requests of a private table / hangout that I can see: all of them as the host, else only mine.
+export function useJoinRequests(meetupId: string | undefined, enabled: boolean) {
+  const [requests, setRequests] = useState<JoinRequest[]>([]);
+  const load = useCallback(() => {
+    if (!meetupId) return;
+    supabase
+      .from('meetup_join_requests')
+      .select('user_id, status, created_at, profiles(display_name, avatar_path)')
+      .eq('meetup_id', meetupId)
+      .order('created_at')
+      .then(({ data, error }) => {
+        if (error) {
+          console.warn('Loading join requests failed', error.message);
+          return;
+        }
+        type Row = Omit<JoinRequest, 'display_name' | 'avatar_path'> & {
+          profiles: { display_name: string; avatar_path: string | null } | null;
+        };
+        setRequests(
+          ((data ?? []) as unknown as Row[]).map(({ profiles, ...row }) => ({
+            ...row,
+            display_name: profiles?.display_name ?? '',
+            avatar_path: profiles?.avatar_path ?? null,
+          })),
+        );
+      });
+  }, [meetupId]);
+
+  useEffect(() => {
+    if (!enabled || !meetupId) return;
+    load();
+    const channel = supabase
+      .channel(uniqueChannelName(`join-requests-${meetupId}`))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'meetup_join_requests', filter: `meetup_id=eq.${meetupId}` }, () => load())
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [enabled, meetupId, load]);
+
+  return { requests, reload: load };
+}
+
 export async function joinMeetup(id: string): Promise<Result<null>> {
   const { error } = await supabase.rpc('join_meetup', { p_meetup_id: id });
   return result(null, error);
@@ -307,7 +392,7 @@ async function fetchMeetup(id: string): Promise<MeetupDetail | null | 'error'> {
     .from('meetups')
     .select(
       'id, kind, time_zone, venue_id, place_id, place:places(name, name_en, name_th, lat, lng, website), spot_name, spot_lat, spot_lng, ' +
-        'host_id, title, description, starts_at, ends_at, max_people, status, cost_level, meeting_point, challenge_id, ' +
+        'host_id, title, description, starts_at, ends_at, max_people, status, cost_level, meeting_point, challenge_id, join_mode, ' +
         'meetup_members(user_id, joined_at, profiles(display_name, avatar_path))',
     )
     .eq('id', id)

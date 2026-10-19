@@ -24,7 +24,15 @@ import { localized, useLanguage } from '@/i18n';
 import { bangkokDay, formatClock, formatDayLabel, fromBangkok, timeSlots, type BangkokDay } from '@/lib/bangkok-time';
 import { BANGKOK_CENTER, distanceMeters, inBangkok, useCurrentLocation } from '@/lib/location';
 import { AREA_ZOOM, PLACE_ZOOM, useMapSearch, type SearchResult } from '@/lib/map-search';
-import { createMeetup, createMeetupAtPlace, setMeetupDetails, type CostLevel, type MeetupErrorKey } from '@/lib/meetups';
+import {
+  createMeetup,
+  createMeetupAtPlace,
+  setMeetupDetails,
+  setMeetupJoinMode,
+  type CostLevel,
+  type JoinMode,
+  type MeetupErrorKey,
+} from '@/lib/meetups';
 import { fetchPlace, placeCategory, placeName, usePlacesInView, type Place } from '@/lib/places';
 import { venuePhotoUrl } from '@/lib/supabase';
 import { isHangoutVenue, PROMOTION_EMOJI, useVenues, type PromotionKind, type Venue } from '@/lib/venues';
@@ -76,6 +84,7 @@ export default function CreateTableScreen() {
   const [cost, setCost] = useState<CostLevel | null>(null);
   const [meetingPoint, setMeetingPoint] = useState('');
   const [challengeId, setChallengeId] = useState<string | null>(null);
+  const [joinMode, setJoinMode] = useState<JoinMode>('open');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<MeetupErrorKey | null>(null);
 
@@ -136,7 +145,11 @@ export default function CreateTableScreen() {
       setError(result.error);
       return;
     }
-    await Promise.all([setMeetupDetails(result.data, cost, meetingPoint), setMeetupChallenge(result.data, challengeId)]);
+    await Promise.all([
+      setMeetupDetails(result.data, cost, meetingPoint),
+      setMeetupChallenge(result.data, challengeId),
+      setMeetupJoinMode(result.data, joinMode),
+    ]);
     setCreating(false);
     router.replace({ pathname: '/table/[id]', params: { id: result.data } });
   }
@@ -327,6 +340,8 @@ export default function CreateTableScreen() {
             onMeetingPoint={setMeetingPoint}
             challengeId={challengeId}
             onChallenge={setChallengeId}
+            joinMode={joinMode}
+            onJoinMode={setJoinMode}
             tone="orange"
           />
 

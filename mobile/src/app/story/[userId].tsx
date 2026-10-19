@@ -152,6 +152,7 @@ export default function StoryScreen() {
               <Text style={styles.meta} numberOfLines={1}>
                 {ageLabel}
                 {area ? ` · ${t('stories.near', { area })}` : ''}
+                {story.audience === 'friends' ? ` · 👥 ${t('stories.audience.friends')}` : ''}
               </Text>
             </View>
           </Pressable>

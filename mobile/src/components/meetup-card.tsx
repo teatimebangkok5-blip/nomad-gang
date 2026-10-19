@@ -59,6 +59,11 @@ export function MeetupCard({
         <KindTag hangout={hangout} small={compact} />
         <StatusTag status={status} joined={meetup.joined} small={compact} />
         {badge && <DealTag label={badge} small={compact} />}
+        {meetup.join_mode === 'private' && (
+          <Text style={styles.lock} accessibilityLabel={t('privacy.private')}>
+            🔒
+          </Text>
+        )}
       </View>
 
       <Text style={compact ? styles.titleCompact : styles.titleFull} numberOfLines={compact ? 1 : 2}>
@@ -156,6 +161,7 @@ export function DealTag({ label, small = false, push = true }: { label: string; 
 }
 
 const useStyles = makeStyles((Colors) => ({
+  lock: { fontSize: 13, alignSelf: 'center' },
   card: {
     backgroundColor: Colors.surface,
     borderWidth: 1,

@@ -5,7 +5,7 @@ import { Chip } from '@/components/chip';
 import { FormInput, FormSection } from '@/components/form-parts';
 import { Radius, Spacing, Type } from '@/constants/theme';
 import { localized, useLanguage } from '@/i18n';
-import { COST_LEVELS, type CostLevel } from '@/lib/meetups';
+import { COST_LEVELS, type CostLevel, type JoinMode } from '@/lib/meetups';
 import { useChallenges } from '@/lib/passport';
 import { makeStyles, useColors } from '@/lib/theme';
 
@@ -18,6 +18,8 @@ export function MeetupExtras({
   onMeetingPoint,
   challengeId,
   onChallenge,
+  joinMode,
+  onJoinMode,
   tone,
 }: {
   cost: CostLevel | null;
@@ -26,6 +28,8 @@ export function MeetupExtras({
   onMeetingPoint: (text: string) => void;
   challengeId: string | null;
   onChallenge: (id: string | null) => void;
+  joinMode: JoinMode;
+  onJoinMode: (mode: JoinMode) => void;
   tone: 'orange' | 'violet';
 }) {
   const styles = useStyles();
@@ -36,6 +40,22 @@ export function MeetupExtras({
 
   return (
     <>
+      <FormSection label={t('privacy.whoCanJoin')}>
+        <View style={styles.chips}>
+          {(['open', 'private'] as const).map((mode) => (
+            <Chip
+              key={mode}
+              tone={tone}
+              icon={mode === 'private' ? 'lock' : 'lockOpen'}
+              label={t(`privacy.${mode}`)}
+              selected={joinMode === mode}
+              onPress={() => onJoinMode(mode)}
+            />
+          ))}
+        </View>
+        <Text style={styles.hint}>{t(`privacy.${joinMode}Hint`)}</Text>
+      </FormSection>
+
       <FormSection label={t('feed.costLabel')} note={t('common.optional')}>
         <View style={styles.chips}>
           {COST_LEVELS.map((level) => (

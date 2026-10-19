@@ -29,7 +29,11 @@ export type Story = {
   area_name_th: string | null;
   created_at: string;
   expires_at: string;
+  // Everyone signed in, or only my friends (mutual follows).
+  audience: StoryAudience;
 };
+
+export type StoryAudience = 'everyone' | 'friends';
 
 // One map pin per person: their stories (oldest first, the order they're shown in) at their latest story's spot.
 export type StoryGroup = { userId: string; name: string; avatarPath: string | null; lat: number; lng: number; stories: Story[] };
@@ -130,11 +134,16 @@ export async function pickStoryPhoto(source: StoryPhotoSource): Promise<string |
   }
 }
 
-const POST_ERRORS = ['not_allowed', 'invalid_caption', 'invalid_location', 'too_many_stories'] as const;
+const POST_ERRORS = ['not_allowed', 'invalid_audience', 'invalid_caption', 'invalid_location', 'too_many_stories'] as const;
 export type PostStoryError = (typeof POST_ERRORS)[number] | 'location' | 'generic';
 
 // Gets where I am right now, uploads the photo and posts the story.
-export async function postStory(myId: string, localUri: string, caption: string): Promise<PostStoryError | null> {
+export async function postStory(
+  myId: string,
+  localUri: string,
+  caption: string,
+  audience: StoryAudience,
+): Promise<PostStoryError | null> {
   let coords: { latitude: number; longitude: number };
   try {
     const permission = await Location.getForegroundPermissionsAsync();
@@ -162,6 +171,7 @@ export async function postStory(myId: string, localUri: string, caption: string)
     p_caption: caption.trim(),
     p_lat: coords.latitude,
     p_lng: coords.longitude,
+    p_audience: audience,
   });
   if (error) {
     // Not posted: remove the file again (best effort).

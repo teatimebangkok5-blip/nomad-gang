@@ -25,11 +25,15 @@ import { useCheckedIn } from '@/lib/coupons';
 import { meetupStatus } from '@/lib/feed';
 import { isSafeLink, openLink, ticketLink } from '@/lib/links';
 import {
+  cancelJoinRequest,
   cancelMeetup,
+  decideJoinRequest,
   directionsUrl,
   joinMeetup,
   leaveMeetup,
   meetupPlaceName,
+  requestToJoin,
+  useJoinRequests,
   useMeetup,
   type MeetupErrorKey,
 } from '@/lib/meetups';
@@ -68,6 +72,8 @@ export default function TableScreen() {
   );
   const feedback = useMyFeedback(id, canRate);
   const checkedIn = useCheckedIn(id, amMember && loaded?.status === 'open');
+  // Private tables / hangouts: the host sees the join requests, others their own.
+  const joinRequests = useJoinRequests(id, loaded?.join_mode === 'private' && !!session);
   // A day hangout made from a day plan links to the plan.
   const dayPlan = usePlanForMeetup(id);
   const challenges = useChallenges();
@@ -79,6 +85,7 @@ export default function TableScreen() {
     setBusy(false);
     if (result.error) setError(result.error);
     reload();
+    joinRequests.reload();
   }
 
   if (state.status === 'loading') {
@@ -114,6 +121,9 @@ export default function TableScreen() {
   const userId = session?.user.id;
   const isHost = meetup.host_id === userId;
   const isMember = amMember;
+  const isPrivate = meetup.join_mode === 'private';
+  const myRequest = joinRequests.requests.find((r) => r.user_id === userId && r.status !== 'approved') ?? null;
+  const pendingRequests = isHost ? joinRequests.requests.filter((r) => r.status === 'pending') : [];
   const ended = new Date(meetup.ends_at) <= new Date();
   const cancelled = meetup.status === 'cancelled';
   const seatsLeft = Math.max(0, meetup.max_people - meetup.members.length);
@@ -214,6 +224,12 @@ export default function TableScreen() {
               <StatusTag status={status} joined={isMember} />
             )}
             {venue?.deal && <DealTag label={`${dealBadge(venue.deal, t)} · ${t('home.partner')}`} push={false} />}
+            {isPrivate && (
+              <View style={styles.privateTag}>
+                <Icon name="lock" size={13} color={Colors.violetText} />
+                <Text style={styles.privateText}>{t('privacy.private')}</Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.titles}>
@@ -342,6 +358,53 @@ export default function TableScreen() {
               </Pressable>
             ))}
 
+          {open && pendingRequests.length > 0 && (
+            <View>
+              <View style={styles.membersHeader}>
+                <Text style={styles.heading}>{t('privacy.requestsTitle')}</Text>
+                <Text style={styles.membersCount}>{pendingRequests.length}</Text>
+              </View>
+              {pendingRequests.map((request) => (
+                <View key={request.user_id} style={styles.member}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${t('profile.open')}: ${request.display_name}`}
+                    onPress={() => router.push({ pathname: '/profile/[userId]', params: { userId: request.user_id } })}
+                    style={({ pressed }) => [styles.memberMain, pressed && styles.pressed]}>
+                    <View style={[styles.avatar, { backgroundColor: avatarColor(request.user_id) }]}>
+                      {request.avatar_path ? (
+                        <Image source={profilePhotoUrl(request.avatar_path)} style={styles.avatarImage} contentFit="cover" />
+                      ) : (
+                        <Text style={styles.avatarText}>{request.display_name.slice(0, 1).toUpperCase() || '?'}</Text>
+                      )}
+                    </View>
+                    <Text style={[styles.memberName, styles.flex]} numberOfLines={1}>
+                      {request.display_name}
+                    </Text>
+                  </Pressable>
+                  <View style={styles.votes}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={t('privacy.approve', { name: request.display_name })}
+                      disabled={busy}
+                      onPress={() => run((meetupId) => decideJoinRequest(meetupId, request.user_id, true))}
+                      style={({ pressed }) => [styles.decide, styles.approve, pressed && styles.pressed]}>
+                      <Icon name="check" size={20} color={Colors.white} />
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={t('privacy.decline', { name: request.display_name })}
+                      disabled={busy}
+                      onPress={() => run((meetupId) => decideJoinRequest(meetupId, request.user_id, false))}
+                      style={({ pressed }) => [styles.decide, styles.decline, pressed && styles.pressed]}>
+                      <Icon name="close" size={20} color={Colors.text} />
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
           <View>
             <View style={styles.membersHeader}>
               <Text style={styles.heading}>{canRate ? t('feedback.title') : t('tables.members')}</Text>
@@ -453,13 +516,34 @@ export default function TableScreen() {
             </>
           ) : (
             <View style={styles.flex}>
-              <Button
-                title={seatsLeft > 0 ? t('tables.join') : t('tables.full')}
-                variant={isHangout ? 'violet' : 'primary'}
-                loading={busy}
-                disabled={seatsLeft === 0}
-                onPress={() => run(joinMeetup)}
-              />
+              {isPrivate ? (
+                myRequest?.status === 'pending' ? (
+                  <Button title={t('privacy.requestSent')} variant="secondary" loading={busy} onPress={() => run(cancelJoinRequest)} />
+                ) : (
+                  <Button
+                    title={
+                      myRequest?.status === 'declined'
+                        ? t('privacy.declinedShort')
+                        : seatsLeft > 0
+                          ? t('privacy.requestToJoin')
+                          : t('tables.full')
+                    }
+                    variant={isHangout ? 'violet' : 'primary'}
+                    icon={<Icon name="lock" size={20} color={Colors.white} />}
+                    loading={busy}
+                    disabled={seatsLeft === 0 || myRequest?.status === 'declined'}
+                    onPress={() => run(requestToJoin)}
+                  />
+                )
+              ) : (
+                <Button
+                  title={seatsLeft > 0 ? t('tables.join') : t('tables.full')}
+                  variant={isHangout ? 'violet' : 'primary'}
+                  loading={busy}
+                  disabled={seatsLeft === 0}
+                  onPress={() => run(joinMeetup)}
+                />
+              )}
             </View>
           )}
         </View>
@@ -602,6 +686,19 @@ const useStyles = makeStyles((Colors) => ({
     overflow: 'hidden',
   },
   votes: { flexDirection: 'row', gap: Spacing.xs },
+  privateTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.violetTint,
+  },
+  privateText: { ...Type.small, fontWeight: '700', color: Colors.violetText },
+  decide: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  approve: { backgroundColor: Colors.ok },
+  decline: { backgroundColor: Colors.surfaceRaised, borderWidth: 1, borderColor: Colors.borderStrong },
   voteButton: {
     width: 44,
     height: 40,

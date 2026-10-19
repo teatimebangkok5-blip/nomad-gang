@@ -253,13 +253,13 @@ Product spec and tech stack below are agreed. Built so far:
   Invites, and map "stories" on home instead of a posts feed.
 - **Phone (push) notifications** (added 2026-10-19, `*_push_notifications.sql`). Founder's choice of what reaches
   the phone: **messages** (private incl. requests, group, table / hangout chat; not after leaving that chat),
-  **someone joins my table / hangout**, **new followers**, **new tables / hangouts within 50 km** of my rough area (max
-  3 a day) and **new promotions** to everyone (max 1 a day). Never my own actions, never across a block. DB triggers
+  **someone joins my table / hangout**, **new followers**, **new tables / hangouts within 20 km** of my rough area ("Sam
+  created \"title\" · time", max 3 a day; 50 km until 2026-10-19) and **new promotions** to everyone (max 1 a day). Never my own actions, never across a block. DB triggers
   on `meetup_messages`, `direct_messages`, `chat_group_messages`, `meetup_members`, `follows`, `meetups`, `deals` call
   `push_send(user, kind, title_en, body_en, title_th, body_th, url)` → `net.http_post` (pg_net) to
   `https://exp.host/--/api/v2/push/send` (Expo push, no key); each trigger and `push_send` swallow errors so a push
-  can't break the action. `push_devices` (token, language en/th, rough area rounded to 0.1° only if location is
-  already allowed; no API access) via `register_push_device` / `unregister_push_device`; `push_log` for the daily
+  can't break the action. `push_devices` (token, language en/th, rough area rounded to 0.05° (~5 km) only if location
+  is already allowed; no API access) via `register_push_device` / `unregister_push_device`; `push_log` for the daily
   limits. Tests stub `net.http_post` into `net.calls`. App: `expo-notifications` (plugin in `app.json`, white icon
   `assets/images/notification-icon.png`, channel `default`), `src/lib/push.ts`: `usePushNotifications` in the root
   layout (after onboarding; registers on start, on language change and after 6 h; tapping opens `data.url`),
@@ -267,6 +267,19 @@ Product spec and tech stack below are agreed. Built so far:
   needs Firebase**: `mobile/google-services.json` (git-ignored, added by `app.config.ts` only if present) + the FCM V1
   service account key uploaded to the Expo project (README step 7); without them `getExpoPushTokenAsync` fails and
   Settings says it isn't available. Not pushed: the 🎁 host reward (time-based, no event).
+- **Private tables / hangouts + story audience** (added 2026-10-19, `*_private_meetups_story_audience.sql`).
+  `meetups.join_mode` `open` (anyone joins) or `private`: "Who can join" chips in `MeetupExtras` on both create forms →
+  `set_meetup_join_mode` right after creating (`setMeetupJoinMode`). Private: `join_meetup` → `approval_required`;
+  people call `request_to_join` (errors `not_private`, `already_member`, `blocked`, `meetup_full`, `request_declined`;
+  no second request after a decline), `cancel_join_request`; the host `decide_join_request(meetup, user, approve)`
+  (locks the meetup, approving adds the member if there's a seat). `meetup_join_requests` (no direct writes; readable
+  by the person and the host; Realtime). `list_open_meetups` returns `join_mode` + `my_request`. Push + bell kinds
+  `join_request` (host) and `request_approved` (person); "X joined" now only for open ones. App: table screen shows a
+  🔒 Private tag, "Request to join" / "Request sent · Cancel" / "Request declined", and for the host a Join requests
+  list with ✓ / ✕ (`useJoinRequests`); `MeetupCard` shows 🔒. **Stories**: `stories.audience` `everyone` (default) or
+  `friends` (mutual follows, `are_friends`), chosen on `post-story.tsx`; `post_story(…, p_audience default
+  'everyone')`, `story_visible` checks it, `map_stories` returns it; the viewer labels friends-only ones. Home already
+  pins open hangouts worldwide (no change).
 - **TableMeet Plus + AdMob ads** (added 2026-10-19, `*_tablemeet_plus.sql`). Founder's decisions: Plus = Plan my
   day, Hidden Gems, Rewards Passport, and no ads; **payments not built yet**, the founder gives Plus by hand at
   **/admin/plus** (search by name / email via `admin_find_users`, Give 1 month / 1 year with `admin_grant_plus`, added

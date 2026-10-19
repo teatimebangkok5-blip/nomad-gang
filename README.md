@@ -161,7 +161,7 @@ notifications (Settings → Phone notifications says it isn't available yet).
 1. Go to <https://console.firebase.google.com> → **Create a project** (any name, e.g. TableMeet; Google Analytics
    not needed).
 2. **Add app → Android**, package name **`com.tablemeet.app`**, then **Download google-services.json** and put it
-   in `mobile/` (next to `app.json`). It's git-ignored; `app.config.js` picks it up automatically.
+   in `mobile/` (next to `app.json`). It's git-ignored; `app.config.ts` picks it up automatically.
 3. In Firebase: **Project settings → Service accounts → Generate new private key** (a JSON file). Keep it private.
 4. Upload that key to Expo: <https://expo.dev> → your project → **Credentials → Android → com.tablemeet.app →
    FCM V1 service account key → Upload** (or run `npx eas credentials` in `mobile/`).

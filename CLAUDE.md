@@ -264,7 +264,7 @@ Product spec and tech stack below are agreed. Built so far:
   `assets/images/notification-icon.png`, channel `default`), `src/lib/push.ts`: `usePushNotifications` in the root
   layout (after onboarding; registers on start, on language change and after 6 h; tapping opens `data.url`),
   `usePushSetting` (Settings → Phone notifications), `unregisterPush` on sign-out and account deletion. **Android
-  needs Firebase**: `mobile/google-services.json` (git-ignored, added by `app.config.js` only if present) + the FCM V1
+  needs Firebase**: `mobile/google-services.json` (git-ignored, added by `app.config.ts` only if present) + the FCM V1
   service account key uploaded to the Expo project (README step 7); without them `getExpoPushTokenAsync` fails and
   Settings says it isn't available. Not pushed: the 🎁 host reward (time-based, no event).
 - **TableMeet Plus + AdMob ads** (added 2026-10-19, `*_tablemeet_plus.sql`). Founder's decisions: Plus = Plan my

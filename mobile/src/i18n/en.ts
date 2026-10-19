@@ -13,6 +13,7 @@ const en = {
   welcome: {
     title: 'Meet people over food, drinks and plans in Bangkok.',
     subtitle: 'Join a table tonight or start a hangout. Partner venues give your group a deal when you show up together.',
+    subtitleNoCoupons: 'Join a table tonight or start a hangout with people nearby.',
     step1: 'Pick a place near you',
     step2: 'Join a table or start one',
     step3: 'Check in with 3+ people to unlock an exclusive discount',
@@ -636,6 +637,7 @@ const en = {
   },
   coupon: {
     title: 'Check in & earn',
+    comingSoon: 'TableMeet coupons are coming soon.',
     progress: '{{count}}/{{needed}} checked in',
     opensSoon: 'Check-in opens 15 minutes before the start. Come to the place, then check in here.',
     checkIn: "I'm here: check in",

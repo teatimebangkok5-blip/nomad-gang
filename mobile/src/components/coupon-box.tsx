@@ -12,6 +12,7 @@ import { localized, useLanguage } from '@/i18n';
 import { bangkokMinutes, formatClock } from '@/lib/bangkok-time';
 import {
   checkIn,
+  COUPONS_ENABLED,
   redemptionUrl,
   requestQr,
   useCouponState,
@@ -51,7 +52,8 @@ export function CouponBox({
   if (!state) return null;
 
   const radius = state.venue?.radius_m ?? 50;
-  const needed = Math.max(PASSPORT_PEOPLE, ...state.deals.map((deal) => deal.needed));
+  const deals = COUPONS_ENABLED ? state.deals : [];
+  const needed = Math.max(PASSPORT_PEOPLE, ...deals.map((deal) => deal.needed));
   const passport = state.passport;
 
   async function act(key: string, action: () => Promise<string | null>) {
@@ -63,7 +65,7 @@ export function CouponBox({
     await reload();
   }
 
-  const firstDeal = state.deals[0];
+  const firstDeal = deals[0];
 
   return (
     // Brand-gradient frame around the box.
@@ -122,7 +124,7 @@ export function CouponBox({
       )}
 
       {!ended &&
-        state.deals.map((deal) => (
+        deals.map((deal) => (
           <DealRow
             key={deal.id}
             deal={deal}

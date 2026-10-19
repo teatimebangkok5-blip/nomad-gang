@@ -33,6 +33,7 @@ import {
   type JoinMode,
   type MeetupErrorKey,
 } from '@/lib/meetups';
+import { COUPONS_ENABLED } from '@/lib/coupons';
 import { fetchPlace, placeCategory, placeName, usePlacesInView, type Place } from '@/lib/places';
 import { venuePhotoUrl } from '@/lib/supabase';
 import { isHangoutVenue, PROMOTION_EMOJI, useVenues, type PromotionKind, type Venue } from '@/lib/venues';
@@ -338,7 +339,7 @@ export default function CreateTableScreen() {
             onDecrease={() => setMaxPeople((n) => Math.max(MIN_PEOPLE, n - 1))}
             onIncrease={() => setMaxPeople((n) => Math.min(MAX_PEOPLE, n + 1))}
           />
-          <Text style={styles.hintTight}>{t('tables.groupSizeHint')}</Text>
+          {COUPONS_ENABLED && <Text style={styles.hintTight}>{t('tables.groupSizeHint')}</Text>}
 
           <FormSection label={t('tables.titleLabel')} note={t('common.optional')} count={`${title.length}/80`}>
             <FormInput value={title} onChangeText={setTitle} placeholder={t('tables.notePlaceholder')} maxLength={80} />

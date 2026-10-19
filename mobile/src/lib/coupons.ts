@@ -10,6 +10,11 @@ import { supabase, uniqueChannelName } from '@/lib/supabase';
 // the group's QR code. It's valid 15 minutes; staff scan it and see the coupon code after their venue login on the
 // web page /r/<token>. Rules: supabase/migrations/*_checkins_redemptions_account_deletion.sql.
 
+// Coupon QR redemption is switched off until the staff web page is online (founder, 2026-10-19): check-ins still work
+// (Rewards Passport) and partner promotions still show, marked "coming soon". Turn on once EXPO_PUBLIC_WEB_URL points
+// at the deployed web app.
+export const COUPONS_ENABLED = false;
+
 export type CouponDeal = {
   id: string;
   kind: 'discount' | 'offer' | 'ticket';

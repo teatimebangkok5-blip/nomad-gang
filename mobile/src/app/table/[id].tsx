@@ -21,7 +21,7 @@ import { avatarColor, Radius, Raised, Spacing, Type } from '@/constants/theme';
 import { localized, useLanguage } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { deviceZone, formatUtcOffset, formatWhen, formatWhenRange, sameClock } from '@/lib/bangkok-time';
-import { useCheckedIn } from '@/lib/coupons';
+import { COUPONS_ENABLED, useCheckedIn } from '@/lib/coupons';
 import { meetupStatus } from '@/lib/feed';
 import { isSafeLink, openLink, ticketLink } from '@/lib/links';
 import {
@@ -302,7 +302,9 @@ export default function TableScreen() {
                   <View style={styles.flex}>
                     <Text style={styles.dealTitle}>{localized(promotion, 'title', language)}</Text>
                     <Text style={styles.dealNote}>
-                      {promotion.kind === 'ticket'
+                      {!COUPONS_ENABLED && ['ticket', 'discount', 'offer'].includes(promotion.kind)
+                        ? t('coupon.comingSoon')
+                        : promotion.kind === 'ticket'
                         ? t('hangouts.ticketNote')
                         : promotion.kind === 'discount' || promotion.kind === 'offer'
                           ? t('tables.discountNote')
@@ -319,7 +321,9 @@ export default function TableScreen() {
                   <Icon name="deal" size={20} color={Colors.accent} />
                   <View style={styles.flex}>
                     <Text style={styles.dealTitle}>{localized(venue.deal, 'title', language)}</Text>
-                    <Text style={styles.dealNote}>{t('tables.discountNote')}</Text>
+                    <Text style={styles.dealNote}>
+                      {COUPONS_ENABLED ? t('tables.discountNote') : t('coupon.comingSoon')}
+                    </Text>
                   </View>
                 </View>
               )}

@@ -222,7 +222,9 @@ Product spec and tech stack below are agreed. Built so far:
   usable promotions (tables: discount / offer, needs 3 checked in; hangouts: ticket, needs 1) and the QR token for
   checked-in members; `issue_redemption_qr` makes a 48-hex token in `redemption_qrs` (no API access), valid 15 min,
   one redemption per meetup + promotion. QR drawn by `src/components/qr-code.tsx` (qrcode-generator, plain views),
-  holding `EXPO_PUBLIC_WEB_URL/r/<token>`. **Staff page** `web/src/app/r/[token]` (Thai + English): venue login
+  holding `EXPO_PUBLIC_WEB_URL/r/<token>`. **Switched off for launch** (founder, 2026-10-19): `COUPONS_ENABLED = false` in
+  `src/lib/coupons.ts` hides the QR / coupon rows (check-in and Passport stay) and labels discount / offer / ticket
+  promotions "coupons coming soon"; turn it on once the web app is deployed and `WEB_URL` is set. **Staff page** `web/src/app/r/[token]` (Thai + English): venue login
   (`staff_sign_in`, per-login lock + 20 failures / IP / 15 min) → session cookie `tm_staff` (path /r, 90 days, hash
   in `venue_staff_sessions`) → `staff_check_qr` (no use-up) → "Show coupon code" → `staff_redeem` (marks used,
   writes `redemptions` with names copied, returns the code). Another venue's login → `wrong_venue`, code not used.
@@ -348,8 +350,9 @@ Product spec and tech stack below are agreed. Built so far:
   auto-incremented on EAS, upload key stored on EAS). EAS cloud builds don't get git-ignored files, so `.env.local` is
   **not** used there: the values live in the EAS **production** environment (`eas env:list --environment
   production`): Supabase URL/key, Google web client ID, `SKIP_LOGIN=false`, `REQUIRE_PHONE=false`,
-  `CONTACT_EMAIL=tablemeet.helpdesk@gmail.com`; `WEB_URL`, `BUSINESS_NAME` and `ADMOB_APP_OPEN_ID` are still unset
-  (no QR link / generic legal wording / Google test ads) and need a new build once set. `google-services.json` is
+  `CONTACT_EMAIL=tablemeet.helpdesk@gmail.com`, `BUSINESS_NAME=TableMeet` (founder, 2026-10-19; legal operator name);
+  `WEB_URL` and `ADMOB_APP_OPEN_ID` are still unset (no website link in Privacy / Google test ads; the founder's public
+  Privacy page for the store is a Google Site, https://sites.google.com/view/tablemeet/home) and need a new build once set. `google-services.json` is
   the EAS file variable `GOOGLE_SERVICES_JSON`, picked up by `app.config.ts`. First production AAB: 1.0.0 (3),
   2026-10-19.
 - **Google sign-in is on** (2026-10-16): the founder created the Google Cloud OAuth clients (Web client ID in

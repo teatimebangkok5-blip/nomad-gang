@@ -11,6 +11,7 @@ import { LanguageSegment } from '@/components/language-toggle';
 import { Logo } from '@/components/logo';
 import { Fonts, Radius, Spacing, Type } from '@/constants/theme';
 import { requirePhoneVerification, signInWithApple, signInWithGoogle } from '@/lib/auth';
+import { COUPONS_ENABLED } from '@/lib/coupons';
 import { supabaseConfigured } from '@/lib/supabase';
 import { makeStyles, useColors, useTheme } from '@/lib/theme';
 
@@ -86,7 +87,7 @@ export default function WelcomeScreen() {
         />
         <Logo size={38} />
         <Text style={styles.tagline}>{t('welcome.title')}</Text>
-        <Text style={styles.subtitle}>{t('welcome.subtitle')}</Text>
+        <Text style={styles.subtitle}>{t(COUPONS_ENABLED ? 'welcome.subtitle' : 'welcome.subtitleNoCoupons')}</Text>
 
         <View style={styles.flexGrow} />
 

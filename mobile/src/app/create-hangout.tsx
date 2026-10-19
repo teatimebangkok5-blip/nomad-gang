@@ -55,6 +55,7 @@ import {
   type OpenMeetup,
 } from '@/lib/meetups';
 import { areaAt, setMeetupArea } from '@/lib/rewards';
+import { COUPONS_ENABLED } from '@/lib/coupons';
 import type { FavoriteTarget } from '@/lib/favorites';
 import { entryFilter, fetchPlace, placeEmoji, placeName, usePlacesInView, type Place, type PlaceEntry } from '@/lib/places';
 import {
@@ -743,7 +744,9 @@ function HangoutForm({ chosen, initialTitle, onChange }: { chosen: Chosen; initi
               {deals.map((promotion) => (
                 <PromotionRow key={promotion.id} promotion={promotion} />
               ))}
-              {deals.some((p) => p.kind === 'ticket') && <Text style={styles.hint}>{t('hangouts.ticketNote')}</Text>}
+              {deals.some((p) => p.kind === 'ticket') && (
+                <Text style={styles.hint}>{COUPONS_ENABLED ? t('hangouts.ticketNote') : t('coupon.comingSoon')}</Text>
+              )}
             </View>
           )}
 

@@ -280,8 +280,8 @@ Product spec and tech stack below are agreed. Built so far:
   (`src/lib/plus.ts`), `RequirePlus` (`src/components/require-plus.tsx`) wraps plan-day, gems, gem/[id], suggest-gem
   and passport (→ redirect to `src/app/plus.tsx`: benefits, Monthly / Yearly, "Contact us" mailto
   `EXPO_PUBLIC_CONTACT_EMAIL`); home's Plan my day / Gems / Passport buttons go straight to /plus when locked;
-  Settings has a Plus row. **Ads**: `react-native-google-mobile-ads` (plugin in `app.json` with Google's **sample App
-  ID** until the founder's AdMob account exists; README step 6). **App open ads** (founder, 2026-10-19, replaced the
+  Settings has a Plus row. **Ads**: `react-native-google-mobile-ads` (plugin in `app.json`: the founder's **Android AdMob App
+  ID** `ca-app-pub-7210077278553769~2177243131` since 2026-10-19; iOS still Google's sample ID; README step 6). **App open ads** (founder, 2026-10-19, replaced the
   tap-triggered interstitials; interstitials at launch break AdMob policy): unit `EXPO_PUBLIC_ADMOB_APP_OPEN_ID`
   (empty = `TestIds.APP_OPEN`). `src/lib/ads.ts`: `prepareAds()` (UMP consent via `AdsConsent.gatherConsent`, then
   initialize + preload; one shared promise), `showLaunchAd()` once per app start and `onAppReopened()` → `showOpenAd()`

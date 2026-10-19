@@ -1406,7 +1406,7 @@ await endMeetup(sameDay);
 pass = await passport(c1);
 check("a second meetup on the same day doesn't count", pass?.verified === 1 && pass.points === 15 && pass.meetups.length === 2);
 
-const [e1, e2, e3, e4] = ["77777777-7777-7777-7777-777777777771", "77777777-7777-7777-7777-777777777772",
+const [e1, e2, e3, e4] = ["dddddddd-dddd-4ddd-8ddd-ddddddddddd1", "dddddddd-dddd-4ddd-8ddd-ddddddddddd2",
   "77777777-7777-7777-7777-777777777773", "77777777-7777-7777-7777-777777777774"];
 await db.exec(`insert into auth.users (id, email, phone_confirmed_at) values ${[e1, e2, e3, e4].map((id, i) => `('${id}', 'e${i}@x.com', now())`).join(", ")}`);
 r = await hangout(e1, { lat: 13.7466, lng: 100.5393, spotName: "Siam steps", startsAt: new Date().toISOString(), size: 6 });
@@ -1728,6 +1728,47 @@ r = await tryQuery("authenticated", s4, `select audience from public.map_stories
 check("stories are for everyone by default", r.rows?.[0]?.audience === "everyone");
 r = await tryQuery("authenticated", s5, `select public.post_story($1, '', 13.75, 100.5, 'nobody')`, [`${s5}/x.jpg`]);
 check("only everyone / friends", /invalid_audience/.test(r.error ?? ""));
+
+// --- The founder deletes someone's account (emailed deletion requests)
+const [x1, x2] = ["0de1e7e0-0000-4000-8000-000000000001", "0de1e7e0-0000-4000-8000-000000000002"];
+await db.exec(`insert into auth.users (id, email, phone_confirmed_at) values ('${x1}', 'x1@x.com', now()), ('${x2}', 'x2@x.com', now())`);
+r = await tryQuery("authenticated", x1, `select public.create_meetup($1, $2, 4) as id`, [cafeId, inHours(7)]);
+const x1Table = r.rows?.[0]?.id;
+await tryQuery("authenticated", x2, `select public.join_meetup($1)`, [x1Table]);
+r = await db.query(`insert into public.chat_groups (name, emoji, owner_id) values ('Delete test', '🍜', $1) returning id`, [x1]);
+const xGroup = r.rows[0].id;
+await db.query(`insert into public.chat_group_members (group_id, user_id, joined_at) values ($1, $2, now() - interval '1 hour'), ($1, $3, now())`, [xGroup, x1, x2]);
+await tryQuery("authenticated", x1, `insert into storage.objects (bucket_id, name) values ('profile-photos', $1)`, [`${x1}/avatar.jpg`]);
+r = await tryQuery("authenticated", x2, `select public.admin_delete_user($1)`, [x1]);
+check("only admins delete other people's accounts", /not allowed/.test(r.error ?? ""));
+r = await tryQuery("authenticated", x2, `select * from public.admin_account_files($1)`, [x1]);
+check("only admins list other people's chat files", /not allowed/.test(r.error ?? ""));
+r = await tryQuery("authenticated", x2, `delete from storage.objects where name = $1 returning id`, [`${x1}/avatar.jpg`]);
+check("people can't delete other people's files", !r.error && r.rows.length === 0);
+r = await tryQuery("authenticated", admin, `select * from public.admin_account_files($1)`, [x1]);
+check("the founder lists someone's chat files", !r.error);
+r = await tryQuery("authenticated", admin, `select name from storage.objects where bucket_id = 'profile-photos' and name like $1`, [`${x1}/%`]);
+check("the founder lists someone's photos", r.rows?.length === 1);
+r = await tryQuery("authenticated", admin, `delete from storage.objects where bucket_id = 'profile-photos' and name = $1 returning id`, [`${x1}/avatar.jpg`]);
+check("the founder deletes someone's photos", r.rows?.length === 1);
+r = await tryQuery("authenticated", admin, `select public.admin_delete_user($1)`, [admin]);
+check("admins can't be deleted from the panel", /cannot_delete_admin/.test(r.error ?? ""));
+r = await tryQuery("authenticated", admin, `select public.admin_delete_user($1)`, [x1]);
+check("the founder deletes an account", !r.error);
+r = await db.query(`select (select count(*)::int from auth.users where id = $1) u, (select count(*)::int from public.profiles where id = $1) p`, [x1]);
+check("their login and profile are gone", r.rows?.[0]?.u === 0 && r.rows[0].p === 0);
+r = await tryQuery("service_role", null, `select host_id, status from public.meetups where id = $1`, [x1Table]);
+check("their table with others is cancelled and passes on", r.rows?.[0]?.host_id === x2 && r.rows[0].status === "cancelled");
+r = await db.query(`select owner_id from public.chat_groups where id = $1`, [xGroup]);
+check("their group passes to the next member", r.rows?.[0]?.owner_id === x2);
+r = await tryQuery("authenticated", admin, `select public.admin_delete_user($1)`, [x1]);
+check("deleting a missing account says not_found", /not_found/.test(r.error ?? ""));
+r = await tryQuery("authenticated", x2, `select public.leave_group($1)`, [xGroup]);
+check("leave_group still works", !r.error);
+r = await db.query(`select count(*)::int n from public.chat_groups where id = $1`, [xGroup]);
+check("the last one out deletes the group", r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", x2, `select public.leave_group($1)`, [xGroup]);
+check("leaving a group you're not in says not_found", /not_found/.test(r.error ?? ""));
 
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

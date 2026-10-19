@@ -233,7 +233,10 @@ Product spec and tech stack below are agreed. Built so far:
   banner. **Delete account** (Settings): `deleteAccount()` in `src/lib/auth.tsx` removes my chat files
   (`my_account_files`) and profile photos, then `delete_my_account()` (groups pass on via `leave_group`, hosted
   meetups with others are cancelled if upcoming and passed to the longest other member, then `auth.users` row deleted;
-  everything else cascades). **Terms / Privacy**: one source `mobile/src/legal/content.ts` (EN + TH draft, PDPA),
+  everything else cascades). The founder can do the same for someone else at **/admin/users** (search by name / email, Delete account, type
+  DELETE to confirm; `*_admin_delete_user.sql`): the panel removes their files (`admin_account_files` + admin storage
+  policies on the people-owned buckets), then `admin_delete_user(user)` (admins can't be deleted there). Both use
+  `delete_account(user)` (no API access); `leave_group` and the deletion share `group_remove_member(group, user)`. **Terms / Privacy**: one source `mobile/src/legal/content.ts` (EN + TH draft, PDPA),
   copied to `web/src/lib/legal-content.ts` by `npm run sync:legal` (`check:legal` compares); app screen
   `src/app/legal/[doc].tsx` (outside the sign-in guards; linked on welcome and Settings → About), web `/terms`,
   `/privacy`, `/delete-account` (`?lang=th`). Business name / contact email: `EXPO_PUBLIC_BUSINESS_NAME`,
@@ -342,7 +345,8 @@ Product spec and tech stack below are agreed. Built so far:
   (`VenueMap` `center` + `interactive={false}`), tags, details card, check-in box with a brand-gradient frame,
   members with "Checked in ✓" (`useCheckedIn`), chat + leave / cancel / join in a bottom bar, Share. Welcome: the
   icon artwork as hero until a photo is supplied. Phone code: six boxes over one hidden input.
-- **Not started:** web push to the founder's phone for redemptions, tables/users in the admin panel, Apple token
+- **Not started:** web push to the founder's phone for redemptions, tables in the admin panel, viewing / blocking users (only
+  deletion exists), Apple token
   revocation on account deletion. Places missing from OpenStreetMap can be added by the founder (admin insert into `places`; no UI yet).
 - Running on the founder's Redmi as a local release APK, connected to the real Supabase project
   (`zxghiilryqzexzvacbrl`, migrations applied by Supabase's GitHub integration on push to `main`).

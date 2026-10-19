@@ -88,6 +88,7 @@ function RootNavigator() {
           <Stack.Screen name="new-group" />
           <Stack.Screen name="group/[id]" />
           <Stack.Screen name="group-info/[id]" />
+          <Stack.Screen name="plus" />
           <Stack.Screen name="post-story" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="story/[userId]" options={{ presentation: 'fullScreenModal', animation: 'fade' }} />
         </Stack.Protected>

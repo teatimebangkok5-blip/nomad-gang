@@ -76,7 +76,7 @@ const TERMS: Record<LegalLanguage, RawDoc> = {
       {
         heading: '7. The service',
         paragraphs: [
-          'TableMeet is free to use. We may change, pause or stop features at any time.',
+          'TableMeet is free to use, with ads. TableMeet Plus is an optional paid membership (monthly or yearly) that unlocks Plan my day, Hidden Gems and the Rewards Passport and removes ads; it lasts for the period you paid for. We may change, pause or stop features at any time.',
           'You can delete your account at any time in Settings → Delete account. We may suspend or close accounts that break these Terms or the law.',
         ],
       },
@@ -157,7 +157,7 @@ const TERMS: Record<LegalLanguage, RawDoc> = {
       {
         heading: '7. บริการ',
         paragraphs: [
-          'TableMeet ใช้งานได้ฟรี เราอาจเปลี่ยนแปลง หยุดชั่วคราว หรือยกเลิกฟีเจอร์ได้ทุกเมื่อ',
+          'TableMeet ใช้งานได้ฟรีโดยมีโฆษณา TableMeet Plus เป็นสมาชิกแบบชำระเงินที่ไม่บังคับ (รายเดือนหรือรายปี) ซึ่งปลดล็อกวางแผนวันของฉัน ฮิดเดนเจมส์ และพาสปอร์ตสะสมรางวัล และไม่มีโฆษณา ใช้ได้ตามระยะเวลาที่คุณชำระ เราอาจเปลี่ยนแปลง หยุดชั่วคราว หรือยกเลิกฟีเจอร์ได้ทุกเมื่อ',
           'คุณลบบัญชีได้ทุกเมื่อที่ การตั้งค่า → ลบบัญชี เราอาจระงับหรือปิดบัญชีที่ละเมิดข้อกำหนดนี้หรือกฎหมาย',
         ],
       },
@@ -227,6 +227,7 @@ const PRIVACY: Record<LegalLanguage, RawDoc> = {
           '• Other users: your profile (age, not your birthday), what you post in chats to the people in them, and the tables and hangouts you join.',
           '• Partner venue staff: only the coupon page and how many people are checked in.',
           '• Service providers that run TableMeet for us: Supabase (database, files and sign-in; servers in Singapore), Google (sign-in), Apple (sign-in on iPhone), OpenFreeMap (map tiles: receives your IP address when the map loads), Photon by komoot (place search: receives what you type), Wikimedia Commons (place photos) and Vercel (our website).',
+          '• Google AdMob (ads, for people without TableMeet Plus): when an ad is shown, Google receives your device\'s advertising ID, IP address and basic device information to show and measure ads. In the EEA, UK and Switzerland you are asked for consent first. You can reset or delete the advertising ID in your phone\'s settings.',
           '• Other websites only if you open their links (for example travel deals or ticket pages).',
           '• Authorities, when the law requires it.',
         ],
@@ -319,6 +320,7 @@ const PRIVACY: Record<LegalLanguage, RawDoc> = {
           '• ผู้ใช้อื่น: โปรไฟล์ของคุณ (อายุ ไม่ใช่วันเกิด) สิ่งที่คุณโพสต์ในแชทสำหรับคนในแชทนั้น และโต๊ะหรือแฮงเอาท์ที่คุณเข้าร่วม',
           '• พนักงานร้านพาร์ทเนอร์: เห็นเพียงหน้าคูปองและจำนวนคนที่เช็กอิน',
           '• ผู้ให้บริการที่ช่วยเราให้บริการ TableMeet: Supabase (ฐานข้อมูล ไฟล์ และการเข้าสู่ระบบ เซิร์ฟเวอร์ที่สิงคโปร์) Google (การเข้าสู่ระบบ) Apple (การเข้าสู่ระบบบน iPhone) OpenFreeMap (ภาพแผนที่ ได้รับที่อยู่ IP ของคุณเมื่อโหลดแผนที่) Photon โดย komoot (ค้นหาสถานที่ ได้รับคำที่คุณพิมพ์) Wikimedia Commons (รูปสถานที่) และ Vercel (เว็บไซต์ของเรา)',
+          '• Google AdMob (โฆษณา สำหรับผู้ที่ไม่ได้เป็นสมาชิก TableMeet Plus): เมื่อแสดงโฆษณา Google จะได้รับรหัสโฆษณาของอุปกรณ์ ที่อยู่ IP และข้อมูลพื้นฐานของอุปกรณ์ เพื่อแสดงและวัดผลโฆษณา ผู้ใช้ในเขตเศรษฐกิจยุโรป สหราชอาณาจักร และสวิตเซอร์แลนด์จะถูกขอความยินยอมก่อน คุณรีเซ็ตหรือลบรหัสโฆษณาได้ในการตั้งค่าโทรศัพท์',
           '• เว็บไซต์อื่น เฉพาะเมื่อคุณเปิดลิงก์ของเขา (เช่น ดีลท่องเที่ยวหรือหน้าขายตั๋ว)',
           '• หน่วยงานรัฐ เมื่อกฎหมายกำหนด',
         ],

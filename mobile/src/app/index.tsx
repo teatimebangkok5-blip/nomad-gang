@@ -51,6 +51,8 @@ import { usePlansForMeetups, type DayPlan } from '@/lib/plans';
 import { useChats } from '@/lib/messages';
 import { useNotifications } from '@/lib/notifications';
 import { useMyName } from '@/lib/profiles';
+import { prepareAds, withAd } from '@/lib/ads';
+import { usePlus } from '@/lib/plus';
 import { clearMyExpiredStories, groupStories, useStories } from '@/lib/stories';
 import { makeStyles, useColors } from '@/lib/theme';
 
@@ -128,6 +130,14 @@ export default function HomeScreen() {
   // Hangouts made from a day plan: tapping their pin draws the plan's route.
   const dayPlans = usePlansForMeetups(visibleMeetups.filter((meetup) => meetup.kind === 'hangout').map((meetup) => meetup.id));
   const selectedPlan = popMeetups.map((meetup) => dayPlans.get(meetup.id)).find((plan) => plan) ?? null;
+  const plus = usePlus();
+  const plusMember = plus.status === 'ready' && plus.member;
+  const plusUnlocked = plus.status === 'ready' && plus.unlocked;
+  // Ads load only for signed-in people without Plus.
+  useEffect(() => {
+    if (session && plus.status === 'ready' && !plusMember) prepareAds();
+  }, [session, plus.status, plusMember]);
+
   // Stories: one pin per person (their profile picture in a brand ring) at their latest story. Key s:<user id>.
   const { stories } = useStories(!!session);
   useEffect(() => {
@@ -198,7 +208,15 @@ export default function HomeScreen() {
     setSelection(venue ? { type: 'venue', venueId: venue.id } : { type: 'place', place });
   }
 
-  const openTable = (meetup: OpenMeetup) => router.push({ pathname: '/table/[id]', params: { id: meetup.id } });
+  // Opening a hangout, Create table / Create hangout and stories can show a pop-up ad first (once per app opening,
+  // never for Plus members).
+  const openTable = (meetup: OpenMeetup) => {
+    const open = () => router.push({ pathname: '/table/[id]', params: { id: meetup.id } });
+    if (meetup.kind === 'hangout') withAd(plusMember, open);
+    else open();
+  };
+  // Plan my day, Hidden Gems and the Passport are for Plus members: others see the Plus page.
+  const openPlus = (path: '/plan-day' | '/gems' | '/passport') => router.push(plusUnlocked ? path : '/plus');
 
   const renderMeetup = (meetup: OpenMeetup, compact = true) => (
     <MeetupCard
@@ -225,7 +243,7 @@ export default function HomeScreen() {
         userCoords={coords}
         onPinPress={(key) =>
           key.startsWith('s:')
-            ? router.push({ pathname: '/story/[userId]', params: { userId: key.slice(2) } })
+            ? withAd(plusMember, () => router.push({ pathname: '/story/[userId]', params: { userId: key.slice(2) } }))
             : setSelection((current) => (current?.type === 'pin' && current.key === key ? null : { type: 'pin', key }))
         }
         onMapPress={() => selection?.type === 'pin' && setSelection(null)}
@@ -309,11 +327,11 @@ export default function HomeScreen() {
                 label={t('stories.add')}
                 onPress={() => router.push('/post-story')}
               />
-              <RoundButton size={40} icon="route" tone="plan" star label={t('plan.open')} onPress={() => router.push('/plan-day')} />
-              <RoundButton size={40} label={t('gems.title')} onPress={() => router.push('/gems')}>
+              <RoundButton size={40} icon="route" tone="plan" star label={t('plan.open')} onPress={() => openPlus('/plan-day')} />
+              <RoundButton size={40} label={t('gems.title')} onPress={() => openPlus('/gems')}>
                 <Text style={styles.emojiButton}>💎</Text>
               </RoundButton>
-              <RoundButton size={40} label={t('passport.title')} onPress={() => router.push('/passport')}>
+              <RoundButton size={40} label={t('passport.title')} onPress={() => openPlus('/passport')}>
                 <Text style={styles.emojiButton}>🎫</Text>
               </RoundButton>
               <View style={styles.divider} />
@@ -397,7 +415,7 @@ export default function HomeScreen() {
                   compact
                   title={t('tables.createTable')}
                   icon={<Icon name="addCircle" size={22} color={Colors.onBrand} />}
-                  onPress={() => router.push('/create-table')}
+                  onPress={() => withAd(plusMember, () => router.push('/create-table'))}
                 />
               </View>
               <View style={styles.flex}>
@@ -406,7 +424,7 @@ export default function HomeScreen() {
                   variant="violet"
                   title={t('hangouts.createHangout')}
                   icon={<Icon name="addCircle" size={22} color={Colors.white} />}
-                  onPress={() => router.push('/create-hangout')}
+                  onPress={() => withAd(plusMember, () => router.push('/create-hangout'))}
                 />
               </View>
             </View>

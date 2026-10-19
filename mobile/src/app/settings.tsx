@@ -76,6 +76,7 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.group}>
           <GlossyFill />
+          <OptionRow icon="verified" label={`✨ ${t('plus.open')}`} onPress={() => router.push('/plus')} />
           <OptionRow icon="event" label={`🎫 ${t('passport.title')}`} onPress={() => router.push('/passport')} />
           <OptionRow icon="deal" label={`🎁 ${t('rewards.title')}`} onPress={() => router.push('/rewards')} />
         </View>

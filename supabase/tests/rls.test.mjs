@@ -43,6 +43,8 @@ await db.exec(migration);
 console.log("migration applied OK");
 // The checks below were written for the launch rules (phone required); the "no phone check" mode is tested at the end.
 await db.exec(`update public.app_settings set require_phone_verification = true`);
+// Plus features are unlocked for the older checks; the Plus lock is tested at the end.
+await db.exec(`update public.app_settings set plus_locked = false`);
 
 const admin = "11111111-1111-1111-1111-111111111111";
 const user = "22222222-2222-2222-2222-222222222222";
@@ -1563,6 +1565,54 @@ check("a deleted story is gone", /not_found/.test(r.error ?? ""));
 await db.query(`insert into public.stories (user_id, photo_path, lat, lng) select $1::uuid, $1::text || '/s' || g || '.jpg', 13.75, 100.5 from generate_series(1, 10) g`, [s2]);
 r = await tryQuery("authenticated", s2, `select public.post_story($1, '', 13.75, 100.5)`, [`${s2}/eleventh.jpg`]);
 check("max 10 stories per person per 24 hours", /too_many_stories/.test(r.error ?? ""));
+
+// --- TableMeet Plus
+await db.exec(`update public.app_settings set plus_locked = true`);
+r = await tryQuery("authenticated", s4, `select * from public.list_gems()`);
+check("Hidden Gems are empty without Plus", !r.error && r.rows.length === 0);
+r = await tryQuery("authenticated", s4, `select public.my_passport()`);
+check("the Passport needs Plus", /plus_required/.test(r.error ?? ""));
+r = await tryQuery("authenticated", s4, `select * from public.plan_candidates(13.75, 100.5, 3000, array['temple'])`);
+check("the day planner finds nothing without Plus", !r.error && r.rows.length === 0);
+r = await tryQuery("authenticated", s4, `insert into public.day_plans (owner_id, title, day, start_minutes, end_minutes, stops) values ($1, 'x', current_date, 540, 720, '[]')`, [s4]);
+check("saving a day plan needs Plus", !!r.error);
+r = await tryQuery("authenticated", s4, `select public.suggest_gem('x', 'food', '', '', '', 13.75, 100.5, null)`);
+check("suggesting a gem needs Plus", /plus_required/.test(r.error ?? ""));
+r = await tryQuery("authenticated", s4, `select public.list_gems_all()`);
+check("the inner functions have no API access", !!r.error);
+r = await tryQuery("authenticated", s4, `select public.my_plus() as p`);
+check("my Plus status: not a member", r.rows?.[0]?.p?.member === false && r.rows[0].p.unlocked === false);
+r = await tryQuery("authenticated", s4, `select public.admin_grant_plus($1, 'monthly', null)`, [s4]);
+check("only the founder gives Plus", !!r.error);
+r = await tryQuery("authenticated", s4, `select * from public.admin_find_users('story')`);
+check("only the founder searches users", !!r.error);
+r = await tryQuery("authenticated", admin, `select id, email from public.admin_find_users('story3')`);
+check("the founder finds people by email", r.rows?.length === 1 && r.rows[0].id === s4);
+r = await tryQuery("authenticated", admin, `select public.admin_grant_plus($1, 'monthly', 'Launch friend') as ends`, [s4]);
+const monthEnd = r.rows?.[0]?.ends ? new Date(r.rows[0].ends).getTime() : 0;
+check("give Plus for a month", !r.error && monthEnd > Date.now() + 27 * 86400000 && monthEnd < Date.now() + 32 * 86400000);
+r = await tryQuery("authenticated", admin, `select public.admin_grant_plus($1, 'yearly', null) as ends`, [s4]);
+check("a yearly plan is added after the current end", new Date(r.rows?.[0]?.ends).getTime() - monthEnd > 364 * 86400000);
+r = await tryQuery("authenticated", s4, `select public.my_plus() as p`);
+check("my Plus status: member, yearly", r.rows?.[0]?.p?.member === true && r.rows[0].p.unlocked === true && r.rows[0].p.plan === "yearly");
+r = await tryQuery("authenticated", s4, `select count(*)::int n from public.list_gems()`);
+check("Plus members see the Hidden Gems", r.rows?.[0]?.n > 100);
+r = await tryQuery("authenticated", s4, `select public.my_passport() as p`);
+check("Plus members open the Passport", !r.error && r.rows?.[0]?.p !== null);
+r = await tryQuery("authenticated", s5, `select * from public.plus_members`);
+check("Plus rows are private", !r.error && r.rows.length === 0);
+r = await tryQuery("authenticated", s4, `update public.plus_members set ends_at = now() + interval '10 years' returning user_id`);
+check("members can't extend Plus themselves", !!r.error || r.rows.length === 0);
+r = await tryQuery("authenticated", admin, `select user_id, note from public.admin_list_plus()`);
+check("the founder lists Plus members", r.rows?.length === 1 && r.rows[0].note === "Launch friend");
+await tryQuery("authenticated", admin, `select public.admin_end_plus($1)`, [s4]);
+r = await tryQuery("authenticated", s4, `select count(*)::int n from public.list_gems()`);
+check("ending Plus locks the features again", r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", admin, `select count(*)::int n from public.list_gems()`);
+check("the founder always has Plus", r.rows?.[0]?.n > 100);
+await db.exec(`update public.app_settings set plus_locked = false`);
+r = await tryQuery("authenticated", s5, `select count(*)::int n from public.list_gems()`);
+check("turning plus_locked off opens the features to everyone", r.rows?.[0]?.n > 100);
 
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

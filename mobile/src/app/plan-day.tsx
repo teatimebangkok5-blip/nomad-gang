@@ -12,6 +12,7 @@ import { MapSearchBar } from '@/components/map-search';
 import { planShareText } from '@/components/plan-timeline';
 import { MakeHangoutBox, PlanView } from '@/components/plan-view';
 import { ScreenHeader } from '@/components/screen-header';
+import { RequirePlus } from '@/components/require-plus';
 import { Radius, Raised, Spacing, Type } from '@/constants/theme';
 import { localized, useLanguage } from '@/i18n';
 import { useAuth } from '@/lib/auth';
@@ -73,10 +74,19 @@ type Result = {
   areaLabel: string | null;
 };
 
+// Plus only (TableMeet Plus); people without Plus see the Plus page.
+export default function PlanDayScreenRoute() {
+  return (
+    <RequirePlus>
+      <PlanDayScreen />
+    </RequirePlus>
+  );
+}
+
 // "Plan my day": choose a start, a day and hours, what you like, entry and how to get around; the app plans the day
 // (rule-based, from TableMeet's places). The plan can be edited, saved, shared as a message or turned into a day
 // hangout others join.
-export default function PlanDayScreen() {
+function PlanDayScreen() {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();

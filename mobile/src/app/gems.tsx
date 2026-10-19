@@ -11,15 +11,25 @@ import { Icon } from '@/components/icon';
 import { MapHeader } from '@/components/map-header';
 import { SlideUpPanel } from '@/components/slide-up-panel';
 import { VenueMap, type MapPin } from '@/components/venue-map';
+import { RequirePlus } from '@/components/require-plus';
 import { Radius, RaisedSmall, Spacing, Type } from '@/constants/theme';
 import { useLanguage } from '@/i18n';
 import { GEM_BUDGETS, GEM_CATEGORIES, GEM_CATEGORY_EMOJI, matchesBudget, useGems, type GemBudget, type GemCategory } from '@/lib/gems';
 import { BANGKOK_CENTER, inBangkok, useCurrentLocation } from '@/lib/location';
 import { makeStyles, useColors } from '@/lib/theme';
 
+// Plus only (TableMeet Plus); people without Plus see the Plus page.
+export default function GemsScreenRoute() {
+  return (
+    <RequirePlus>
+      <GemsScreen />
+    </RequirePlus>
+  );
+}
+
 // Hidden Gems map: the curated Bangkok places tourists often miss, filtered by area, category, budget or saved.
 // Tap a gem for its card; "List" shows them all. Users can suggest a place.
-export default function GemsScreen() {
+function GemsScreen() {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();

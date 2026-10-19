@@ -251,6 +251,26 @@ Product spec and tech stack below are agreed. Built so far:
   cost. Planned next (founder, 2026-10-18, in this order): Rewards Passport (stamps / points / milestones 3-5-10,
   completion by GPS check-in or host code + admin review), Hidden Gems (founder supplies the list), Locals + Safety +
   Invites, and map "stories" on home instead of a posts feed.
+- **TableMeet Plus + AdMob ads** (added 2026-10-19, `*_tablemeet_plus.sql`). Founder's decisions: Plus = Plan my
+  day, Hidden Gems, Rewards Passport, and no ads; **payments not built yet**, the founder gives Plus by hand at
+  **/admin/plus** (search by name / email via `admin_find_users`, Give 1 month / 1 year with `admin_grant_plus`, added
+  after the current end; End now = `admin_end_plus`; list = `admin_list_plus`); plans monthly + yearly (Google Play
+  billing later, likely RevenueCat). `plus_members` (own row readable, no direct writes), `has_plus(user)` (admins
+  always), `plus_unlocked()` (member, or `app_settings.plus_locked = false`), `my_plus()` → `{member, unlocked, plan,
+  ends_at}`. Locked **on the server** by renaming the old functions to `*_all` (no API access) behind same-named
+  wrappers: `list_gems`, `plan_candidates`, `plan_food_near` return nothing; `my_passport`, `suggest_gem`,
+  `create_plan_hangout` raise `plus_required`; inserting a `day_plans` row needs Plus. Free stays free: a day
+  hangout's plan on its table screen and `plan/[id]`, check-ins, completion codes. App: `usePlus()`
+  (`src/lib/plus.ts`), `RequirePlus` (`src/components/require-plus.tsx`) wraps plan-day, gems, gem/[id], suggest-gem
+  and passport (→ redirect to `src/app/plus.tsx`: benefits, Monthly / Yearly, "Contact us" mailto
+  `EXPO_PUBLIC_CONTACT_EMAIL`); home's Plan my day / Gems / Passport buttons go straight to /plus when locked;
+  Settings has a Plus row. **Ads**: `react-native-google-mobile-ads` (plugin in `app.json` with Google's **sample App
+  ID** until the founder's AdMob account exists; README step 6), interstitial unit `EXPO_PUBLIC_ADMOB_INTERSTITIAL_ID`
+  (empty = `TestIds.INTERSTITIAL`). `src/lib/ads.ts`: `prepareAds()` (UMP consent via `AdsConsent.gatherConsent`,
+  then initialize + preload; only for signed-in non-members) and `withAd(isMember, action)`: **at most one ad per app
+  opening** (back after 30 min in the background = new opening) on opening a hangout from home, Create table, Create
+  hangout and tapping a story pin; the action runs when the ad closes, or at once if no ad is ready. Terms (§7) and
+  Privacy (AdMob, advertising ID, EEA consent) updated.
 - **Map stories** (added 2026-10-19, `*_map_stories.sql`): camera button first in the home row (before Plan my day)
   → `src/app/post-story.tsx` (take / pick a photo, caption ≤ 150) → `post_story(path, caption, lat, lng)`: pinned on
   the home map for **24 hours** for everyone signed in (anywhere in the world), except across a block. **The exact

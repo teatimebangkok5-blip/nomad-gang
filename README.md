@@ -129,6 +129,29 @@ npx eas-cli@latest credentials    # Android -> development: note the SHA-1 finge
 
 Rebuild (step 3) only when you add a library with native code. Normal code changes appear instantly.
 
+### 6. Ads (Google AdMob) and TableMeet Plus
+
+People without Plus see one pop-up ad each time they open the app (on opening a hangout from home, Create table,
+Create hangout or a story). Until you set up AdMob, the app shows Google's **test ads**, which is fine for testing
+but earns nothing. Never tap your own real ads.
+
+1. Create a free account at <https://admob.google.com> and add the app: Android, then **"No, it's not listed on a
+   supported app store"** until TableMeet is on Google Play (link it to the Play listing later).
+2. Copy the **App ID** (`ca-app-pub-…~…`) into `mobile/app.json` → `react-native-google-mobile-ads` →
+   `androidAppId`, replacing Google's sample ID.
+3. In the app, go to **Ad units → Add ad unit → Interstitial**, then copy its ID (`ca-app-pub-…/…`) into
+   `mobile/.env.local` as `EXPO_PUBLIC_ADMOB_INTERSTITIAL_ID`.
+4. **Privacy & messaging → GDPR**: create and publish the consent message. Travellers from Europe are shown it
+   automatically before any ad.
+5. Rebuild the app (`npx expo prebuild --platform android`, then the release APK), because the App ID is native.
+6. In Play Console, answer **"Contains ads: Yes"** and, under Data safety, declare **Device or other IDs** (advertising
+   ID) collected by AdMob for advertising.
+
+**Plus** has no payments yet. When someone pays you, open the admin panel → **Plus**, search them by name or email,
+and tap **Give 1 month** or **Give 1 year** (giving more while they still have Plus adds it after the current end).
+To open Plan my day, Hidden Gems and the Passport to everyone, run
+`update public.app_settings set plus_locked = false;` in the Supabase SQL editor.
+
 ## Website on Vercel (staff QR page, Terms, Privacy, Delete account)
 
 Redemption QR codes open `<website>/r/<code>`, so the website must be online before coupons work.

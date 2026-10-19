@@ -10,6 +10,7 @@ import { Chip } from '@/components/chip';
 import { Icon } from '@/components/icon';
 import { ScreenHeader } from '@/components/screen-header';
 import { VenueMap } from '@/components/venue-map';
+import { RequirePlus } from '@/components/require-plus';
 import { Radius, Spacing, Type } from '@/constants/theme';
 import { useAuth } from '@/lib/auth';
 import { GEM_CATEGORIES, GEM_CATEGORY_EMOJI, suggestGem, type GemCategory, type SuggestErrorKey } from '@/lib/gems';
@@ -18,9 +19,18 @@ import { pickAndUploadPhoto } from '@/lib/photos';
 import { supabase } from '@/lib/supabase';
 import { makeStyles, useColors } from '@/lib/theme';
 
+// Plus only (TableMeet Plus); people without Plus see the Plus page.
+export default function SuggestGemScreenRoute() {
+  return (
+    <RequirePlus>
+      <SuggestGemScreen />
+    </RequirePlus>
+  );
+}
+
 // Suggest a Hidden Gem: name, category, what makes it special, a local tip, price, a pin on the map and an optional
 // photo. The founder checks it before it appears for everyone (and credits the person who suggested it).
-export default function SuggestGemScreen() {
+function SuggestGemScreen() {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();

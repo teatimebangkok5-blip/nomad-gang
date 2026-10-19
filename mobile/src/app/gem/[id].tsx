@@ -9,6 +9,7 @@ import { GlossyFill } from '@/components/glossy';
 import { Icon, type IconName } from '@/components/icon';
 import { MeetupCard } from '@/components/meetup-card';
 import { ScreenHeader } from '@/components/screen-header';
+import { RequirePlus } from '@/components/require-plus';
 import { Radius, Raised, Spacing, Type } from '@/constants/theme';
 import { localized, useLanguage } from '@/i18n';
 import { useAuth } from '@/lib/auth';
@@ -21,9 +22,18 @@ import { useVenues } from '@/lib/venues';
 // Open tables / hangouts this close to a gem are shown on it.
 const NEARBY_METERS = 300;
 
+// Plus only (TableMeet Plus); people without Plus see the Plus page.
+export default function GemScreenRoute() {
+  return (
+    <RequirePlus>
+      <GemScreen />
+    </RequirePlus>
+  );
+}
+
 // One Hidden Gem: photo, what it is, price, hours, the local tip and the suggested activity, with "Start this
 // activity" (a hangout there), open tables / hangouts nearby, save, useful, share and directions.
-export default function GemScreen() {
+function GemScreen() {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();

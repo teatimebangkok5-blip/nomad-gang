@@ -31,6 +31,9 @@ export default function PanelLayout({ children }: { children: ReactNode }) {
               <Link href="/admin/travel-deals" className="font-medium text-ink-700 hover:text-brand-700">
                 Travel deals
               </Link>
+              <Link href="/admin/plus" className="font-medium text-ink-700 hover:text-brand-700">
+                Plus
+              </Link>
             </nav>
           </div>
           <form action={signOut}>

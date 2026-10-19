@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '@/components/button';
 import { GlossyFill, Shine } from '@/components/glossy';
 import { ScreenHeader } from '@/components/screen-header';
+import { RequirePlus } from '@/components/require-plus';
 import { BrandGradient, Radius, Raised, Spacing, Type } from '@/constants/theme';
 import { localized, useLanguage } from '@/i18n';
 import { formatWhen } from '@/lib/bangkok-time';
@@ -27,9 +28,18 @@ import { makeStyles, useColors } from '@/lib/theme';
 // Bangkok has 50 districts (khet); the stamps collect them.
 const BANGKOK_DISTRICTS = 50;
 
+// Plus only (TableMeet Plus); people without Plus see the Plus page.
+export default function PassportScreenRoute() {
+  return (
+    <RequirePlus>
+      <PassportScreen />
+    </RequirePlus>
+  );
+}
+
 // Rewards Passport: points, progress to the 3 / 5 / 10 milestones, district stamps, milestone rewards, challenges
 // and the verified meetups behind them.
-export default function PassportScreen() {
+function PassportScreen() {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();

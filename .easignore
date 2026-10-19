@@ -1,0 +1,38 @@
+# What EAS Build leaves out of the upload. When this file exists EAS ignores .gitignore, so it repeats those rules
+# (secrets included) and also drops everything the app build doesn't need (admin website, database, store images).
+
+# Not needed to build the app
+/web/
+/supabase/
+/store-screenshots/
+/apk/
+/.claude/
+
+# Local native folders and build output (EAS makes its own with prebuild)
+/mobile/android/
+/mobile/ios/
+node_modules/
+.expo/
+dist/
+web-build/
+.kotlin/
+*.tsbuildinfo
+expo-env.d.ts
+.metro-health-check*
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.orig.*
+.DS_Store
+
+# Secrets (EAS gets its values from the EAS environment instead)
+.env*.local
+*.jks
+*.p8
+*.p12
+*.key
+*.pem
+*.mobileprovision
+google-play-service-account.json
+google-services.json
+*firebase-adminsdk*.json

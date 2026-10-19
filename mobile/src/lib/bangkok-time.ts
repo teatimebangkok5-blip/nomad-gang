@@ -8,6 +8,7 @@ const BANGKOK = 'Asia/Bangkok';
 const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEKDAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'] as const;
 
 // A calendar day (in Bangkok, or in the given zone), counted in days since 1970-01-01.
 export type BangkokDay = number;
@@ -127,7 +128,10 @@ export function formatDayLabel(day: BangkokDay, t: TFunction, now = new Date(), 
   if (diff === 0) return t('tables.today');
   if (diff === 1) return t('tables.tomorrow');
   const date = new Date(day * DAY_MS);
-  return `${t(`weekday.${WEEKDAYS[date.getUTCDay()]}`)} ${date.getUTCDate()}`;
+  const label = `${t(`weekday.${WEEKDAYS[date.getUTCDay()]}`)} ${date.getUTCDate()}`;
+  // Meetup day chips reach 13 days ahead and stay short; further away (deal end dates, past events, old messages)
+  // "Wed 18" alone is ambiguous, so add the month: "Wed 18 Nov".
+  return diff < -6 || diff > 13 ? `${label} ${t(`month.${MONTHS[date.getUTCMonth()]}`)}` : label;
 }
 
 // "Today 20:00", "Tomorrow 19:30", "Sat 18 21:00".

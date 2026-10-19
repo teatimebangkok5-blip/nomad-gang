@@ -227,7 +227,10 @@ export function useGroup(groupId: string) {
   const load = useCallback(() => {
     supabase
       .from('chat_groups')
-      .select('id, name, emoji, owner_id, chat_group_members(user_id, joined_at, profiles(display_name, avatar_path))')
+      // chat_group_members links to profiles twice (user_id, added_by), so name the link to use.
+      .select(
+        'id, name, emoji, owner_id, chat_group_members(user_id, joined_at, profiles!chat_group_members_user_id_fkey(display_name, avatar_path))',
+      )
       .eq('id', groupId)
       .maybeSingle()
       .then(({ data, error }) => {

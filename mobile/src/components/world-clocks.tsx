@@ -55,7 +55,9 @@ export function WorldClocks({ zones, editable, onChanged }: { zones: string[]; e
             style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}>
             <GlossyFill />
             <Icon name="plus" size={18} color={Colors.accent} />
-            <Text style={styles.addText}>{t('profile.addClock')}</Text>
+            <Text style={styles.addText} numberOfLines={1}>
+              {t('profile.addClock')}
+            </Text>
           </Pressable>
         )}
       </View>
@@ -113,8 +115,9 @@ export function WorldClocks({ zones, editable, onChanged }: { zones: string[]; e
 
 const useStyles = makeStyles((Colors) => ({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
-  title: { ...Type.heading, color: Colors.text },
+  title: { ...Type.heading, color: Colors.text, flexShrink: 1 },
   addButton: {
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,

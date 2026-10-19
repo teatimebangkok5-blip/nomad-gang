@@ -110,7 +110,8 @@ const useStyles = makeStyles((Colors) => ({
   pressed: { opacity: 0.8 },
   photoWrap: { position: 'relative' },
   photo: { width: '100%', aspectRatio: 16 / 9, backgroundColor: Colors.surfaceRaised },
-  photoPlaceholder: { alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.orangeTint },
+  // No photo yet: a slim banner instead of an empty 16:9 box.
+  photoPlaceholder: { aspectRatio: 4, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.orangeTint },
   categoryChip: {
     position: 'absolute',
     top: Spacing.md,

@@ -27,7 +27,7 @@ import { LocationBubble, PhotoBubble, VoiceBubble } from '@/components/chat-bubb
 import { GlossyFill } from '@/components/glossy';
 import { Icon, type IconName } from '@/components/icon';
 import { Radius, Spacing, Type } from '@/constants/theme';
-import { bangkokMinutes, deviceZone, formatClock } from '@/lib/bangkok-time';
+import { bangkokDay, bangkokMinutes, deviceZone, formatClock, formatDayLabel } from '@/lib/bangkok-time';
 import type { ChatErrorKey, ChatMessage } from '@/lib/chat';
 import {
   editMessage,
@@ -198,19 +198,27 @@ export function ChatView({
       {banner}
       {messages === null ? (
         <ActivityIndicator color={Colors.accent} style={styles.spinner} />
+      ) : messages.length === 0 ? (
+        // Outside the inverted list: its flip differs by platform (Android flips both axes), which mirrored the text.
+        <View style={styles.flex}>
+          <Text style={styles.empty}>{emptyText ?? t('chat.empty')}</Text>
+        </View>
       ) : (
         <FlatList
           inverted
           data={messages}
           keyExtractor={(message) => message.id}
           contentContainerStyle={styles.list}
-          ListEmptyComponent={<Text style={[styles.empty, styles.flipped]}>{emptyText ?? t('chat.empty')}</Text>}
           renderItem={({ item, index }) => {
             const mine = item.sender_id === myId;
             // In an inverted list the next item is the older message.
             const older = messages[index + 1];
-            const firstOfRun = !older || older.sender_id !== item.sender_id;
-            return (
+            // A day label ("Today", "Sat 17") above the first message of each day, in the phone's time zone.
+            const zone = deviceZone();
+            const day = bangkokDay(new Date(item.created_at), zone);
+            const newDay = !older || bangkokDay(new Date(older.created_at), zone) !== day;
+            const firstOfRun = newDay || older.sender_id !== item.sender_id;
+            const row = (
               <View style={[styles.row, mine ? styles.rowMine : styles.rowTheirs, firstOfRun && styles.rowFirst]}>
                 {!mine &&
                   (firstOfRun ? (
@@ -233,6 +241,13 @@ export function ChatView({
                     onLongPress={mine && chat && item.kind !== 'unsent' ? () => messageMenu(item) : undefined}
                   />
                 </View>
+              </View>
+            );
+            if (!newDay) return row;
+            return (
+              <View>
+                <Text style={styles.dayLabel}>{formatDayLabel(day, t, undefined, zone)}</Text>
+                {row}
               </View>
             );
           }}
@@ -463,11 +478,10 @@ const useStyles = makeStyles((Colors) => ({
   flex: { flex: 1 },
   spinner: { marginTop: Spacing.xxl },
   list: { padding: Spacing.lg, gap: Spacing.xs, flexGrow: 1 },
-  // FlatList's inverted transform also flips the empty component.
-  flipped: { transform: [{ scaleY: -1 }] },
-  empty: { ...Type.body, color: Colors.textMuted, textAlign: 'center', marginTop: Spacing.xxl },
+  empty: { ...Type.body, color: Colors.textMuted, textAlign: 'center', marginTop: Spacing.xxl, paddingHorizontal: Spacing.lg },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
   rowFirst: { marginTop: Spacing.sm },
+  dayLabel: { ...Type.small, color: Colors.textMuted, textAlign: 'center', marginTop: Spacing.lg, marginBottom: Spacing.xs },
   rowMine: { justifyContent: 'flex-end' },
   rowTheirs: { justifyContent: 'flex-start' },
   avatarSpace: { width: AVATAR },

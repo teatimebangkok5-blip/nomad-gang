@@ -179,8 +179,9 @@ export default function CreateTableScreen() {
           }))}
           onPinPress={(id) => setPicked({ type: 'venue', venueId: id })}
           onMapPress={() => setPicked(null)}
-          places={mapPlaces}
-          placeDots={placeDots}
+          // Only partner venues have promotions, so a promotion filter hides the plain places.
+          places={promo ? [] : mapPlaces}
+          placeDots={promo ? [] : placeDots}
           dotsMinZoom={dotsMinZoom}
           onPlacePress={handlePlacePress}
           onBoundsChange={onBoundsChange}
@@ -199,6 +200,14 @@ export default function CreateTableScreen() {
             onChange={(value) => {
               setPromo(value);
               setPicked(null);
+              // Move to the nearest partner place with that promotion, which may be off screen.
+              const nearest = value
+                ? venues.venues
+                    .filter((venue) => !isHangoutVenue(venue) && venue.promotions.some((p) => p.kind === value))
+                    .map((venue) => ({ venue, distance: coords ? distanceMeters(coords, venue) : 0 }))
+                    .sort((a, b) => a.distance - b.distance)[0]?.venue
+                : undefined;
+              if (nearest) setFocus({ lat: nearest.lat, lng: nearest.lng, zoom: PLACE_ZOOM, seq: Date.now() });
             }}
           />
         </MapHeader>
@@ -236,7 +245,9 @@ export default function CreateTableScreen() {
             <View style={styles.hintCard}>
               <GlossyFill />
               <IconBadge icon="touch" tone="orange" />
-              <Text style={styles.hintText}>{t('tables.pickAnyPlace')}</Text>
+              <Text style={styles.hintText}>
+                {promo === null ? t('tables.pickAnyPlace') : places.length > 0 ? t('tables.pickPromoPlace') : t('tables.noPromoPlaces')}
+              </Text>
             </View>
           )}
         </View>

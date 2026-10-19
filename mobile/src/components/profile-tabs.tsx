@@ -6,7 +6,7 @@ import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native';
 import { Button } from '@/components/button';
 import { GlossyFill } from '@/components/glossy';
 import { Icon } from '@/components/icon';
-import { SearchPicker, useProfileOptions } from '@/components/profile-fields';
+import { compareNames, SearchPicker, useProfileOptions } from '@/components/profile-fields';
 import { WorldClocks } from '@/components/world-clocks';
 import { Radius, Raised, RaisedSmall, Spacing, Type } from '@/constants/theme';
 import { useLanguage } from '@/i18n';
@@ -158,7 +158,7 @@ export function TravelTab({ profile, isMe, onChanged }: { profile: Profile; isMe
         ) : (
           <View style={styles.tags}>
             {[...visited]
-              .sort((a, b) => countryName(a, language).localeCompare(countryName(b, language), language))
+              .sort((a, b) => compareNames(countryName(a, language), countryName(b, language), language))
               .map((code) => (
                 <Tag key={code} label={`${flagEmoji(code)} ${countryName(code, language)}`} />
               ))}

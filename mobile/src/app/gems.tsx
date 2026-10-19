@@ -147,10 +147,8 @@ function GemsScreen() {
         </View>
       </View>
 
-      <SlideUpPanel open={listOpen} onClose={() => setListOpen(false)}>
+      <SlideUpPanel open={listOpen} onClose={() => setListOpen(false)} title={t('gems.title')} subtitle={t('gems.intro')}>
         <ScrollView contentContainerStyle={styles.sheet}>
-          <Text style={styles.sheetTitle}>{t('gems.title')}</Text>
-          <Text style={styles.sheetHint}>{t('gems.intro')}</Text>
           <View style={styles.list}>
             {shown.map((gem) => (
               <GemCard
@@ -193,7 +191,5 @@ const useStyles = makeStyles((Colors) => ({
   pressed: { opacity: 0.8 },
   actionText: { ...Type.label, color: Colors.text },
   sheet: { padding: Spacing.lg, paddingBottom: Spacing.xxl * 2 },
-  sheetTitle: { ...Type.heading, color: Colors.text },
-  sheetHint: { ...Type.small, color: Colors.textSecondary, marginTop: Spacing.xs },
-  list: { gap: Spacing.md, marginTop: Spacing.lg },
+  list: { gap: Spacing.md },
 }));

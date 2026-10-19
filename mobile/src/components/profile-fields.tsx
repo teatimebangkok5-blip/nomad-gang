@@ -9,7 +9,7 @@ import { Chip } from '@/components/chip';
 import { GlossyFill } from '@/components/glossy';
 import { Icon, type IconName } from '@/components/icon';
 import { Radius, RaisedSmall, Spacing, Type } from '@/constants/theme';
-import { useLanguage } from '@/i18n';
+import { useLanguage, type Language } from '@/i18n';
 import { COUNTRIES, LANGUAGES } from '@/lib/countries';
 import {
   CLOCK_CITIES,
@@ -28,22 +28,50 @@ import { makeStyles, useColors } from '@/lib/theme';
 
 export type Option = { key: string; label: string; emoji?: string; search?: string[] };
 
+// The long lists (countries, languages, clock cities), sorted once per language. Sorting them on every render cost
+// seconds on Android: Hermes builds a new collator for each localeCompare(…, locale) call.
+type SortedLists = { countries: Option[]; languages: Option[]; cities: Option[] };
+const sortedLists = new Map<Language, SortedLists>();
+
+function listsFor(language: Language): SortedLists {
+  let lists = sortedLists.get(language);
+  if (!lists) {
+    const other = language === 'th' ? 'en' : 'th';
+    const compare = new Intl.Collator(language).compare;
+    const byLabel = (a: Option, b: Option) => compare(a.label, b.label);
+    lists = {
+      countries: COUNTRIES.map((c) => ({ key: c.code, label: c[language], emoji: flagEmoji(c.code), search: [c[other], c.code] })).sort(byLabel),
+      languages: LANGUAGES.map((l) => ({ key: l.code, label: l[language], emoji: flagEmoji(l.flag), search: [l[other]] })).sort(byLabel),
+      cities: CLOCK_CITIES.map((c) => ({ key: c.zone, label: c[language], emoji: '🕒', search: [c[other], c.zone] })).sort(byLabel),
+    };
+    sortedLists.set(language, lists);
+  }
+  return lists;
+}
+
+// Sorts names the way people of that language expect, with one shared collator per language.
+const collators = new Map<Language, Intl.Collator>();
+export function compareNames(a: string, b: string, language: Language): number {
+  let collator = collators.get(language);
+  if (!collator) {
+    collator = new Intl.Collator(language);
+    collators.set(language, collator);
+  }
+  return collator.compare(a, b);
+}
+
 // The translated choices for every profile question.
 export function useProfileOptions() {
   const { t } = useTranslation();
   const language = useLanguage();
-  const other = language === 'th' ? 'en' : 'th';
-  const byLabel = (a: Option, b: Option) => a.label.localeCompare(b.label, language);
+  const lists = listsFor(language);
   return {
-    countries: COUNTRIES.map((c) => ({ key: c.code, label: c[language], emoji: flagEmoji(c.code), search: [c[other], c.code] })).sort(byLabel),
-    languages: [
-      ...LANGUAGES.map((l) => ({ key: l.code, label: l[language], emoji: flagEmoji(l.flag), search: [l[other]] })).sort(byLabel),
-      { key: 'other', label: t('about.otherLanguage'), emoji: '🌐' },
-    ],
+    countries: lists.countries,
+    languages: [...lists.languages, { key: 'other', label: t('about.otherLanguage'), emoji: '🌐' }],
     professions: PROFESSIONS.map((key) => ({ key, label: t(`about.professions.${key}`) })),
     styles: TRAVEL_STYLES.map((key) => ({ key, label: t(`about.styles.${key}`) })),
     interests: INTERESTS.map(({ key, emoji }) => ({ key, emoji, label: t(`about.interestNames.${key}`) })),
-    cities: CLOCK_CITIES.map((c) => ({ key: c.zone, label: c[language], emoji: '🕒', search: [c[other], c.zone] })).sort(byLabel),
+    cities: lists.cities,
   };
 }
 

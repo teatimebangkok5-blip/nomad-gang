@@ -14,7 +14,7 @@ export type LegalDoc = { title: string; updated: string; intro: string[]; sectio
 // sets them; the texts then use generic wording.
 export type LegalContact = { operator: string | null; email: string | null; webUrl: string | null };
 
-const UPDATED: Record<LegalLanguage, string> = { en: '18 October 2026', th: '18 ตุลาคม 2569' };
+const UPDATED: Record<LegalLanguage, string> = { en: '19 October 2026', th: '19 ตุลาคม 2569' };
 
 type RawDoc = { title: string; intro: string[]; sections: LegalSection[] };
 
@@ -219,7 +219,7 @@ const PRIVACY: Record<LegalLanguage, RawDoc> = {
         paragraphs: [
           'To run TableMeet (accounts, tables, hangouts, chats, the map), show your profile to other users, unlock coupons and settle with partner venues, keep people safe (reports, blocks, moderation), prevent misuse, and meet legal duties.',
           'Our legal bases are: providing the service you asked for (contract), our legitimate interests (safety, preventing misuse, improving the app), your consent (location features, Travellers, live location, optional profile details) and legal obligations. You can withdraw consent at any time in the app.',
-          'We do not sell your data and we do not show ads.',
+          'We do not sell your data. People without TableMeet Plus see ads (see section 4).',
         ],
       },
       {
@@ -313,7 +313,7 @@ const PRIVACY: Record<LegalLanguage, RawDoc> = {
         paragraphs: [
           'เพื่อให้บริการ TableMeet (บัญชี โต๊ะ แฮงเอาท์ แชท แผนที่) แสดงโปรไฟล์ของคุณให้ผู้ใช้อื่น ปลดล็อกคูปองและชำระบัญชีกับร้านพาร์ทเนอร์ ดูแลความปลอดภัย (รายงาน การบล็อก การดูแลเนื้อหา) ป้องกันการใช้งานในทางที่ผิด และปฏิบัติตามกฎหมาย',
           'ฐานทางกฎหมายของเราคือ การให้บริการที่คุณขอ (สัญญา) ประโยชน์โดยชอบด้วยกฎหมาย (ความปลอดภัย ป้องกันการใช้ในทางที่ผิด และปรับปรุงแอป) ความยินยอมของคุณ (ฟีเจอร์ตำแหน่ง นักเดินทาง ตำแหน่งสด และข้อมูลโปรไฟล์ที่ไม่บังคับ) และหน้าที่ตามกฎหมาย คุณถอนความยินยอมได้ทุกเมื่อในแอป',
-          'เราไม่ขายข้อมูลของคุณและไม่แสดงโฆษณา',
+          'เราไม่ขายข้อมูลของคุณ ผู้ที่ไม่มี TableMeet Plus จะเห็นโฆษณา (ดูข้อ 4)',
         ],
       },
       {

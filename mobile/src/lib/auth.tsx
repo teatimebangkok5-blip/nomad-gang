@@ -10,6 +10,7 @@ import * as Crypto from 'expo-crypto';
 import { createContext, use, useEffect, useState, type ReactNode } from 'react';
 
 import { skipLogin } from '@/lib/preview';
+import { unregisterPush } from '@/lib/push';
 import { supabase } from '@/lib/supabase';
 
 GoogleSignin.configure({
@@ -137,6 +138,8 @@ export async function signInWithApple(): Promise<AppleSignInResult> {
 }
 
 export async function signOut() {
+  // This phone stops getting my notifications (needs the session, so first).
+  await unregisterPush().catch(() => {});
   await supabase.auth.signOut();
   // Forget the Google account too, so the account picker shows next time.
   await GoogleSignin.signOut().catch(() => {});
@@ -159,6 +162,7 @@ export async function deleteAccount(myId: string): Promise<boolean> {
     }
   }
 
+  await unregisterPush().catch(() => {});
   const { error } = await supabase.rpc('delete_my_account');
   if (error) {
     console.warn('Deleting the account failed', error.message);

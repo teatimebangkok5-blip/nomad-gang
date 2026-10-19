@@ -332,6 +332,11 @@ const en = {
   },
   settings: {
     privacy: 'Privacy',
+    pushTitle: 'Phone notifications',
+    pushHint: 'Messages, people joining your tables, new followers, tables and hangouts near you, and partner deals.',
+    pushDenied: 'Notifications are turned off for TableMeet in your phone settings.',
+    pushOpenSettings: 'Open settings',
+    pushUnavailable: "Phone notifications aren't available in this version of the app yet.",
     title: 'Settings',
     open: 'Settings',
     appearance: 'Appearance',

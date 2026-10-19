@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GlossyFill } from '@/components/glossy';
@@ -11,6 +11,7 @@ import { Radius, Raised, Spacing, Type } from '@/constants/theme';
 import { type Language, setLanguage, useLanguage } from '@/i18n';
 import { deleteAccount, signOut, useAuth } from '@/lib/auth';
 import { skipLogin } from '@/lib/preview';
+import { usePushSetting } from '@/lib/push';
 import { makeStyles, useColors, useTheme, type ThemeName } from '@/lib/theme';
 import { useDiscoverable } from '@/lib/travellers';
 
@@ -24,6 +25,7 @@ export default function SettingsScreen() {
   const Colors = useColors();
   const { session } = useAuth();
   const visibility = useDiscoverable(session?.user.id);
+  const push = usePushSetting();
   const [deleting, setDeleting] = useState(false);
 
   const themes: { value: ThemeName; label: string; icon: IconName }[] = [
@@ -124,6 +126,32 @@ export default function SettingsScreen() {
               disabled={visibility.on === null}
               onValueChange={(next) => {
                 visibility.set(next);
+              }}
+              trackColor={{ false: Colors.borderStrong, true: Colors.orange }}
+              thumbColor={Colors.white}
+            />
+          </View>
+          <View style={styles.row}>
+            <Icon name="notifications" size={22} color={push.on ? Colors.accent : Colors.textSecondary} />
+            <View style={styles.switchText}>
+              <Text style={styles.rowLabel}>{t('settings.pushTitle')}</Text>
+              <Text style={styles.rowHint}>{t('settings.pushHint')}</Text>
+            </View>
+            <Switch
+              accessibilityLabel={t('settings.pushTitle')}
+              value={push.on}
+              disabled={push.busy}
+              onValueChange={(next) => {
+                push.set(next).then((result) => {
+                  if (result === 'denied') {
+                    Alert.alert(t('settings.pushDenied'), undefined, [
+                      { text: t('common.cancel'), style: 'cancel' },
+                      { text: t('settings.pushOpenSettings'), onPress: () => Linking.openSettings() },
+                    ]);
+                  } else if (result === 'unavailable') {
+                    Alert.alert(t('settings.pushUnavailable'));
+                  }
+                });
               }}
               trackColor={{ false: Colors.borderStrong, true: Colors.orange }}
               thumbColor={Colors.white}

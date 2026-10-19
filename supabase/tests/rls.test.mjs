@@ -37,6 +37,12 @@ await db.exec(`
   alter table storage.objects enable row level security;
   grant select, insert, update, delete on storage.objects to anon, authenticated, service_role;
   create publication supabase_realtime;
+  -- pg_net stand-in: records the push requests instead of sending them.
+  create schema net;
+  create table net.calls (id serial primary key, url text, body jsonb);
+  create function net.http_post(url text, body jsonb default '{}', params jsonb default '{}', headers jsonb default '{}',
+    timeout_milliseconds integer default 5000) returns bigint language sql as $$
+    insert into net.calls (url, body) values (url, body) returning id::bigint $$;
 `);
 
 await db.exec(migration);
@@ -1613,6 +1619,55 @@ check("the founder always has Plus", r.rows?.[0]?.n > 100);
 await db.exec(`update public.app_settings set plus_locked = false`);
 r = await tryQuery("authenticated", s5, `select count(*)::int n from public.list_gems()`);
 check("turning plus_locked off opens the features to everyone", r.rows?.[0]?.n > 100);
+
+// --- Phone (push) notifications
+const pushToken = (n) => `ExponentPushToken[pushTestToken000${n}]`;
+const pushesTo = async (token) =>
+  (await db.query(`select e from net.calls c, jsonb_array_elements(c.body) e where e->>'to' = $1 order by c.id`, [token])).rows.map((row) => row.e);
+r = await tryQuery("authenticated", s2, `select public.register_push_device($1, 'android', 'en', 13.7563, 100.5018)`, [pushToken(2)]);
+check("register this phone for notifications", !r.error);
+r = await tryQuery("authenticated", s2, `select public.register_push_device('not-a-token', 'android', 'en', null, null)`);
+check("only Expo push tokens are accepted", /invalid_device/.test(r.error ?? ""));
+r = await db.query(`select area_lat, area_lng from public.push_devices where token = $1`, [pushToken(2)]);
+check("only a rough area (0.1°) is kept", r.rows[0]?.area_lat === 13.8 && r.rows[0]?.area_lng === 100.5);
+r = await tryQuery("authenticated", s3, `select * from public.push_devices`);
+check("phones can't be read through the API", !!r.error);
+await tryQuery("authenticated", s3, `select public.register_push_device($1, 'android', 'th', null, null)`, [pushToken(3)]);
+await db.exec(`truncate net.calls`);
+const pushThread = (await db.query(`insert into public.direct_threads (user_a, user_b, requested_by) values ($1, $2, $2) returning id`, [s2, s5])).rows[0].id;
+const pushDm = (body) => db.query(`insert into public.direct_messages (thread_id, sender_id, body) values ($1, $2, $3)`, [pushThread, s5, body]);
+await pushDm("Hi, are you at the market?");
+let pushes = await pushesTo(pushToken(2));
+check("a private message reaches the phone (as a request the first time)",
+  pushes.length === 1 && pushes[0].title === "Message request from Story 4" && pushes[0].body === "Hi, are you at the market?" && pushes[0].data.url === `/dm/${s5}`);
+await tryQuery("authenticated", s5, `select public.follow_user($1)`, [s3]);
+pushes = await pushesTo(pushToken(3));
+check("new follower, in the phone's language (Thai)", pushes.length === 1 && pushes[0].title === "ผู้ติดตามใหม่" && pushes[0].body === "Story 4 เริ่มติดตามคุณ");
+// s3 blocked s1 earlier (stories): nothing from s1 reaches s3.
+await db.exec(`truncate net.calls`);
+const blockedThread = (await db.query(`insert into public.direct_threads (user_a, user_b, requested_by) values ($1, $2, $1) returning id`, [s1, s3])).rows[0].id;
+await db.query(`insert into public.direct_messages (thread_id, sender_id, body) values ($1, $2, 'hello')`, [blockedThread, s1]);
+await db.query(`insert into public.follows (follower_id, followee_id) values ($1, $2)`, [s6, s3]);
+check("the check itself works: a follow from someone else does arrive", (await pushesTo(pushToken(3))).length === 1);
+check("nothing across a block", !(await pushesTo(pushToken(3))).some((push) => push.body === "hello"));
+await db.query(`insert into public.meetups (kind, spot_name, spot_lat, spot_lng, host_id, title, starts_at, ends_at, max_people)
+  values ('hangout', 'Lumphini', 13.73, 100.54, $1, 'Morning run', now() + interval '1 day', now() + interval '1 day 2 hours', 5)`, [s6]);
+pushes = await pushesTo(pushToken(2));
+check("a new hangout within 50 km of my area", pushes.length === 1 && pushes[0].title === "New hangout near you" && pushes[0].body.startsWith("Morning run · "));
+for (let i = 0; i < 3; i++) {
+  await db.query(`insert into public.meetups (kind, spot_name, spot_lat, spot_lng, host_id, title, starts_at, ends_at, max_people)
+    values ('hangout', 'x', 13.74, 100.55, $1, 'More ' || $2, now() + interval '1 day', now() + interval '1 day 2 hours', 5)`, [s6, i]);
+}
+check("max 3 nearby notifications a day", (await pushesTo(pushToken(2))).length === 3);
+await db.exec(`truncate net.calls`);
+await db.query(`insert into public.meetups (kind, spot_name, spot_lat, spot_lng, host_id, title, starts_at, ends_at, max_people)
+  values ('hangout', 'Paris', 48.85, 2.35, $1, 'Far away', now() + interval '1 day', now() + interval '1 day 2 hours', 5)`, [s5]);
+check("nothing for hangouts far away", (await pushesTo(pushToken(2))).length === 0);
+await tryQuery("authenticated", s2, `select public.unregister_push_device($1)`, [pushToken(2)]);
+await pushDm("still there?");
+check("turned off: nothing reaches the phone", (await pushesTo(pushToken(2))).length === 0);
+r = await tryQuery("authenticated", s4, `select public.push_send($1, 'chat', 'x', 'x', 'x', 'x', '/')`, [s3]);
+check("nobody can send notifications through the API", !!r.error);
 
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

@@ -210,6 +210,7 @@ const PRIVACY: Record<LegalLanguage, RawDoc> = {
           '• Travellers: only if you turn on "Show me to travellers nearby". We keep your latest location for up to 2 hours. Others see a dot moved 150–400 m away and a rounded distance, never your exact position. Turning it off deletes your location.',
           '• Live location in a chat: only when you start it, updated only while the app is open, and it stops at the time you chose.',
           '• Stories: when you post a story, its photo and caption are shown on the map to everyone signed in to TableMeet for 24 hours. We store only a point moved 100–250 m from where you posted it, never your exact position.',
+          '• Phone notifications: if you allow notifications and location, we keep a rough area for your phone (rounded to about 11 km, updated when you open the app) only to tell you about new tables and hangouts within 50 km. Turning off phone notifications in Settings deletes it.',
           'We never track your location in the background.',
         ],
       },
@@ -226,7 +227,7 @@ const PRIVACY: Record<LegalLanguage, RawDoc> = {
         paragraphs: [
           '• Other users: your profile (age, not your birthday), what you post in chats to the people in them, and the tables and hangouts you join.',
           '• Partner venue staff: only the coupon page and how many people are checked in.',
-          '• Service providers that run TableMeet for us: Supabase (database, files and sign-in; servers in Singapore), Google (sign-in), Apple (sign-in on iPhone), OpenFreeMap (map tiles: receives your IP address when the map loads), Photon by komoot (place search: receives what you type), Wikimedia Commons (place photos) and Vercel (our website).',
+          '• Service providers that run TableMeet for us: Supabase (database, files and sign-in; servers in Singapore), Google (sign-in), Apple (sign-in on iPhone), OpenFreeMap (map tiles: receives your IP address when the map loads), Photon by komoot (place search: receives what you type), Wikimedia Commons (place photos), Expo and Google Firebase Cloud Messaging (phone notifications: they receive the notification text and your phone\'s push token) and Vercel (our website).',
           '• Google AdMob (ads, for people without TableMeet Plus): when an ad is shown, Google receives your device\'s advertising ID, IP address and basic device information to show and measure ads. In the EEA, UK and Switzerland you are asked for consent first. You can reset or delete the advertising ID in your phone\'s settings.',
           '• Other websites only if you open their links (for example travel deals or ticket pages).',
           '• Authorities, when the law requires it.',
@@ -303,6 +304,7 @@ const PRIVACY: Record<LegalLanguage, RawDoc> = {
           '• นักเดินทาง: เฉพาะเมื่อคุณเปิด "แสดงฉันให้นักเดินทางใกล้ๆ เห็น" เราเก็บตำแหน่งล่าสุดของคุณไม่เกิน 2 ชั่วโมง ผู้อื่นเห็นจุดที่ถูกขยับไป 150–400 เมตรและระยะทางแบบปัดเศษ ไม่เห็นตำแหน่งจริงของคุณ การปิดจะลบตำแหน่งของคุณ',
           '• ตำแหน่งสดในแชท: เฉพาะเมื่อคุณเริ่มแชร์ อัปเดตเฉพาะขณะเปิดแอป และหยุดตามเวลาที่คุณเลือก',
           '• สตอรี่: เมื่อคุณโพสต์สตอรี่ รูปภาพและคำบรรยายจะแสดงบนแผนที่ให้ทุกคนที่ลงชื่อเข้าใช้ TableMeet เห็นเป็นเวลา 24 ชั่วโมง เราเก็บเพียงจุดที่ถูกขยับไป 100–250 เมตรจากที่คุณโพสต์ ไม่เก็บตำแหน่งจริงของคุณ',
+          '• การแจ้งเตือนในโทรศัพท์: หากคุณอนุญาตการแจ้งเตือนและตำแหน่ง เราเก็บพื้นที่โดยประมาณของโทรศัพท์คุณ (ปัดเป็นประมาณ 11 กม. อัปเดตเมื่อคุณเปิดแอป) เพื่อแจ้งโต๊ะและแฮงเอาท์ใหม่ภายใน 50 กม. เท่านั้น การปิดการแจ้งเตือนในโทรศัพท์ที่หน้าการตั้งค่าจะลบข้อมูลนี้',
           'เราไม่ติดตามตำแหน่งของคุณเบื้องหลัง',
         ],
       },
@@ -319,7 +321,7 @@ const PRIVACY: Record<LegalLanguage, RawDoc> = {
         paragraphs: [
           '• ผู้ใช้อื่น: โปรไฟล์ของคุณ (อายุ ไม่ใช่วันเกิด) สิ่งที่คุณโพสต์ในแชทสำหรับคนในแชทนั้น และโต๊ะหรือแฮงเอาท์ที่คุณเข้าร่วม',
           '• พนักงานร้านพาร์ทเนอร์: เห็นเพียงหน้าคูปองและจำนวนคนที่เช็กอิน',
-          '• ผู้ให้บริการที่ช่วยเราให้บริการ TableMeet: Supabase (ฐานข้อมูล ไฟล์ และการเข้าสู่ระบบ เซิร์ฟเวอร์ที่สิงคโปร์) Google (การเข้าสู่ระบบ) Apple (การเข้าสู่ระบบบน iPhone) OpenFreeMap (ภาพแผนที่ ได้รับที่อยู่ IP ของคุณเมื่อโหลดแผนที่) Photon โดย komoot (ค้นหาสถานที่ ได้รับคำที่คุณพิมพ์) Wikimedia Commons (รูปสถานที่) และ Vercel (เว็บไซต์ของเรา)',
+          '• ผู้ให้บริการที่ช่วยเราให้บริการ TableMeet: Supabase (ฐานข้อมูล ไฟล์ และการเข้าสู่ระบบ เซิร์ฟเวอร์ที่สิงคโปร์) Google (การเข้าสู่ระบบ) Apple (การเข้าสู่ระบบบน iPhone) OpenFreeMap (ภาพแผนที่ ได้รับที่อยู่ IP ของคุณเมื่อโหลดแผนที่) Photon โดย komoot (ค้นหาสถานที่ ได้รับคำที่คุณพิมพ์) Wikimedia Commons (รูปสถานที่) Expo และ Google Firebase Cloud Messaging (การแจ้งเตือนในโทรศัพท์ ได้รับข้อความแจ้งเตือนและรหัสการแจ้งเตือนของโทรศัพท์คุณ) และ Vercel (เว็บไซต์ของเรา)',
           '• Google AdMob (โฆษณา สำหรับผู้ที่ไม่ได้เป็นสมาชิก TableMeet Plus): เมื่อแสดงโฆษณา Google จะได้รับรหัสโฆษณาของอุปกรณ์ ที่อยู่ IP และข้อมูลพื้นฐานของอุปกรณ์ เพื่อแสดงและวัดผลโฆษณา ผู้ใช้ในเขตเศรษฐกิจยุโรป สหราชอาณาจักร และสวิตเซอร์แลนด์จะถูกขอความยินยอมก่อน คุณรีเซ็ตหรือลบรหัสโฆษณาได้ในการตั้งค่าโทรศัพท์',
           '• เว็บไซต์อื่น เฉพาะเมื่อคุณเปิดลิงก์ของเขา (เช่น ดีลท่องเที่ยวหรือหน้าขายตั๋ว)',
           '• หน่วยงานรัฐ เมื่อกฎหมายกำหนด',

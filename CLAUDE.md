@@ -251,6 +251,22 @@ Product spec and tech stack below are agreed. Built so far:
   cost. Planned next (founder, 2026-10-18, in this order): Rewards Passport (stamps / points / milestones 3-5-10,
   completion by GPS check-in or host code + admin review), Hidden Gems (founder supplies the list), Locals + Safety +
   Invites, and map "stories" on home instead of a posts feed.
+- **Phone (push) notifications** (added 2026-10-19, `*_push_notifications.sql`). Founder's choice of what reaches
+  the phone: **messages** (private incl. requests, group, table / hangout chat; not after leaving that chat),
+  **someone joins my table / hangout**, **new followers**, **new tables / hangouts within 50 km** of my rough area (max
+  3 a day) and **new promotions** to everyone (max 1 a day). Never my own actions, never across a block. DB triggers
+  on `meetup_messages`, `direct_messages`, `chat_group_messages`, `meetup_members`, `follows`, `meetups`, `deals` call
+  `push_send(user, kind, title_en, body_en, title_th, body_th, url)` → `net.http_post` (pg_net) to
+  `https://exp.host/--/api/v2/push/send` (Expo push, no key); each trigger and `push_send` swallow errors so a push
+  can't break the action. `push_devices` (token, language en/th, rough area rounded to 0.1° only if location is
+  already allowed; no API access) via `register_push_device` / `unregister_push_device`; `push_log` for the daily
+  limits. Tests stub `net.http_post` into `net.calls`. App: `expo-notifications` (plugin in `app.json`, white icon
+  `assets/images/notification-icon.png`, channel `default`), `src/lib/push.ts`: `usePushNotifications` in the root
+  layout (after onboarding; registers on start, on language change and after 6 h; tapping opens `data.url`),
+  `usePushSetting` (Settings → Phone notifications), `unregisterPush` on sign-out and account deletion. **Android
+  needs Firebase**: `mobile/google-services.json` (git-ignored, added by `app.config.js` only if present) + the FCM V1
+  service account key uploaded to the Expo project (README step 7); without them `getExpoPushTokenAsync` fails and
+  Settings says it isn't available. Not pushed: the 🎁 host reward (time-based, no event).
 - **TableMeet Plus + AdMob ads** (added 2026-10-19, `*_tablemeet_plus.sql`). Founder's decisions: Plus = Plan my
   day, Hidden Gems, Rewards Passport, and no ads; **payments not built yet**, the founder gives Plus by hand at
   **/admin/plus** (search by name / email via `admin_find_users`, Give 1 month / 1 year with `admin_grant_plus`, added

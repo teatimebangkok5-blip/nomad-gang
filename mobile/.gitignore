@@ -44,3 +44,7 @@ example
 
 # Google Play service account key for EAS Submit (secret)
 google-play-service-account.json
+
+# Firebase (phone notifications): the app file and the service account key for Expo, kept out of git.
+google-services.json
+*firebase-adminsdk*.json

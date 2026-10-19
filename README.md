@@ -152,6 +152,24 @@ and tap **Give 1 month** or **Give 1 year** (giving more while they still have P
 To open Plan my day, Hidden Gems and the Passport to everyone, run
 `update public.app_settings set plus_locked = false;` in the Supabase SQL editor.
 
+### 7. Phone notifications (Firebase, free)
+
+The server sends notifications through Expo's free push service, which delivers them on Android through Google's
+Firebase Cloud Messaging. Until the two Firebase steps below are done, the app works but phones can't get
+notifications (Settings → Phone notifications says it isn't available yet).
+
+1. Go to <https://console.firebase.google.com> → **Create a project** (any name, e.g. TableMeet; Google Analytics
+   not needed).
+2. **Add app → Android**, package name **`com.tablemeet.app`**, then **Download google-services.json** and put it
+   in `mobile/` (next to `app.json`). It's git-ignored; `app.config.js` picks it up automatically.
+3. In Firebase: **Project settings → Service accounts → Generate new private key** (a JSON file). Keep it private.
+4. Upload that key to Expo: <https://expo.dev> → your project → **Credentials → Android → com.tablemeet.app →
+   FCM V1 service account key → Upload** (or run `npx eas credentials` in `mobile/`).
+5. Rebuild the app (`npx expo prebuild --platform android`, then the release APK) and install it. The app asks to
+   allow notifications the first time it opens.
+
+Nothing else is needed on the server: the database (`pg_net`) posts to Expo directly when something happens.
+
 ## Website on Vercel (staff QR page, Terms, Privacy, Delete account)
 
 Redemption QR codes open `<website>/r/<code>`, so the website must be online before coupons work.

@@ -344,6 +344,14 @@ Product spec and tech stack below are agreed. Built so far:
   revocation on account deletion. Places missing from OpenStreetMap can be added by the founder (admin insert into `places`; no UI yet).
 - Running on the founder's Redmi as a local release APK, connected to the real Supabase project
   (`zxghiilryqzexzvacbrl`, migrations applied by Supabase's GitHub integration on push to `main`).
+- **Production builds (Play Store)**: `eas build --platform android --profile production` (AAB, versionCode
+  auto-incremented on EAS, upload key stored on EAS). EAS cloud builds don't get git-ignored files, so `.env.local` is
+  **not** used there: the values live in the EAS **production** environment (`eas env:list --environment
+  production`): Supabase URL/key, Google web client ID, `SKIP_LOGIN=false`, `REQUIRE_PHONE=false`,
+  `CONTACT_EMAIL=tablemeet.helpdesk@gmail.com`; `WEB_URL`, `BUSINESS_NAME` and `ADMOB_APP_OPEN_ID` are still unset
+  (no QR link / generic legal wording / Google test ads) and need a new build once set. `google-services.json` is
+  the EAS file variable `GOOGLE_SERVICES_JSON`, picked up by `app.config.ts`. First production AAB: 1.0.0 (3),
+  2026-10-19.
 - **Google sign-in is on** (2026-10-16): the founder created the Google Cloud OAuth clients (Web client ID in
   `mobile/.env.local` as `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`; Android client for the debug-key SHA-1 in README) and
   enabled Google in Supabase. `EXPO_PUBLIC_SKIP_LOGIN=false` now (the preview/guest mode in `src/lib/preview.ts`

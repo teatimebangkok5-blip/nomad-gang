@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
@@ -21,7 +22,8 @@ const BENEFITS = [
 ] as const;
 
 // TableMeet Plus: what it unlocks, monthly or yearly, and how to get it. Payments aren't in the app yet: people ask
-// the TableMeet team (email), and the founder turns Plus on in the admin panel.
+// the TableMeet team (email), and the founder turns Plus on in the admin panel. Reaching level 15 (My rewards) gives
+// Plus for free.
 export default function PlusScreen() {
   const styles = useStyles();
   const { t } = useTranslation();
@@ -61,7 +63,11 @@ export default function PlusScreen() {
             <GlossyFill />
             <Text style={styles.cardTitle}>{t('plus.active')}</Text>
             <Text style={styles.cardText}>
-              {plus.status === 'ready' && plus.plan ? t(`plus.plans.${plus.plan}`) : t('plus.founder')}
+              {plus.status === 'ready' && plus.plan
+                ? t(`plus.plans.${plus.plan}`)
+                : plus.status === 'ready' && plus.byLevel
+                  ? t('plus.byLevel', { level: plus.level ?? 15 })
+                  : t('plus.founder')}
               {endsLabel ? ` · ${t('plus.until', { date: endsLabel })}` : ''}
             </Text>
           </View>
@@ -81,6 +87,18 @@ export default function PlusScreen() {
 
         {!member && (
           <>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push('/rewards')}
+              style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
+              <GlossyFill />
+              <Text style={styles.cardTitle}>👑 {t('plus.freeTitle', { level: 15 })}</Text>
+              <Text style={styles.cardText}>
+                {t('plus.freeText', { level: 15, current: plus.status === 'ready' ? (plus.level ?? 1) : 1 })}
+              </Text>
+              <Text style={styles.freeLink}>{t('plus.freeLink')}</Text>
+            </Pressable>
+
             <Text style={styles.section}>{t('plus.choosePlan')}</Text>
             <View style={styles.plans}>
               {(['monthly', 'yearly'] as const).map((option) => (
@@ -130,6 +148,8 @@ const useStyles = makeStyles((Colors) => ({
     ...Raised,
   },
   cardTitle: { ...Type.heading, color: Colors.text },
+  pressed: { opacity: 0.7 },
+  freeLink: { ...Type.label, color: Colors.accent, marginTop: Spacing.sm },
   cardText: { ...Type.body, color: Colors.textSecondary, marginTop: Spacing.xs },
   benefits: { gap: Spacing.md },
   benefit: { flexDirection: 'row', gap: Spacing.md, alignItems: 'flex-start' },

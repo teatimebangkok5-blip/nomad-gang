@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/icon';
@@ -11,12 +11,23 @@ import { useLanguage } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { profilePhotoUrl } from '@/lib/photos';
 import { openSafetyMenu } from '@/lib/safety-menu';
-import { deleteStory, groupStories, reloadStories, storyAge, useStories, useStoryPhotoUrl } from '@/lib/stories';
-import { makeStyles } from '@/lib/theme';
+import {
+  deleteStory,
+  groupStories,
+  likeStory,
+  reloadStories,
+  storyAge,
+  useStories,
+  useStoryLikers,
+  useStoryPhotoUrl,
+  type StoryLiker,
+} from '@/lib/stories';
+import { makeStyles, useColors } from '@/lib/theme';
 
 // One person's live stories, full screen and oldest first: tap the right side for the next one, the left side for
 // the previous one. The header has their name (tap → profile), how long ago and the area; the ⋮ menu deletes my own
-// story, or reports / blocks someone else.
+// story, or reports / blocks someone else. At the bottom: ♥ to like someone's story (friends-only stories can only be
+// seen, and so liked, by friends), or on my own story how many liked it (tap → who).
 export default function StoryScreen() {
   const styles = useStyles();
   const { t } = useTranslation();
@@ -37,10 +48,22 @@ export default function StoryScreen() {
   const story = group?.stories[position] ?? null;
   const photoUrl = useStoryPhotoUrl(story?.photo_path ?? null);
   const mine = !!session && story?.user_id === session.user.id;
+  const [likersOpen, setLikersOpen] = useState(false);
+  const [liking, setLiking] = useState(false);
 
   function next() {
     if (position + 1 < count) setIndex(position + 1);
     else router.back();
+  }
+
+  function toggleLike() {
+    if (!story || mine || liking) return;
+    setLiking(true);
+    likeStory(story, !story.liked).then((error) => {
+      setLiking(false);
+      if (error === 'not_found') Alert.alert(t('stories.gone'));
+      else if (error) Alert.alert(t(`stories.likeErrors.${error}`));
+    });
   }
 
   function openMenu() {
@@ -165,17 +188,118 @@ export default function StoryScreen() {
         </View>
       </SafeAreaView>
 
-      {story.caption ? (
-        <SafeAreaView edges={['bottom']} style={styles.bottom} pointerEvents="none">
-          <Text style={styles.caption}>{story.caption}</Text>
-        </SafeAreaView>
-      ) : null}
+      <SafeAreaView edges={['bottom']} style={[styles.bottom, story.caption ? styles.bottomShade : null]} pointerEvents="box-none">
+        {story.caption ? (
+          <Text style={styles.caption} pointerEvents="none">
+            {story.caption}
+          </Text>
+        ) : null}
+        <View style={styles.actions} pointerEvents="box-none">
+          {mine ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('stories.likesCount', { count: story.like_count ?? 0 })}
+              onPress={() => setLikersOpen(true)}
+              style={({ pressed }) => [styles.likePill, pressed && styles.pressed]}>
+              <Icon name="heart" size={20} color={LIKE_RED} />
+              <Text style={styles.likeText}>{t('stories.likesCount', { count: story.like_count ?? 0 })}</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={story.liked ? t('stories.unlike') : t('stories.like')}
+              accessibilityState={{ selected: story.liked, busy: liking }}
+              onPress={toggleLike}
+              hitSlop={8}
+              style={({ pressed }) => [styles.likePill, pressed && styles.pressed]}>
+              <Icon name={story.liked ? 'heart' : 'heartOutline'} size={24} color={story.liked ? LIKE_RED : '#FFFFFF'} />
+              <Text style={styles.likeText}>{story.liked ? t('stories.liked') : t('stories.like')}</Text>
+            </Pressable>
+          )}
+        </View>
+      </SafeAreaView>
+
+      {mine && (
+        <LikersSheet
+          visible={likersOpen}
+          storyId={story.id}
+          likeCount={story.like_count}
+          onClose={() => setLikersOpen(false)}
+        />
+      )}
     </View>
   );
 }
 
-// The viewer is always dark (photos look best on black), in both themes.
-const useStyles = makeStyles(() => ({
+const LIKE_RED = '#FF4D6D';
+
+// Who liked my story (tap a person → their profile).
+function LikersSheet({
+  visible,
+  storyId,
+  likeCount,
+  onClose,
+}: {
+  visible: boolean;
+  storyId: string;
+  likeCount: number | null;
+  onClose: () => void;
+}) {
+  const styles = useStyles();
+  const Colors = useColors();
+  const { t } = useTranslation();
+  const likers = useStoryLikers(visible ? storyId : null, likeCount);
+
+  function openProfile(liker: StoryLiker) {
+    onClose();
+    router.push({ pathname: '/profile/[userId]', params: { userId: liker.user_id } });
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable accessibilityRole="button" accessibilityLabel={t('common.close')} style={styles.sheetBackdrop} onPress={onClose} />
+      <SafeAreaView edges={['bottom']} style={styles.sheet}>
+        <View style={styles.sheetHeader}>
+          <Text style={styles.sheetTitle}>{t('stories.likedBy')}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={t('common.close')} onPress={onClose} hitSlop={10} style={styles.iconButton}>
+            <Icon name="close" size={24} color={Colors.text} />
+          </Pressable>
+        </View>
+        {likers === null ? (
+          <ActivityIndicator color={Colors.accent} style={styles.sheetSpinner} />
+        ) : (
+          <FlatList
+            data={likers}
+            keyExtractor={(liker) => liker.user_id}
+            contentContainerStyle={styles.sheetList}
+            ListEmptyComponent={<Text style={styles.sheetEmpty}>{t('stories.noLikes')}</Text>}
+            renderItem={({ item }) => (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => openProfile(item)}
+                style={({ pressed }) => [styles.likerRow, pressed && styles.pressed]}>
+                <View style={[styles.likerAvatar, { backgroundColor: avatarColor(item.user_id) }]}>
+                  {item.avatar_path ? (
+                    <Image source={profilePhotoUrl(item.avatar_path)} style={StyleSheet.absoluteFill} contentFit="cover" />
+                  ) : (
+                    <Text style={styles.initials}>{item.display_name.slice(0, 1).toUpperCase()}</Text>
+                  )}
+                </View>
+                <Text style={styles.likerName} numberOfLines={1}>
+                  {item.display_name}
+                </Text>
+                <Icon name="heart" size={18} color={LIKE_RED} />
+              </Pressable>
+            )}
+          />
+        )}
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+// The viewer is always dark (photos look best on black), in both themes; the likes sheet follows the theme.
+const useStyles = makeStyles((Colors) => ({
   root: { flex: 1, backgroundColor: '#000000' },
   center: { alignItems: 'center', justifyContent: 'center' },
   gone: { ...Type.body, color: '#FFFFFF', textAlign: 'center', paddingHorizontal: Spacing.xl },
@@ -205,6 +329,41 @@ const useStyles = makeStyles(() => ({
   name: { ...Type.label, color: '#FFFFFF' },
   meta: { ...Type.small, color: 'rgba(255,255,255,0.8)' },
   iconButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: Radius.pill },
-  bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)' },
-  caption: { ...Type.body, color: '#FFFFFF', padding: Spacing.lg },
+  bottom: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+  bottomShade: { backgroundColor: 'rgba(0,0,0,0.45)' },
+  caption: { ...Type.body, color: '#FFFFFF', paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg },
+  actions: { flexDirection: 'row', justifyContent: 'flex-end', padding: Spacing.md },
+  likePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    minHeight: 44,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.pill,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  likeText: { ...Type.label, color: '#FFFFFF' },
+  pressed: { opacity: 0.7 },
+  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
+  sheet: {
+    maxHeight: '60%',
+    backgroundColor: Colors.bg,
+    borderTopLeftRadius: Radius.sheet,
+    borderTopRightRadius: Radius.sheet,
+  },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', paddingLeft: Spacing.lg, paddingRight: Spacing.sm, paddingTop: Spacing.sm },
+  sheetTitle: { ...Type.heading, color: Colors.text, flex: 1 },
+  sheetSpinner: { margin: Spacing.xl },
+  sheetList: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.lg },
+  sheetEmpty: { ...Type.body, color: Colors.textSecondary, paddingVertical: Spacing.lg },
+  likerRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, minHeight: 56 },
+  likerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  likerName: { ...Type.label, color: Colors.text, flex: 1 },
 }));

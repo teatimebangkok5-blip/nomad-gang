@@ -94,7 +94,7 @@ export function RewardCard({
   );
 }
 
-function DealRow({ deal, example, onReported }: { deal: TravelDeal; example: boolean; onReported: () => void }) {
+export function DealRow({ deal, example, onReported }: { deal: TravelDeal; example: boolean; onReported: () => void }) {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();

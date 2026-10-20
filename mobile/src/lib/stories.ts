@@ -31,6 +31,10 @@ export type Story = {
   expires_at: string;
   // Everyone signed in, or only my friends (mutual follows).
   audience: StoryAudience;
+  // I liked it.
+  liked: boolean;
+  // How many people liked it: only on my own stories (null on other people's).
+  like_count: number | null;
 };
 
 export type StoryAudience = 'everyone' | 'friends';
@@ -90,6 +94,8 @@ export function useStories(enabled = true) {
     const channel = supabase
       .channel(uniqueChannelName('stories'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stories' }, () => fetchStories())
+      // New likes on my stories (RLS), so my like counts stay fresh. Inserts only: delete events skip RLS.
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'story_likes' }, () => fetchStories())
       .subscribe();
     const timer = setInterval(() => setNow(Date.now()), 60_000);
     return () => {
@@ -191,6 +197,40 @@ export async function deleteStory(story: Story): Promise<boolean> {
   if (typeof data === 'string') supabase.storage.from(BUCKET).remove([data]);
   await fetchStories();
   return true;
+}
+
+// Likes (or unlikes) someone's story. The shared list updates at once and is corrected from the server after.
+// Returns an error key (not_found = gone or no longer visible to me) or null.
+export async function likeStory(story: Story, like: boolean): Promise<'not_allowed' | 'not_found' | 'generic' | null> {
+  if (cache) {
+    cache = cache.map((item) => (item.id === story.id ? { ...item, liked: like } : item));
+    listeners.forEach((listener) => listener(cache));
+  }
+  const { error } = await supabase.rpc('like_story', { p_story_id: story.id, p_like: like });
+  if (error) console.warn('Liking the story failed', error.message);
+  await fetchStories();
+  if (!error) return null;
+  return error.message.includes('not_allowed') ? 'not_allowed' : error.message.includes('not_found') ? 'not_found' : 'generic';
+}
+
+export type StoryLiker = { user_id: string; display_name: string; avatar_path: string | null; liked_at: string };
+
+// Who liked my story, newest first (null while loading; [] if it failed).
+export function useStoryLikers(storyId: string | null, likeCount: number | null) {
+  const [state, setState] = useState<{ storyId: string; likers: StoryLiker[] } | null>(null);
+  useEffect(() => {
+    if (!storyId) return;
+    let alive = true;
+    supabase.rpc('story_likers', { p_story_id: storyId }).then(({ data, error }) => {
+      if (error) console.warn('Loading story likes failed', error.message);
+      if (alive) setState({ storyId, likers: error ? [] : ((data ?? []) as StoryLiker[]) });
+    });
+    return () => {
+      alive = false;
+    };
+    // Reload when the count changes (a new like arrived by Realtime).
+  }, [storyId, likeCount]);
+  return state && state.storyId === storyId ? state.likers : null;
 }
 
 // Deletes my expired stories and their photos, once per app start (they're already hidden from everyone).

@@ -320,6 +320,24 @@ Product spec and tech stack below are agreed. Built so far:
   once per app start (deletes my expired rows, the app deletes the files); account deletion removes the folder. Data:
   `src/lib/stories.ts` (`useStories`, Realtime on `stories`). Privacy Policy mentions stories. No admin UI yet
   (`delete_story` works for admins).
+- **Story likes + Levels** (added 2026-10-20, `*_story_likes_levels.sql`). **Likes**: ♥ in the story viewer
+  (`like_story(story, like)`; only people who can see the story, so friends-only = friends only; not your own);
+  `map_stories` returns `liked` and `like_count` (own stories only); the poster taps "N liked it" → `story_likers`
+  sheet (owner / admin only, no one across a block). `story_likes` has a random `id` key because Realtime delete
+  events skip RLS; the app subscribes to inserts only. **Levels** (free, on My rewards above the host rewards,
+  `src/components/level-section.tsx`, `src/lib/levels.ts`): 100 points per level; +20 for every checked-in member
+  once **4 members are checked in** at a table / hangout (trigger on `meetup_checkins`; also members who confirmed an
+  approved completion code), **max 2 per person per local day**, none if cancelled; +20 per challenge. Challenges
+  are `level_challenges` (3 per level, levels 1–20, `kind` + `target`, wording in `levels.challenge.<kind>.one/many`)
+  and count only what happened **after reaching that level** (`level_reached`; level 1 = since sign-up), profile kinds
+  (photo, about, Instagram, trips, favourites) look at the profile as it is; earlier unfinished ones stay open.
+  Stories / likes / friends / feedback are recorded in `level_activity` by triggers (once each, so unfollow + follow
+  or unlike + like don't count twice). Awards only in `level_points` (unique per user + source + ref; no API writes);
+  `level_sync` awards finished challenges and runs inside `my_level()` and `my_plus()`. **Level 15 = Plus**
+  (`has_plus` includes `user_level >= 15`, so no ads either; `my_plus` returns `level`, `by_level`) and every active
+  travel deal (`level_deals()`; `report_travel_deal` allows level 15). UI: level card + progress bar, level road to
+  👑 15, points-per-week chart (8 weeks), how to earn, challenges (tap → where to do it), recent points, level 15 deals;
+  the Plus screen shows "Free at level 15".
 - **Hidden Gems list** (`*_hidden_gems.sql` + `*_more_hidden_gems.sql`): the founder's numbered list of 100 (2026-10-18:
   1–30 places by type, 31–65 cafés, 66–100 food) is gems 1–100; the first 32 gems not on it are 101+ (still
   published). Areas are free text and become the map's area chips. All are published (`*_publish_hidden_gems.sql`,
@@ -355,7 +373,9 @@ Product spec and tech stack below are agreed. Built so far:
   **not** used there: the values live in the EAS **production** environment (`eas env:list --environment
   production`): Supabase URL/key, Google web client ID, `SKIP_LOGIN=false`, `REQUIRE_PHONE=false`,
   `CONTACT_EMAIL=tablemeet.helpdesk@gmail.com`, `BUSINESS_NAME=TableMeet` (founder, 2026-10-19; legal operator name);
-  `WEB_URL` and `ADMOB_APP_OPEN_ID` are still unset (no website link in Privacy / Google test ads; the founder's public
+  `ADMOB_APP_OPEN_ID=ca-app-pub-7210077278553769/4092785023` (founder's real "home page" App open unit, set
+  2026-10-20 in EAS production and `.env.local`; builds before that show Google test ads). `WEB_URL` is still unset
+  (no website link in Privacy; the founder's public
   Privacy page for the store is a Google Site, https://sites.google.com/view/tablemeet/home) and need a new build once set. `google-services.json` is
   the EAS file variable `GOOGLE_SERVICES_JSON`, picked up by `app.config.ts`. First production AAB: 1.0.0 (3),
   2026-10-19.

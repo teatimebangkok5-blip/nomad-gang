@@ -1770,5 +1770,152 @@ check("the last one out deletes the group", r.rows?.[0]?.n === 0);
 r = await tryQuery("authenticated", x2, `select public.leave_group($1)`, [xGroup]);
 check("leaving a group you're not in says not_found", /not_found/.test(r.error ?? ""));
 
+// --- Story likes
+const [lA, lB, lC, lD] = [1, 2, 3, 4].map((n) => `1a000000-0000-4000-8000-00000000000${n}`);
+await db.exec(`insert into auth.users (id, email, raw_user_meta_data, phone_confirmed_at) values
+  ${[lA, lB, lC, lD].map((id, i) => `('${id}', 'like${i}@x.com', '{"full_name": "Liker ${i + 1}"}', now())`).join(", ")}`);
+r = await tryQuery("authenticated", lA, `select public.post_story($1, 'Look', 13.75, 100.5) as id`, [`${lA}/likes.jpg`]);
+const likedStory = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", lB, `select public.like_story($1)`, [likedStory]);
+check("like someone's story", !r.error);
+r = await tryQuery("authenticated", lB, `select public.like_story($1, true)`, [likedStory]);
+check("liking twice is harmless", !r.error);
+r = await tryQuery("authenticated", lA, `select public.like_story($1)`, [likedStory]);
+check("can't like your own story", /own_story/.test(r.error ?? ""));
+r = await tryQuery("authenticated", lB, `select liked, like_count from public.map_stories() where id = $1`, [likedStory]);
+check("the map says I liked it, without the count", r.rows?.[0]?.liked === true && r.rows[0].like_count === null);
+r = await tryQuery("authenticated", lA, `select liked, like_count from public.map_stories() where id = $1`, [likedStory]);
+check("the poster sees how many liked it", r.rows?.[0]?.liked === false && r.rows[0].like_count === 1);
+r = await tryQuery("authenticated", lA, `select user_id, display_name from public.story_likers($1)`, [likedStory]);
+check("the poster sees who liked it", r.rows?.length === 1 && r.rows[0].user_id === lB && r.rows[0].display_name === "Liker 2");
+r = await tryQuery("authenticated", lB, `select * from public.story_likers($1)`, [likedStory]);
+check("others can't see who liked it", /not_owner/.test(r.error ?? ""));
+r = await tryQuery("authenticated", lC, `select * from public.story_likes where story_id = $1`, [likedStory]);
+check("other people's likes can't be read", !r.error && r.rows.length === 0);
+r = await tryQuery("authenticated", lA, `select user_id from public.story_likes where story_id = $1`, [likedStory]);
+check("the poster can read the likes (Realtime)", r.rows?.length === 1);
+r = await tryQuery("authenticated", lC, `insert into public.story_likes (story_id, user_id) values ($1, $2)`, [likedStory, lC]);
+check("likes can't be written directly", !!r.error);
+await tryQuery("authenticated", lB, `select public.like_story($1, false)`, [likedStory]);
+r = await tryQuery("authenticated", lA, `select like_count from public.map_stories() where id = $1`, [likedStory]);
+check("unlike", r.rows?.[0]?.like_count === 0);
+await tryQuery("authenticated", lB, `select public.like_story($1)`, [likedStory]);
+r = await tryQuery("authenticated", lA, `select public.post_story($1, 'Friends', 13.75, 100.5, 'friends') as id`, [`${lA}/friends.jpg`]);
+const friendsOnlyStory = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", lC, `select public.like_story($1)`, [friendsOnlyStory]);
+check("only friends can like a friends-only story", /not_found/.test(r.error ?? ""));
+await db.query(`insert into public.follows (follower_id, followee_id) values ($1, $2), ($2, $1)`, [lA, lC]);
+r = await tryQuery("authenticated", lC, `select public.like_story($1)`, [friendsOnlyStory]);
+check("a friend can like it", !r.error);
+r = await tryQuery("authenticated", lA, `select user_id from public.story_likers($1)`, [friendsOnlyStory]);
+check("and the poster sees the friend", r.rows?.length === 1 && r.rows[0].user_id === lC);
+await tryQuery("authenticated", lD, `select public.like_story($1)`, [likedStory]);
+await db.query(`insert into public.blocks (blocker_id, blocked_id) values ($1, $2)`, [lA, lD]);
+r = await tryQuery("authenticated", lA, `select user_id from public.story_likers($1)`, [likedStory]);
+check("likers across a block are left out", r.rows?.length === 1 && r.rows[0].user_id === lB);
+r = await tryQuery("authenticated", lA, `select like_count from public.map_stories() where id = $1`, [likedStory]);
+check("and not counted", r.rows?.[0]?.like_count === 1);
+r = await tryQuery("authenticated", lD, `select public.like_story($1)`, [friendsOnlyStory]);
+check("no likes across a block", /not_found/.test(r.error ?? ""));
+await tryQuery("authenticated", lA, `select public.delete_story($1)`, [likedStory]);
+r = await db.query(`select count(*)::int n from public.story_likes where story_id = $1`, [likedStory]);
+check("deleting a story deletes its likes", r.rows[0].n === 0);
+r = await db.query(`select count(*)::int n from public.level_activity where user_id = $1 and kind = 'like_received'`, [lA]);
+check("likes received are remembered for challenges (once per person)", r.rows[0].n === 3);
+
+// --- Levels
+const myLevel = async (who) => (await tryQuery("authenticated", who, `select public.my_level() as l`)).rows?.[0]?.l;
+const levelChallenge = (lvl, id) => lvl?.challenges.find((ch) => ch.id === id);
+const [v1, v2, v3, v4, v5] = [1, 2, 3, 4, 5].map((n) => `1e000000-0000-4000-8000-00000000000${n}`);
+await db.exec(`insert into auth.users (id, email, raw_user_meta_data, phone_confirmed_at) values
+  ${[v1, v2, v3, v4, v5].map((id, i) => `('${id}', 'level${i}@x.com', '{"full_name": "Leveller ${i + 1}"}', now())`).join(", ")}`);
+let lvl = await myLevel(v1);
+check("new people start at level 1 with 0 points", lvl?.level === 1 && lvl.points === 0 && lvl.per_level === 100 && lvl.plus_level === 15);
+check("level 1 has 3 challenges and level 2's are shown locked",
+  lvl?.challenges.filter((ch) => ch.level === 1 && !ch.locked).length === 3 && lvl.challenges.filter((ch) => ch.level === 2 && ch.locked).length === 3);
+await db.query(`update public.profiles set avatar_path = id::text || '/a.jpg', profession = 'engineer' where id = $1`, [v1]);
+lvl = await myLevel(v1);
+check("profile challenges finish on their own: 2 × 20 points", lvl?.points === 40 && levelChallenge(lvl, "l1-photo")?.done && levelChallenge(lvl, "l1-about")?.done
+  && !levelChallenge(lvl, "l1-story")?.done && levelChallenge(lvl, "l1-story")?.progress === 0);
+check("a finished challenge counts once", (await myLevel(v1))?.points === 40);
+
+const levelTable = async (host, checkInOrder) => {
+  const id = (await tryQuery("authenticated", host, `select public.create_meetup($1, now(), 6) as id`, [cafeId])).rows?.[0]?.id;
+  for (const who of [v1, v2, v3, v4].filter((w) => w !== host)) await tryQuery("authenticated", who, `select public.join_meetup($1)`, [id]);
+  for (const who of checkInOrder) await tryQuery("authenticated", who, `select public.check_in($1, $2, $3)`, [id, ...atCafe]);
+  return id;
+};
+const pointsFor = async (who, meetupId) =>
+  (await db.query(`select count(*)::int n from public.level_points where user_id = $1 and source = 'meetup' and ref = $2`, [who, meetupId])).rows[0].n;
+const tableA = await levelTable(v1, [v1, v2, v3]);
+check("no points with 3 check-ins", (await pointsFor(v1, tableA)) === 0);
+await tryQuery("authenticated", v4, `select public.check_in($1, $2, $3)`, [tableA, ...atCafe]);
+check("the 4th check-in gives every checked-in member 20 points",
+  (await pointsFor(v1, tableA)) === 1 && (await pointsFor(v4, tableA)) === 1 && (await myLevel(v2))?.points === 20);
+check("not to people who didn't check in", (await pointsFor(v5, tableA)) === 0);
+await tryQuery("authenticated", v1, `select public.post_story($1, '', 13.75, 100.5)`, [`${v1}/level.jpg`]);
+lvl = await myLevel(v1);
+check("posting a story finishes its challenge", lvl?.points === 80 && lvl.level === 1 && lvl.level_points === 80);
+const tableB = await levelTable(v2, [v1, v2, v3, v4]);
+lvl = await myLevel(v1);
+check("100 points = level 2", lvl?.level === 2 && lvl.points === 100 && lvl.level_points === 0 && lvl.level_started_at);
+check("level 2's challenges open and count only what happens from now on",
+  levelChallenge(lvl, "l2-checkin")?.locked === false && levelChallenge(lvl, "l2-checkin")?.progress === 0 && levelChallenge(lvl, "l3-table")?.locked === true);
+const tableC = await levelTable(v3, [v1, v2, v3, v4]);
+check("max 2 tables / hangouts a day count", (await pointsFor(v1, tableC)) === 0 && (await pointsFor(v1, tableB)) === 1);
+lvl = await myLevel(v1);
+check("but the check-in counts for the level 2 challenge", levelChallenge(lvl, "l2-checkin")?.done === true && lvl.points === 120);
+await db.query(`insert into public.follows (follower_id, followee_id) values ($1, $2), ($2, $1)`, [v1, v5]);
+await db.query(`delete from public.follows where follower_id = $1 and followee_id = $2`, [v5, v1]);
+await db.query(`insert into public.follows (follower_id, followee_id) values ($1, $2)`, [v5, v1]);
+r = await db.query(`select count(*)::int n from public.level_activity where user_id = $1 and kind = 'friend'`, [v1]);
+check("a friend counts once, even after unfollow + follow", r.rows[0].n === 1);
+lvl = await myLevel(v1);
+check("making a friend finishes the friend challenge", levelChallenge(lvl, "l2-friend")?.done === true && lvl.points === 140);
+const meetupEntry = lvl?.history.find((h) => h.source === "meetup" && h.ref === tableA);
+check("points history shows the table", meetupEntry?.points === 20 && meetupEntry.meetup_kind === "table" && meetupEntry.place_name === "Check Cafe");
+check("weekly chart: 8 weeks, this week has all the points", lvl?.weekly.length === 8 && lvl.weekly[7].points === 140);
+const cancelledTable = (await tryQuery("authenticated", v4, `select public.create_meetup($1, now(), 6) as id`, [cafeId])).rows?.[0]?.id;
+for (const who of [v1, v2, v3]) await tryQuery("authenticated", who, `select public.join_meetup($1)`, [cancelledTable]);
+for (const who of [v4, v1, v2]) await tryQuery("authenticated", who, `select public.check_in($1, $2, $3)`, [cancelledTable, ...atCafe]);
+await db.query(`update public.meetups set status = 'cancelled' where id = $1`, [cancelledTable]);
+await db.query(`insert into public.meetup_checkins (meetup_id, user_id) values ($1, $2)`, [cancelledTable, v3]);
+check("no points for a cancelled table", (await pointsFor(v4, cancelledTable)) === 0);
+r = await tryQuery("authenticated", v1, `insert into public.level_points (user_id, source, ref, points) values ($1, 'challenge', 'free', 100)`, [v1]);
+check("points can't be written directly", !!r.error);
+r = await tryQuery("authenticated", v1, `select public.level_award($1, 'challenge', 'free', 100)`, [v1]);
+check("points can't be given through the API", !!r.error);
+r = await tryQuery("authenticated", v1, `select * from public.level_activity`);
+check("activity isn't readable", !!r.error);
+r = await tryQuery("authenticated", v2, `select ref from public.level_points where user_id = $1`, [v1]);
+check("other people's points are private", !r.error && r.rows.length === 0);
+r = await tryQuery("authenticated", v1, `update public.level_challenges set target = 1 where id = 'l3-feedback' returning id`);
+check("only the founder changes challenges", !!r.error || r.rows.length === 0);
+
+// Level 15: Plus (no ads, Plus features) and every travel deal.
+await db.exec(`update public.app_settings set plus_locked = true`);
+r = await tryQuery("authenticated", v5, `select public.my_plus() as p`);
+check("below level 15: no Plus", r.rows?.[0]?.p?.member === false && r.rows[0].p.by_level === false && r.rows[0].p.level === 1);
+await db.query(`insert into public.level_points (user_id, source, ref, points) select $1, 'challenge', 'test-' || g, 100 from generate_series(1, 14) g`, [v5]);
+r = await tryQuery("authenticated", v5, `select public.my_plus() as p`);
+check("level 15 = Plus", r.rows?.[0]?.p?.member === true && r.rows[0].p.unlocked === true && r.rows[0].p.by_level === true && r.rows[0].p.level === 15);
+r = await tryQuery("authenticated", v5, `select count(*)::int n from public.list_gems()`);
+check("level 15 opens the Plus features", r.rows?.[0]?.n > 100);
+r = await tryQuery("authenticated", v1, `select count(*)::int n from public.list_gems()`);
+check("level 2 doesn't", r.rows?.[0]?.n === 0);
+await db.exec(`update public.app_settings set plus_locked = false`);
+r = await tryQuery("authenticated", admin, `insert into public.travel_deals (brand, category, title_en, title_th, code, scope) values ('Klook', 'activity', '10% off', 'ลด 10%', 'LEVEL15', 'world') returning id`);
+const levelDealId = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", v5, `select id, code from public.level_deals()`);
+check("level 15 sees the travel deals", r.rows?.some((d) => d.id === levelDealId && d.code === "LEVEL15"));
+r = await tryQuery("authenticated", v1, `select id from public.level_deals()`);
+check("lower levels don't", !r.error && r.rows.length === 0);
+r = await tryQuery("authenticated", v5, `select public.report_travel_deal($1)`, [levelDealId]);
+check("level 15 can report a deal that didn't work", !r.error);
+r = await tryQuery("authenticated", v5, `select id from public.level_deals() where id = $1`, [levelDealId]);
+check("and it's hidden for them", !r.error && r.rows.length === 0);
+r = await tryQuery("authenticated", v3, `select public.report_travel_deal($1)`, [levelDealId]);
+check("people without a reward or level 15 can't report", /not_allowed/.test(r.error ?? ""));
+
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

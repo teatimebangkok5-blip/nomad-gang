@@ -5,7 +5,8 @@ import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
 // TableMeet Plus: Plan my day, Hidden Gems and the Rewards Passport, and no ads. For now the founder gives Plus by
-// hand in the admin panel (monthly or yearly). The server checks it too: supabase/migrations/*_tablemeet_plus.sql.
+// hand in the admin panel (monthly or yearly), and reaching level 15 gives it for free (src/lib/levels.ts). The
+// server checks it too: supabase/migrations/*_tablemeet_plus.sql, *_story_likes_levels.sql.
 
 export type PlusPlan = 'monthly' | 'yearly';
 
@@ -19,6 +20,9 @@ export type PlusState =
       unlocked: boolean;
       plan: PlusPlan | null;
       endsAt: string | null;
+      // Plus because of reaching the Plus level (no end date).
+      byLevel: boolean;
+      level: number | null;
     };
 
 // One shared copy for every screen, per signed-in user. Screens get it through React state (setState with the new
@@ -33,7 +37,14 @@ async function fetchPlus(userId: string) {
     console.warn('Loading Plus failed', error.message);
     return;
   }
-  const value = (data ?? {}) as { member?: boolean; unlocked?: boolean; plan?: PlusPlan | null; ends_at?: string | null };
+  const value = (data ?? {}) as {
+    member?: boolean;
+    unlocked?: boolean;
+    plan?: PlusPlan | null;
+    ends_at?: string | null;
+    by_level?: boolean;
+    level?: number | null;
+  };
   const next: Cached = {
     userId,
     state: {
@@ -42,6 +53,8 @@ async function fetchPlus(userId: string) {
       unlocked: !!value.unlocked,
       plan: value.plan ?? null,
       endsAt: value.ends_at ?? null,
+      byLevel: !!value.by_level,
+      level: value.level ?? null,
     },
   };
   cache = next;

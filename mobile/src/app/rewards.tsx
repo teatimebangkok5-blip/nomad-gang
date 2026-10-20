@@ -5,6 +5,7 @@ import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GlossyFill } from '@/components/glossy';
+import { LevelSection } from '@/components/level-section';
 import { RewardCard } from '@/components/reward-card';
 import { ScreenHeader } from '@/components/screen-header';
 import { Radius, Raised, Spacing, Type } from '@/constants/theme';
@@ -14,8 +15,9 @@ import { formatDayLabel, bangkokDay, deviceZone } from '@/lib/bangkok-time';
 import { EXAMPLE_REWARD, REWARD_MIN_PEOPLE, useRewards } from '@/lib/rewards';
 import { makeStyles, useColors } from '@/lib/theme';
 
-// My rewards: travel deals unlocked by tables and hangouts I hosted that ended with 4+ people, newest first, and a
-// sample reward ("See an example") showing what hosting unlocks.
+// My rewards: my level (points, challenges, and at level 15 Plus + every travel deal), then the travel deals unlocked
+// by tables and hangouts I hosted that ended with 4+ people, newest first, and a sample reward ("See an example")
+// showing what hosting unlocks.
 export default function RewardsScreen() {
   const styles = useStyles();
   const Colors = useColors();
@@ -37,6 +39,8 @@ export default function RewardsScreen() {
           contentContainerStyle={styles.list}
           ListHeaderComponent={
             <View style={styles.header}>
+              {session && <LevelSection userId={session.user.id} />}
+              <Text style={styles.hostTitle}>{t('rewards.hostTitle')}</Text>
               <Text style={styles.intro}>{t('rewards.intro', { count: REWARD_MIN_PEOPLE })}</Text>
               <Pressable
                 accessibilityRole="button"
@@ -94,6 +98,7 @@ const useStyles = makeStyles((Colors) => ({
   spinner: { marginTop: Spacing.xxl },
   list: { padding: Spacing.lg, gap: Spacing.xl, flexGrow: 1 },
   intro: { ...Type.body, color: Colors.textSecondary },
+  hostTitle: { ...Type.title, color: Colors.text, marginTop: Spacing.lg },
   header: { gap: Spacing.md, marginBottom: Spacing.md },
   pressed: { opacity: 0.7 },
   exampleButton: {

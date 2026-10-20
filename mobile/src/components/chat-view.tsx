@@ -227,7 +227,7 @@ export function ChatView({
                       accessibilityLabel={t('chat.openProfile', { name: item.sender_name })}
                       hitSlop={4}
                       onPress={() => router.push({ pathname: '/profile/[userId]', params: { userId: item.sender_id } })}>
-                      <ChatAvatar name={item.sender_name} photoPath={item.sender_avatar} size={AVATAR} />
+                      <ChatAvatar name={item.sender_name} photoPath={item.sender_avatar} size={AVATAR} userId={item.sender_id} />
                     </Pressable>
                   ) : (
                     <View style={styles.avatarSpace} />

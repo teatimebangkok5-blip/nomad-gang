@@ -16,6 +16,7 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { LevelBadgeView } from '@/components/level-badge';
 import { lightColors, Radius } from '@/constants/theme';
 import { useLanguage } from '@/i18n';
 import type { Coords } from '@/lib/location';
@@ -104,6 +105,8 @@ export type MapPin = {
   accessibilityLabel?: string;
   // Shown as a badge, e.g. the number of open tables at the venue.
   count?: number;
+  // The person's level, on the top-left corner (story pins).
+  level?: number | null;
   selected?: boolean;
 };
 
@@ -575,6 +578,11 @@ function PinView({ pin }: { pin: MapPin }) {
           <Text style={styles.badgeText}>{pin.count}</Text>
         </View>
       ) : null}
+      {pin.level ? (
+        <View style={styles.levelSpot}>
+          <LevelBadgeView level={pin.level} size={PIN} corner="topLeft" />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -647,4 +655,6 @@ const useStyles = makeStyles((Colors) => ({
     elevation: 9,
   },
   badgeText: { fontSize: 11, lineHeight: 14, fontWeight: '800', color: Colors.white },
+  // A box the size of the ball, so the level badge sits on the ball's top-left corner.
+  levelSpot: { position: 'absolute', top: 8, left: 4, width: PIN, height: PIN },
 }));

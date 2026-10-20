@@ -338,6 +338,24 @@ Product spec and tech stack below are agreed. Built so far:
   travel deal (`level_deals()`; `report_travel_deal` allows level 15). UI: level card + progress bar, level road to
   👑 15, points-per-week chart (8 weeks), how to earn, challenges (tap → where to do it), recent points, level 15 deals;
   the Plus screen shows "Free at level 15".
+- **Story map + level badges** (added 2026-10-20, `*_story_map_level_badges.sql`; founder's choices). Stories stay
+  on the home map 24 h (`map_stories`, `expires_at`) but are **kept 10 days** for the poster's **story map**
+  (`story_on_profile(story)`: same audience / block / report rules, `created_at` within 10 days; the stories RLS
+  policy, `story_file_visible` and `like_story` use it); `clear_my_expired_stories` now deletes stories older than
+  10 days. `user_story_map(user)` → oldest first with `on_map`, `liked`, `like_count` (own). Screen
+  `src/app/story-map/[userId].tsx` (Story map button on every profile, params `userId` + `name`): full-screen map,
+  story photos as numbered pins joined by a route line, "N stories · about X km travelled", a bottom timeline of
+  cards (tap = go there, tap again = full-screen photo with ♥ / "N liked it" + delete for mine / report-block for
+  others). Photos via `useStoryPhotoUrls` (one `createSignedUrls` call); "Liked by" sheet shared in
+  `src/components/story-likers-sheet.tsx`. **Level badges**: `user_levels(ids)` (max 300, not across a block) →
+  batched cache in `src/lib/levels.ts` (`useUserLevel(s)`, 5 min, `setKnownLevel` from My rewards);
+  `LevelBadge` / `LevelBadgeView` (`src/components/level-badge.tsx`, brand circle on the circle's edge, scales with
+  the picture, ignores touches). Shown on the home profile button, profile page (bottom-left, camera stays
+  bottom-right), `ChatAvatar` when given `userId` (messages inbox private chats, chat messages, friends, group
+  members, friend picker, live location), table / hangout members and join requests, Travellers nearby, the story
+  viewer + likers, and story pins on the home map (`MapPin.level`, top-left; count stays top-right). Not on
+  notifications (they already carry a kind badge). Others' levels include challenge points only once they open the
+  app (challenges are awarded by `level_sync`). Privacy Policy mentions the 10-day story map and likes.
 - **Hidden Gems list** (`*_hidden_gems.sql` + `*_more_hidden_gems.sql`): the founder's numbered list of 100 (2026-10-18:
   1–30 places by type, 31–65 cafés, 66–100 food) is gems 1–100; the first 32 gems not on it are 101+ (still
   published). Areas are free text and become the map's area chips. All are published (`*_publish_hidden_gems.sql`,

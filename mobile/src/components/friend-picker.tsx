@@ -48,7 +48,7 @@ export function FriendPicker({
             onPress={() => onToggle(friend.id)}
             style={({ pressed }) => [styles.row, on && styles.rowOn, pressed && styles.pressed]}>
             <GlossyFill />
-            <ChatAvatar name={friend.display_name} photoPath={friend.avatar_path} size={40} />
+            <ChatAvatar name={friend.display_name} photoPath={friend.avatar_path} size={40} userId={friend.id} />
             <Text style={styles.name} numberOfLines={1}>
               {friend.display_name}
             </Text>

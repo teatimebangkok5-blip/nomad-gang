@@ -126,6 +126,7 @@ export function useLevel(userId: string | null) {
       const level = data as LevelState;
       const before = lastLevel?.userId === userId ? lastLevel.level : null;
       lastLevel = { userId, level: level.level };
+      setKnownLevel(userId, level.level);
       // Reaching the Plus level (or a new level after it) unlocks Plus: refresh it everywhere (ads, Plus screens).
       if (level.level >= level.plus_level) reloadPlus();
       setState((current) => ({
@@ -164,4 +165,91 @@ export function useLevelDeals(enabled: boolean) {
     if (enabled) load();
   }, [enabled, load]);
   return { deals: enabled ? deals : null, reload: load };
+}
+
+// ---------------------------------------------------------------------------
+// Everyone's level, for the badge on profile pictures. Requests from all badges on screen are collected for a moment
+// and loaded in one call (user_levels, max 300 ids, nothing across a block); results are kept for 5 minutes.
+// ---------------------------------------------------------------------------
+
+const LEVEL_TTL = 5 * 60_000;
+const levelCache = new Map<string, { level: number | null; at: number }>();
+const levelListeners = new Set<(levels: Map<string, number | null>) => void>();
+const pendingLevels = new Set<string>();
+let levelTimer: ReturnType<typeof setTimeout> | null = null;
+
+function notifyLevels(ids: string[]) {
+  const update = new Map(ids.map((id) => [id, levelCache.get(id)?.level ?? null]));
+  levelListeners.forEach((listener) => listener(update));
+}
+
+async function flushLevels() {
+  levelTimer = null;
+  const ids = [...pendingLevels].slice(0, 300);
+  ids.forEach((id) => pendingLevels.delete(id));
+  if (pendingLevels.size) levelTimer = setTimeout(flushLevels, 0);
+  if (!ids.length) return;
+  const { data, error } = await supabase.rpc('user_levels', { p_user_ids: ids });
+  if (error) {
+    console.warn('Loading levels failed', error.message);
+    return;
+  }
+  const now = Date.now();
+  // People missing from the answer (blocked, deleted) get no badge.
+  ids.forEach((id) => levelCache.set(id, { level: null, at: now }));
+  for (const row of (data ?? []) as { user_id: string; level: number }[]) levelCache.set(row.user_id, { level: row.level, at: now });
+  notifyLevels(ids);
+}
+
+function requestLevels(ids: string[]) {
+  const now = Date.now();
+  const fresh: string[] = [];
+  for (const id of ids) {
+    const cached = levelCache.get(id);
+    if (cached && now - cached.at < LEVEL_TTL) fresh.push(id);
+    else pendingLevels.add(id);
+  }
+  // Already known: hand them over after this render (never set state while rendering).
+  if (fresh.length) Promise.resolve().then(() => notifyLevels(fresh));
+  if (pendingLevels.size && !levelTimer) levelTimer = setTimeout(flushLevels, 30);
+}
+
+// My own level just loaded (My rewards): update my badges everywhere.
+export function setKnownLevel(userId: string, level: number) {
+  levelCache.set(userId, { level, at: Date.now() });
+  notifyLevels([userId]);
+}
+
+// Levels of these people (missing until loaded; null = no badge).
+export function useUserLevels(ids: (string | null | undefined)[]): Map<string, number | null> {
+  const wanted = [...new Set(ids.filter((id): id is string => !!id))].sort();
+  const key = wanted.join(',');
+  const [levels, setLevels] = useState<Map<string, number | null>>(() => new Map());
+
+  useEffect(() => {
+    if (!key) return;
+    const mine = new Set(key.split(','));
+    const listener = (update: Map<string, number | null>) => {
+      const relevant = [...update].filter(([id]) => mine.has(id));
+      if (!relevant.length) return;
+      setLevels((current) => {
+        if (relevant.every(([id, level]) => current.has(id) && current.get(id) === level)) return current;
+        const next = new Map(current);
+        relevant.forEach(([id, level]) => next.set(id, level));
+        return next;
+      });
+    };
+    levelListeners.add(listener);
+    requestLevels([...mine]);
+    return () => {
+      levelListeners.delete(listener);
+    };
+  }, [key]);
+
+  return levels;
+}
+
+export function useUserLevel(userId: string | null | undefined): number | null {
+  const levels = useUserLevels([userId]);
+  return userId ? (levels.get(userId) ?? null) : null;
 }

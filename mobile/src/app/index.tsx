@@ -24,6 +24,7 @@ import { Button } from '@/components/button';
 import { Chip } from '@/components/chip';
 import { Icon, type IconName } from '@/components/icon';
 import { LanguageToggle } from '@/components/language-toggle';
+import { LevelBadge } from '@/components/level-badge';
 import { Logo } from '@/components/logo';
 import { MeetupCard } from '@/components/meetup-card';
 import { stopName } from '@/components/plan-timeline';
@@ -48,6 +49,7 @@ import { venuePhotoUrl } from '@/lib/supabase';
 import { isHangoutVenue, useVenues, type Venue } from '@/lib/venues';
 import { profilePhotoUrl } from '@/lib/photos';
 import { usePlansForMeetups, type DayPlan } from '@/lib/plans';
+import { useUserLevels } from '@/lib/levels';
 import { useChats } from '@/lib/messages';
 import { useNotifications } from '@/lib/notifications';
 import { useMyName } from '@/lib/profiles';
@@ -157,7 +159,9 @@ export default function HomeScreen() {
   useEffect(() => {
     if (session) clearMyExpiredStories();
   }, [session]);
-  const storyPins: MapPin[] = groupStories(stories ?? []).map((group) => ({
+  const storyGroups = groupStories(stories ?? []);
+  const storyLevels = useUserLevels(storyGroups.map((group) => group.userId));
+  const storyPins: MapPin[] = storyGroups.map((group) => ({
     key: `s:${group.userId}`,
     lat: group.lat,
     lng: group.lng,
@@ -165,6 +169,7 @@ export default function HomeScreen() {
     tone: 'story',
     image: group.avatarPath ? profilePhotoUrl(group.avatarPath) : null,
     count: group.stories.length > 1 ? group.stories.length : undefined,
+    level: storyLevels.get(group.userId) ?? null,
     accessibilityLabel:
       group.userId === session?.user.id ? t('stories.pinLabelMine') : t('stories.pinLabel', { name: group.name }),
   }));
@@ -284,26 +289,29 @@ export default function HomeScreen() {
           <View style={styles.top} pointerEvents="box-none" onLayout={(e) => setTopHeight(e.nativeEvent.layout.height)}>
             <LinearGradient colors={Colors.fade} locations={[0, 0.55, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
             <View style={[styles.topBar, { paddingTop: insets.top + 6 }]}>
-              {/* My profile, top left: photo or initials in the brand ring. */}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('profile.myProfile')}
-                hitSlop={6}
-                disabled={!session}
-                onPress={() => session && router.push({ pathname: '/profile/[userId]', params: { userId: session.user.id } })}
-                style={({ pressed }) => [styles.profileRing, pressed && styles.pressed]}>
-                <ToneFill tone="brand" shine={false} />
-                <View
-                  style={[styles.profileInner, { backgroundColor: session ? avatarColor(session.user.id) : Colors.surfaceRaised }]}>
-                  {me?.avatarPath ? (
-                    <Image source={profilePhotoUrl(me.avatarPath)} style={StyleSheet.absoluteFill} contentFit="cover" />
-                  ) : myInitials ? (
-                    <Text style={styles.profileInitials}>{myInitials}</Text>
-                  ) : (
-                    <Icon name="person" size={20} color={Colors.onBrand} />
-                  )}
-                </View>
-              </Pressable>
+              {/* My profile, top left: photo or initials in the brand ring, my level on its corner. */}
+              <View style={styles.profileWrap}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('profile.myProfile')}
+                  hitSlop={6}
+                  disabled={!session}
+                  onPress={() => session && router.push({ pathname: '/profile/[userId]', params: { userId: session.user.id } })}
+                  style={({ pressed }) => [styles.profileRing, pressed && styles.pressed]}>
+                  <ToneFill tone="brand" shine={false} />
+                  <View
+                    style={[styles.profileInner, { backgroundColor: session ? avatarColor(session.user.id) : Colors.surfaceRaised }]}>
+                    {me?.avatarPath ? (
+                      <Image source={profilePhotoUrl(me.avatarPath)} style={StyleSheet.absoluteFill} contentFit="cover" />
+                    ) : myInitials ? (
+                      <Text style={styles.profileInitials}>{myInitials}</Text>
+                    ) : (
+                      <Icon name="person" size={20} color={Colors.onBrand} />
+                    )}
+                  </View>
+                </Pressable>
+                {session && <LevelBadge userId={session.user.id} size={44} />}
+              </View>
               <View style={styles.logo}>
                 <Logo size={21} />
               </View>
@@ -750,6 +758,7 @@ const useStyles = makeStyles((Colors) => ({
   pressed: { opacity: 0.75 },
   top: { position: 'absolute', top: 0, left: 0, right: 0, paddingBottom: Spacing.xl },
   topBar: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: Spacing.md },
+  profileWrap: { width: 44, height: 44 },
   profileRing: {
     width: 44,
     height: 44,

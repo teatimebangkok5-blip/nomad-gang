@@ -116,7 +116,7 @@ export default function LiveLocationScreen() {
               accessibilityRole="button"
               accessibilityLabel={t('chat.openProfile', { name })}
               onPress={() => router.push({ pathname: '/profile/[userId]', params: { userId: row.sender_id } })}>
-              <ChatAvatar name={name} photoPath={row.profiles?.avatar_path} size={48} />
+              <ChatAvatar name={name} photoPath={row.profiles?.avatar_path} size={48} userId={row.sender_id} />
             </Pressable>
             <View style={styles.flex}>
               <Text style={styles.name} numberOfLines={1}>

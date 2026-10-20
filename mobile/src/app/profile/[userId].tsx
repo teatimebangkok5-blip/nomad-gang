@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '@/components/button';
 import { GlossyFill, InstagramBadge } from '@/components/glossy';
 import { Icon, type IconName } from '@/components/icon';
+import { LevelBadge } from '@/components/level-badge';
 import { AboutTab, EventsTab, TravelTab, TripsTab, worldPercent, type ProfileTab } from '@/components/profile-tabs';
 import { ScreenHeader } from '@/components/screen-header';
 import { StoryShare } from '@/components/story-card';
@@ -249,6 +250,7 @@ export default function ProfileScreen() {
                 <Icon name="camera" size={16} color={Colors.white} />
               </View>
             )}
+            <LevelBadge userId={profile.id} size={AVATAR} corner="bottomLeft" />
           </Pressable>
 
           <Text style={styles.name}>
@@ -313,13 +315,6 @@ export default function ProfileScreen() {
               <ActionButton icon="heart" iconColor={Colors.pink} label={t('profile.favorites')} onPress={() => router.push('/favorites')} />
               <ActionButton icon="settings" label={t('profile.settings')} iconOnly onPress={() => router.push('/settings')} />
             </View>
-            <View style={styles.centerRow}>
-              <ActionButton
-                icon="eye"
-                label={t('profile.viewPublic')}
-                onPress={() => router.push({ pathname: '/profile/[userId]', params: { userId: profile.id, preview: '1' } })}
-              />
-            </View>
           </>
         ) : !isOwner ? (
           <View style={styles.followRow}>
@@ -331,6 +326,23 @@ export default function ProfileScreen() {
             />
           </View>
         ) : null}
+
+        {/* Story map: everyone's stories of the last 10 days on a map, in time order (the ones I may see). */}
+        <View style={styles.storyMapRow}>
+          <ActionButton
+            icon="map"
+            iconColor={Colors.violetText}
+            label={t('profile.storyMap')}
+            onPress={() => router.push({ pathname: '/story-map/[userId]', params: { userId: profile.id, name: profile.display_name } })}
+          />
+          {isMe && (
+            <ActionButton
+              icon="eye"
+              label={t('profile.viewPublic')}
+              onPress={() => router.push({ pathname: '/profile/[userId]', params: { userId: profile.id, preview: '1' } })}
+            />
+          )}
+        </View>
 
         <View style={styles.tabs} accessibilityRole="tablist">
           {tabs.map((item) => {
@@ -557,7 +569,7 @@ const useStyles = makeStyles((Colors) => ({
     marginTop: Spacing.lg,
   },
   actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: Spacing.sm, marginTop: Spacing.xl },
-  centerRow: { alignItems: 'center', marginTop: Spacing.md },
+  storyMapRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: Spacing.sm, marginTop: Spacing.md },
   action: {
     flexDirection: 'row',
     alignItems: 'center',

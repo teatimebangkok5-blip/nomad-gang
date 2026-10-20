@@ -109,7 +109,7 @@ export default function GroupInfoScreen() {
                 accessibilityRole="button"
                 onPress={() => router.push({ pathname: '/profile/[userId]', params: { userId: member.user_id } })}
                 style={({ pressed }) => [styles.memberMain, pressed && styles.pressed]}>
-                <ChatAvatar name={member.display_name} photoPath={member.avatar_path} size={40} />
+                <ChatAvatar name={member.display_name} photoPath={member.avatar_path} size={40} userId={member.user_id} />
                 <View style={styles.flex}>
                   <Text style={styles.memberName} numberOfLines={1}>
                     {member.display_name}

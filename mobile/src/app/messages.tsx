@@ -271,6 +271,7 @@ function ChatRow({
         name={title}
         photoPath={chat.chat_kind === 'dm' ? chat.other_avatar : null}
         emoji={chat.chat_kind === 'group' ? chat.emoji : chat.chat_kind === 'meetup' ? (chat.meetup_kind === 'hangout' ? '🙌' : '👥') : null}
+        userId={chat.chat_kind === 'dm' ? chat.other_id : null}
       />
       <View style={styles.rowBody}>
         <View style={styles.rowTop}>

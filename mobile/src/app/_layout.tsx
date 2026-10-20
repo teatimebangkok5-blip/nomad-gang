@@ -94,6 +94,7 @@ function RootNavigator() {
           <Stack.Screen name="plus" />
           <Stack.Screen name="post-story" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="story/[userId]" options={{ presentation: 'fullScreenModal', animation: 'fade' }} />
+          <Stack.Screen name="story-map/[userId]" />
         </Stack.Protected>
         {/* Terms / Privacy: open signed in or not. */}
         <Stack.Screen name="legal/[doc]" />

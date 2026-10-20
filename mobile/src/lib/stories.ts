@@ -8,9 +8,10 @@ import { AppState } from 'react-native';
 import { skipNextOpenAd } from '@/lib/ads';
 import { supabase, uniqueChannelName } from '@/lib/supabase';
 
-// Map stories: a photo with an optional caption, pinned on the home map near where it was posted, for 24 hours.
-// The server stores only a point 100–250 m from the real location. Photos are in the private "story-photos" bucket
-// at <my id>/<random>.jpg and open through signed links. Rules: supabase/migrations/*_map_stories.sql.
+// Map stories: a photo with an optional caption, pinned on the home map near where it was posted, for 24 hours, then
+// kept for 10 days on the poster's story map (their profile). The server stores only a point 100–250 m from the real
+// location. Photos are in the private "story-photos" bucket at <my id>/<random>.jpg and open through signed links.
+// Rules: supabase/migrations/*_map_stories.sql, *_story_likes_levels.sql, *_story_map_level_badges.sql.
 
 const BUCKET = 'story-photos';
 const SIGNED_SECONDS = 60 * 60;
@@ -188,7 +189,7 @@ export async function postStory(
   return null;
 }
 
-export async function deleteStory(story: Story): Promise<boolean> {
+export async function deleteStory(story: Pick<Story, 'id'>): Promise<boolean> {
   const { data, error } = await supabase.rpc('delete_story', { p_story_id: story.id });
   if (error) {
     console.warn('Deleting the story failed', error.message);
@@ -201,7 +202,7 @@ export async function deleteStory(story: Story): Promise<boolean> {
 
 // Likes (or unlikes) someone's story. The shared list updates at once and is corrected from the server after.
 // Returns an error key (not_found = gone or no longer visible to me) or null.
-export async function likeStory(story: Story, like: boolean): Promise<'not_allowed' | 'not_found' | 'generic' | null> {
+export async function likeStory(story: Pick<Story, 'id'>, like: boolean): Promise<'not_allowed' | 'not_found' | 'generic' | null> {
   if (cache) {
     cache = cache.map((item) => (item.id === story.id ? { ...item, liked: like } : item));
     listeners.forEach((listener) => listener(cache));
@@ -233,7 +234,93 @@ export function useStoryLikers(storyId: string | null, likeCount: number | null)
   return state && state.storyId === storyId ? state.likers : null;
 }
 
-// Deletes my expired stories and their photos, once per app start (they're already hidden from everyone).
+// Someone's story map: their stories of the last 10 days that I may see, oldest first.
+export type StoryMapItem = {
+  id: string;
+  photo_path: string;
+  caption: string;
+  lat: number;
+  lng: number;
+  area_name_en: string | null;
+  area_name_th: string | null;
+  created_at: string;
+  audience: StoryAudience;
+  // Still on the home map (first 24 hours).
+  on_map: boolean;
+  liked: boolean;
+  // Only on my own stories.
+  like_count: number | null;
+};
+
+// null while loading, 'error' if it failed.
+export function useStoryMap(userId: string | null) {
+  const [state, setState] = useState<{ userId: string; items: StoryMapItem[] | 'error' } | null>(null);
+  const load = useCallback(() => {
+    if (!userId) return;
+    supabase.rpc('user_story_map', { p_user_id: userId }).then(({ data, error }) => {
+      if (error) console.warn('Loading the story map failed', error.message);
+      setState((current) =>
+        error && current?.userId === userId && current.items !== 'error'
+          ? current
+          : { userId, items: error ? 'error' : ((data ?? []) as StoryMapItem[]) },
+      );
+    });
+  }, [userId]);
+  useEffect(() => {
+    load();
+    const appState = AppState.addEventListener('change', (next) => {
+      if (next === 'active') load();
+    });
+    return () => appState.remove();
+  }, [load]);
+  return { items: state && state.userId === userId ? state.items : null, reload: load };
+}
+
+// Links to several story photos at once (one request); a photo that can't be opened is missing from the map.
+export function useStoryPhotoUrls(paths: string[]) {
+  const key = [...new Set(paths)].sort().join('|');
+  const [urls, setUrls] = useState<Map<string, string>>(() => new Map());
+  useEffect(() => {
+    if (!key) return;
+    let alive = true;
+    const wanted = key.split('|');
+    const now = Date.now();
+    const missing = wanted.filter((path) => {
+      const cached = signed.get(path);
+      return !cached || cached.expires <= now + 60_000;
+    });
+    const fill = () => {
+      if (!alive) return;
+      const next = new Map<string, string>();
+      wanted.forEach((path) => {
+        const cached = signed.get(path);
+        if (cached) next.set(path, cached.url);
+      });
+      setUrls(next);
+    };
+    if (!missing.length) {
+      Promise.resolve().then(fill);
+    } else {
+      supabase.storage
+        .from(BUCKET)
+        .createSignedUrls(missing, SIGNED_SECONDS)
+        .then(({ data, error }) => {
+          if (error) console.warn('Opening story photos failed', error.message);
+          const expires = Date.now() + SIGNED_SECONDS * 1000;
+          for (const item of data ?? []) {
+            if (item.path && item.signedUrl && !item.error) signed.set(item.path, { url: item.signedUrl, expires });
+          }
+          fill();
+        });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [key]);
+  return urls;
+}
+
+// Deletes my stories older than 10 days and their photos, once per app start (no longer shown anywhere).
 let cleared = false;
 export function clearMyExpiredStories() {
   if (cleared) return;

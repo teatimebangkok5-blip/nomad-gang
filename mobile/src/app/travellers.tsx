@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GlossyFill } from '@/components/glossy';
 import { Button } from '@/components/button';
+import { LevelBadge } from '@/components/level-badge';
 import { Icon } from '@/components/icon';
 import { ScreenHeader } from '@/components/screen-header';
 import { VenueMap } from '@/components/venue-map';
@@ -125,7 +126,7 @@ function NearbyTab({ myId }: { myId: string | undefined }) {
               accessibilityLabel={`${t('profile.open')}: ${item.display_name}`}
               onPress={() => router.push({ pathname: '/profile/[userId]', params: { userId: item.user_id } })}
               style={({ pressed }) => [styles.personMain, pressed && styles.pressed]}>
-              <Avatar name={item.display_name} />
+              <Avatar name={item.display_name} userId={item.user_id} />
               <View style={styles.personBody}>
                 <Text style={styles.personName} numberOfLines={1}>
                   {item.display_name}
@@ -162,11 +163,16 @@ function NearbyTab({ myId }: { myId: string | undefined }) {
   );
 }
 
-function Avatar({ name }: { name: string }) {
+const AVATAR_SIZE = 44;
+
+function Avatar({ name, userId }: { name: string; userId: string }) {
   const styles = useStyles();
   return (
-    <View style={styles.avatar}>
-      <Text style={styles.avatarText}>{name.slice(0, 1).toUpperCase() || '?'}</Text>
+    <View>
+      <View style={styles.avatar}>
+        <Text style={styles.avatarText}>{name.slice(0, 1).toUpperCase() || '?'}</Text>
+      </View>
+      <LevelBadge userId={userId} size={AVATAR_SIZE} />
     </View>
   );
 }

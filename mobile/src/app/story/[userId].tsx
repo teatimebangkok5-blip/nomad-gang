@@ -2,10 +2,12 @@ import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Alert, FlatList, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/icon';
+import { LevelBadge } from '@/components/level-badge';
+import { LIKE_RED, StoryLikersSheet } from '@/components/story-likers-sheet';
 import { avatarColor, Radius, Spacing, Type } from '@/constants/theme';
 import { useLanguage } from '@/i18n';
 import { useAuth } from '@/lib/auth';
@@ -18,11 +20,9 @@ import {
   reloadStories,
   storyAge,
   useStories,
-  useStoryLikers,
   useStoryPhotoUrl,
-  type StoryLiker,
 } from '@/lib/stories';
-import { makeStyles, useColors } from '@/lib/theme';
+import { makeStyles } from '@/lib/theme';
 
 // One person's live stories, full screen and oldest first: tap the right side for the next one, the left side for
 // the previous one. The header has their name (tap → profile), how long ago and the area; the ⋮ menu deletes my own
@@ -161,12 +161,15 @@ export default function StoryScreen() {
             onPress={() => router.push({ pathname: '/profile/[userId]', params: { userId: group.userId } })}
             style={styles.who}
             hitSlop={6}>
-            <View style={[styles.avatar, { backgroundColor: avatarColor(group.userId) }]}>
-              {group.avatarPath ? (
-                <Image source={profilePhotoUrl(group.avatarPath)} style={StyleSheet.absoluteFill} contentFit="cover" />
-              ) : (
-                <Text style={styles.initials}>{initials}</Text>
-              )}
+            <View>
+              <View style={[styles.avatar, { backgroundColor: avatarColor(group.userId) }]}>
+                {group.avatarPath ? (
+                  <Image source={profilePhotoUrl(group.avatarPath)} style={StyleSheet.absoluteFill} contentFit="cover" />
+                ) : (
+                  <Text style={styles.initials}>{initials}</Text>
+                )}
+              </View>
+              <LevelBadge userId={group.userId} size={40} />
             </View>
             <View style={styles.whoText}>
               <Text style={styles.name} numberOfLines={1}>
@@ -220,7 +223,7 @@ export default function StoryScreen() {
       </SafeAreaView>
 
       {mine && (
-        <LikersSheet
+        <StoryLikersSheet
           visible={likersOpen}
           storyId={story.id}
           likeCount={story.like_count}
@@ -231,75 +234,8 @@ export default function StoryScreen() {
   );
 }
 
-const LIKE_RED = '#FF4D6D';
-
-// Who liked my story (tap a person → their profile).
-function LikersSheet({
-  visible,
-  storyId,
-  likeCount,
-  onClose,
-}: {
-  visible: boolean;
-  storyId: string;
-  likeCount: number | null;
-  onClose: () => void;
-}) {
-  const styles = useStyles();
-  const Colors = useColors();
-  const { t } = useTranslation();
-  const likers = useStoryLikers(visible ? storyId : null, likeCount);
-
-  function openProfile(liker: StoryLiker) {
-    onClose();
-    router.push({ pathname: '/profile/[userId]', params: { userId: liker.user_id } });
-  }
-
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable accessibilityRole="button" accessibilityLabel={t('common.close')} style={styles.sheetBackdrop} onPress={onClose} />
-      <SafeAreaView edges={['bottom']} style={styles.sheet}>
-        <View style={styles.sheetHeader}>
-          <Text style={styles.sheetTitle}>{t('stories.likedBy')}</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel={t('common.close')} onPress={onClose} hitSlop={10} style={styles.iconButton}>
-            <Icon name="close" size={24} color={Colors.text} />
-          </Pressable>
-        </View>
-        {likers === null ? (
-          <ActivityIndicator color={Colors.accent} style={styles.sheetSpinner} />
-        ) : (
-          <FlatList
-            data={likers}
-            keyExtractor={(liker) => liker.user_id}
-            contentContainerStyle={styles.sheetList}
-            ListEmptyComponent={<Text style={styles.sheetEmpty}>{t('stories.noLikes')}</Text>}
-            renderItem={({ item }) => (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => openProfile(item)}
-                style={({ pressed }) => [styles.likerRow, pressed && styles.pressed]}>
-                <View style={[styles.likerAvatar, { backgroundColor: avatarColor(item.user_id) }]}>
-                  {item.avatar_path ? (
-                    <Image source={profilePhotoUrl(item.avatar_path)} style={StyleSheet.absoluteFill} contentFit="cover" />
-                  ) : (
-                    <Text style={styles.initials}>{item.display_name.slice(0, 1).toUpperCase()}</Text>
-                  )}
-                </View>
-                <Text style={styles.likerName} numberOfLines={1}>
-                  {item.display_name}
-                </Text>
-                <Icon name="heart" size={18} color={LIKE_RED} />
-              </Pressable>
-            )}
-          />
-        )}
-      </SafeAreaView>
-    </Modal>
-  );
-}
-
-// The viewer is always dark (photos look best on black), in both themes; the likes sheet follows the theme.
-const useStyles = makeStyles((Colors) => ({
+// The viewer is always dark (photos look best on black), in both themes.
+const useStyles = makeStyles(() => ({
   root: { flex: 1, backgroundColor: '#000000' },
   center: { alignItems: 'center', justifyContent: 'center' },
   gone: { ...Type.body, color: '#FFFFFF', textAlign: 'center', paddingHorizontal: Spacing.xl },
@@ -344,26 +280,4 @@ const useStyles = makeStyles((Colors) => ({
   },
   likeText: { ...Type.label, color: '#FFFFFF' },
   pressed: { opacity: 0.7 },
-  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
-  sheet: {
-    maxHeight: '60%',
-    backgroundColor: Colors.bg,
-    borderTopLeftRadius: Radius.sheet,
-    borderTopRightRadius: Radius.sheet,
-  },
-  sheetHeader: { flexDirection: 'row', alignItems: 'center', paddingLeft: Spacing.lg, paddingRight: Spacing.sm, paddingTop: Spacing.sm },
-  sheetTitle: { ...Type.heading, color: Colors.text, flex: 1 },
-  sheetSpinner: { margin: Spacing.xl },
-  sheetList: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.lg },
-  sheetEmpty: { ...Type.body, color: Colors.textSecondary, paddingVertical: Spacing.lg },
-  likerRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, minHeight: 56 },
-  likerAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  likerName: { ...Type.label, color: Colors.text, flex: 1 },
 }));

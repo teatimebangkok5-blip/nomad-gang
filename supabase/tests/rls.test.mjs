@@ -1562,10 +1562,17 @@ check("can't delete someone else's story", /not_found/.test(r.error ?? ""));
 await db.query(`update public.stories set expires_at = now() - interval '1 minute' where id = $1`, [storyId]);
 r = await tryQuery("authenticated", s6, `select id from public.map_stories()`);
 check("stories disappear after 24 hours", r.rows?.length === 0);
+r = await tryQuery("authenticated", s6, `select id, on_map from public.user_story_map($1)`, [s1]);
+check("but stay on the poster's story map", r.rows?.length === 1 && r.rows[0].id === storyId && r.rows[0].on_map === false);
+r = await tryQuery("authenticated", s1, `select public.clear_my_expired_stories() as path`);
+check("a story under 10 days old isn't cleared", r.rows?.length === 0);
+await db.query(`update public.stories set created_at = now() - interval '10 days 1 minute' where id = $1`, [storyId]);
+r = await tryQuery("authenticated", s6, `select id from public.user_story_map($1)`, [s1]);
+check("after 10 days it's off the story map too", !r.error && r.rows.length === 0);
 r = await tryQuery("authenticated", s6, `select public.clear_my_expired_stories() as path`);
 check("clearing expired stories only touches my own", r.rows?.length === 0);
 r = await tryQuery("authenticated", s1, `select public.clear_my_expired_stories() as path`);
-check("clear my expired stories (returns the photos to remove)", r.rows?.length === 1 && r.rows[0].path === storyPath);
+check("clear my stories older than 10 days (returns the photos to remove)", r.rows?.length === 1 && r.rows[0].path === storyPath);
 r = await tryQuery("authenticated", s1, `select public.delete_story($1) as path`, [storyId]);
 check("a deleted story is gone", /not_found/.test(r.error ?? ""));
 await db.query(`insert into public.stories (user_id, photo_path, lat, lng) select $1::uuid, $1::text || '/s' || g || '.jpg', 13.75, 100.5 from generate_series(1, 10) g`, [s2]);
@@ -1916,6 +1923,48 @@ r = await tryQuery("authenticated", v5, `select id from public.level_deals() whe
 check("and it's hidden for them", !r.error && r.rows.length === 0);
 r = await tryQuery("authenticated", v3, `select public.report_travel_deal($1)`, [levelDealId]);
 check("people without a reward or level 15 can't report", /not_allowed/.test(r.error ?? ""));
+
+// --- Story map (stories kept 10 days on the profile)
+const [m1, m2, m3, m4] = [1, 2, 3, 4].map((n) => `3a000000-0000-4000-8000-00000000000${n}`);
+await db.exec(`insert into auth.users (id, email, raw_user_meta_data, phone_confirmed_at) values
+  ${[m1, m2, m3, m4].map((id, i) => `('${id}', 'map${i}@x.com', '{"full_name": "Mapper ${i + 1}"}', now())`).join(", ")}`);
+const mapStory = async (path, lat, audience = "everyone", daysAgo = 0) => {
+  await tryQuery("authenticated", m1, `insert into storage.objects (bucket_id, name) values ('story-photos', $1)`, [path]);
+  const id = (await tryQuery("authenticated", m1, `select public.post_story($1, 'Trip', $2, 100.5, $3) as id`, [path, lat, audience])).rows?.[0]?.id;
+  if (daysAgo) await db.query(`update public.stories set created_at = now() - make_interval(days => $2), expires_at = now() - make_interval(days => $2) + interval '24 hours' where id = $1`, [id, daysAgo]);
+  return id;
+};
+const oldStory = await mapStory(`${m1}/day1.jpg`, 13.70, "everyone", 4);
+const friendsStory2 = await mapStory(`${m1}/day2.jpg`, 18.79, "friends", 2);
+const newStory = await mapStory(`${m1}/today.jpg`, 7.89);
+r = await tryQuery("authenticated", m2, `select id, on_map, liked, like_count from public.user_story_map($1)`, [m1]);
+check("the story map lists everyone-stories oldest first, not friends-only ones",
+  r.rows?.map((s) => s.id).join() === [oldStory, newStory].join() && r.rows[0].on_map === false && r.rows[1].on_map === true && r.rows[0].like_count === null);
+await db.query(`insert into public.follows (follower_id, followee_id) values ($1, $2), ($2, $1)`, [m1, m3]);
+r = await tryQuery("authenticated", m3, `select id from public.user_story_map($1)`, [m1]);
+check("friends also see friends-only stories on it", r.rows?.map((s) => s.id).join() === [oldStory, friendsStory2, newStory].join());
+r = await tryQuery("authenticated", m2, `select name from storage.objects where bucket_id = 'story-photos' and name like $1 order by name`, [`${m1}/%`]);
+check("photos of kept stories open (only the ones I may see)", r.rows?.map((o) => o.name).join() === [`${m1}/day1.jpg`, `${m1}/today.jpg`].join());
+r = await tryQuery("authenticated", m2, `select public.like_story($1)`, [oldStory]);
+check("a story on the story map can be liked", !r.error);
+r = await tryQuery("authenticated", m2, `select public.like_story($1)`, [friendsStory2]);
+check("but not a friends-only one by others", /not_found/.test(r.error ?? ""));
+r = await tryQuery("authenticated", m1, `select id, like_count from public.user_story_map($1) where id = $2`, [m1, oldStory]);
+check("the poster sees the likes on the story map", r.rows?.[0]?.like_count === 1);
+await db.query(`insert into public.blocks (blocker_id, blocked_id) values ($1, $2)`, [m1, m4]);
+r = await tryQuery("authenticated", m4, `select id from public.user_story_map($1)`, [m1]);
+check("no story map across a block", !r.error && r.rows.length === 0);
+r = await tryQuery("anon", null, `select * from public.user_story_map($1)`, [m1]);
+check("signed-out callers can't open a story map", !!r.error);
+
+// --- Level badges
+r = await tryQuery("authenticated", m2, `select user_id, level from public.user_levels($1)`, [[v1, v5, m1]]);
+const levelOf = (id) => r.rows?.find((row) => row.user_id === id)?.level;
+check("levels of several people at once", levelOf(v1) === 2 && levelOf(v5) === 15 && levelOf(m1) === 1);
+r = await tryQuery("authenticated", m4, `select user_id from public.user_levels($1)`, [[m1, v1]]);
+check("no level across a block", r.rows?.length === 1 && r.rows[0].user_id === v1);
+r = await tryQuery("anon", null, `select * from public.user_levels($1)`, [[v1]]);
+check("signed-out callers get no levels", !!r.error);
 
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

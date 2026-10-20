@@ -56,7 +56,7 @@ export default function FriendsScreen() {
               onPress={() => router.push({ pathname: '/profile/[userId]', params: { userId: item.id } })}
               style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
               <GlossyFill />
-              <ChatAvatar name={item.display_name} photoPath={item.avatar_path} size={48} />
+              <ChatAvatar name={item.display_name} photoPath={item.avatar_path} size={48} userId={item.id} />
               <View style={styles.rowText}>
                 <Text style={styles.name} numberOfLines={1}>
                   {item.display_name}

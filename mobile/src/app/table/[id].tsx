@@ -9,6 +9,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { GlossyFill } from '@/components/glossy';
 import { Button } from '@/components/button';
 import { CouponBox } from '@/components/coupon-box';
+import { LevelBadge } from '@/components/level-badge';
 import { Icon, type IconName } from '@/components/icon';
 import { DealTag, KindTag, StatusTag, dealBadge } from '@/components/meetup-card';
 import { PlanTimeline } from '@/components/plan-timeline';
@@ -375,12 +376,15 @@ export default function TableScreen() {
                     accessibilityLabel={`${t('profile.open')}: ${request.display_name}`}
                     onPress={() => router.push({ pathname: '/profile/[userId]', params: { userId: request.user_id } })}
                     style={({ pressed }) => [styles.memberMain, pressed && styles.pressed]}>
-                    <View style={[styles.avatar, { backgroundColor: avatarColor(request.user_id) }]}>
-                      {request.avatar_path ? (
-                        <Image source={profilePhotoUrl(request.avatar_path)} style={styles.avatarImage} contentFit="cover" />
-                      ) : (
-                        <Text style={styles.avatarText}>{request.display_name.slice(0, 1).toUpperCase() || '?'}</Text>
-                      )}
+                    <View style={styles.avatarBox}>
+                      <View style={[styles.avatar, { backgroundColor: avatarColor(request.user_id) }]}>
+                        {request.avatar_path ? (
+                          <Image source={profilePhotoUrl(request.avatar_path)} style={styles.avatarImage} contentFit="cover" />
+                        ) : (
+                          <Text style={styles.avatarText}>{request.display_name.slice(0, 1).toUpperCase() || '?'}</Text>
+                        )}
+                      </View>
+                      <LevelBadge userId={request.user_id} size={44} />
                     </View>
                     <Text style={[styles.memberName, styles.flex]} numberOfLines={1}>
                       {request.display_name}
@@ -434,12 +438,15 @@ export default function TableScreen() {
                     accessibilityLabel={`${t('profile.open')}: ${member.display_name}`}
                     onPress={() => router.push({ pathname: '/profile/[userId]', params: { userId: member.user_id } })}
                     style={({ pressed }) => [styles.memberMain, pressed && styles.pressed]}>
-                    <View style={[styles.avatar, { backgroundColor: avatarColor(member.user_id) }]}>
-                      {member.avatar_path ? (
-                        <Image source={profilePhotoUrl(member.avatar_path)} style={styles.avatarImage} contentFit="cover" />
-                      ) : (
-                        <Text style={styles.avatarText}>{initials || '?'}</Text>
-                      )}
+                    <View style={styles.avatarBox}>
+                      <View style={[styles.avatar, { backgroundColor: avatarColor(member.user_id) }]}>
+                        {member.avatar_path ? (
+                          <Image source={profilePhotoUrl(member.avatar_path)} style={styles.avatarImage} contentFit="cover" />
+                        ) : (
+                          <Text style={styles.avatarText}>{initials || '?'}</Text>
+                        )}
+                      </View>
+                      <LevelBadge userId={member.user_id} size={44} />
                     </View>
                     <View style={styles.flex}>
                       <Text style={styles.memberName} numberOfLines={1}>
@@ -672,6 +679,7 @@ const useStyles = makeStyles((Colors) => ({
   feedbackBody: { ...Type.small, color: Colors.textSecondary, marginBottom: Spacing.sm },
   member: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, minHeight: 56 },
   memberMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  avatarBox: { width: 44, height: 44 },
   avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   avatarText: { fontSize: 14, fontWeight: '800', color: Colors.onBrand },
   avatarImage: { width: 44, height: 44 },

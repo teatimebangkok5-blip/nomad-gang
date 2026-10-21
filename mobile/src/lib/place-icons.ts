@@ -8,6 +8,7 @@ export const PLACE_ICON_IMAGES: Record<PlaceIcon, ImageRequireSource> = {
   food: require('@/assets/images/map-icons/food.png'),
   fastfood: require('@/assets/images/map-icons/fastfood.png'),
   cafe: require('@/assets/images/map-icons/cafe.png'),
+  cowork: require('@/assets/images/map-icons/cowork.png'),
   bakery: require('@/assets/images/map-icons/bakery.png'),
   icecream: require('@/assets/images/map-icons/icecream.png'),
   bar: require('@/assets/images/map-icons/bar.png'),

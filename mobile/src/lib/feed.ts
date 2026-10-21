@@ -7,13 +7,23 @@ import type { Venue } from '@/lib/venues';
 // Home feed: filters, status and the "3 going for dinner near Asok" line on each card. Everything comes from real
 // open tables / hangouts (member counts from the database); areas are the public place's neighbourhood.
 
-export const FEED_FILTERS = ['all', 'today', 'tonight', 'food', 'drinks', 'explore', 'budget'] as const;
+export const FEED_FILTERS = ['all', 'today', 'tonight', 'daytime', 'pitstop', 'food', 'drinks', 'explore', 'budget'] as const;
 export type FeedFilter = (typeof FEED_FILTERS)[number];
 
 // OpenStreetMap kinds and venue categories that count as "Drinks" rather than "Food".
 const DRINK_PLACE_KINDS = new Set(['bar', 'pub', 'biergarten', 'nightclub']);
 const DRINK_VENUE_CATEGORIES = new Set(['bar', 'rooftop']);
 const TONIGHT_FROM = 17 * 60;
+// Daytime mode: "Work & coffee" tables, and anything at a café or co-working space between 06:00 and 17:00.
+const DAYTIME_PLACE_KINDS = new Set(['cafe', 'coworking', 'coffee', 'tea', 'bakery']);
+const DAYTIME_FROM = 6 * 60;
+
+function isDaytime(meetup: OpenMeetup, venue: Venue | undefined): boolean {
+  if (meetup.vibe === 'cowork') return true;
+  const minutes = bangkokMinutes(new Date(meetup.starts_at), meetup.time_zone);
+  const cafe = venue ? venue.category === 'cafe' : DAYTIME_PLACE_KINDS.has(meetup.place_kind ?? '');
+  return cafe && minutes >= DAYTIME_FROM && minutes < TONIGHT_FROM;
+}
 
 function isDrinks(meetup: OpenMeetup, venue: Venue | undefined): boolean {
   if (meetup.kind !== 'table') return false;
@@ -32,6 +42,10 @@ export function matchesFilter(meetup: OpenMeetup, filter: FeedFilter, venue: Ven
       return today || live;
     case 'tonight':
       return (today && bangkokMinutes(start, zone) >= TONIGHT_FROM) || (live && bangkokMinutes(now, zone) >= TONIGHT_FROM);
+    case 'daytime':
+      return isDaytime(meetup, venue);
+    case 'pitstop':
+      return Boolean(meetup.pitstop);
     case 'food':
       return meetup.kind === 'table' && !isDrinks(meetup, venue);
     case 'drinks':

@@ -1,0 +1,73 @@
+shortcode,name,category,gif_dark,gif_light,png
+:tm_happy:,Happy,faces,gif-dark/happy.gif,gif-light/happy.gif,png/happy.png
+:tm_lol:,LOL,faces,gif-dark/lol.gif,gif-light/lol.gif,png/lol.png
+:tm_love:,Love,faces,gif-dark/love.gif,gif-light/love.gif,png/love.png
+:tm_sad:,Sad,faces,gif-dark/sad.gif,gif-light/sad.gif,png/sad.png
+:tm_wow:,Wow,faces,gif-dark/wow.gif,gif-light/wow.gif,png/wow.png
+:tm_angry:,Angry,faces,gif-dark/angry.gif,gif-light/angry.gif,png/angry.png
+:tm_wink:,Wink,faces,gif-dark/wink.gif,gif-light/wink.gif,png/wink.png
+:tm_yum:,Yum,faces,gif-dark/yum.gif,gif-light/yum.gif,png/yum.png
+:tm_thumbs:,Thumbs up,reactions,gif-dark/thumbs.gif,gif-light/thumbs.gif,png/thumbs.png
+:tm_clap:,Clap,reactions,gif-dark/clap.gif,gif-light/clap.gif,png/clap.png
+:tm_fire:,Fire,reactions,gif-dark/fire.gif,gif-light/fire.gif,png/fire.png
+:tm_hundred:,100,reactions,gif-dark/hundred.gif,gif-light/hundred.gif,png/hundred.png
+:tm_ok:,OK,reactions,gif-dark/ok.gif,gif-light/ok.gif,png/ok.png
+:tm_heart:,Heart,reactions,gif-dark/heart.gif,gif-light/heart.gif,png/heart.png
+:tm_noodles:,Noodles,food,gif-dark/noodles.gif,gif-light/noodles.gif,png/noodles.png
+:tm_beer:,Beer,food,gif-dark/beer.gif,gif-light/beer.gif,png/beer.png
+:tm_coffee:,Coffee,food,gif-dark/coffee.gif,gif-light/coffee.gif,png/coffee.png
+:tm_pizza:,Pizza,food,gif-dark/pizza.gif,gif-light/pizza.gif,png/pizza.png
+:tm_cocktail:,Cocktail,food,gif-dark/cocktail.gif,gif-light/cocktail.gif,png/cocktail.png
+:tm_dumpling:,Dumpling,food,gif-dark/dumpling.gif,gif-light/dumpling.gif,png/dumpling.png
+:tm_plane:,Plane,travel,gif-dark/plane.gif,gif-light/plane.gif,png/plane.png
+:tm_backpack:,Backpack,travel,gif-dark/backpack.gif,gif-light/backpack.gif,png/backpack.png
+:tm_mappin:,Location,travel,gif-dark/mappin.gif,gif-light/mappin.gif,png/mappin.png
+:tm_passport:,Passport,travel,gif-dark/passport.gif,gif-light/passport.gif,png/passport.png
+:tm_suitcase:,Suitcase,travel,gif-dark/suitcase.gif,gif-light/suitcase.gif,png/suitcase.png
+:tm_globe:,Globe,travel,gif-dark/globe.gif,gif-light/globe.gif,png/globe.png
+:tm_cheers:,Cheers,meetup,gif-dark/cheers.gif,gif-light/cheers.gif,png/cheers.png
+:tm_table:,Table for 2,meetup,gif-dark/table.gif,gif-light/table.gif,png/table.png
+:tm_seeyou:,See you,meetup,gif-dark/seeyou.gif,gif-light/seeyou.gif,png/seeyou.png
+:tm_omw:,On my way,meetup,gif-dark/omw.gif,gif-light/omw.gif,png/omw.png
+:tm_checkin:,Checked in,meetup,gif-dark/checkin.gif,gif-light/checkin.gif,png/checkin.png
+:tm_friends:,New friends,meetup,gif-dark/friends.gif,gif-light/friends.gif,png/friends.png
+:tm_sawasdee:,Sawasdee,greetings,gif-dark/sawasdee.gif,gif-light/sawasdee.gif,png/sawasdee.png
+:tm_hola:,Hola,greetings,gif-dark/hola.gif,gif-light/hola.gif,png/hola.png
+:tm_ciao:,Ciao,greetings,gif-dark/ciao.gif,gif-light/ciao.gif,png/ciao.png
+:tm_bonjour:,Bonjour,greetings,gif-dark/bonjour.gif,gif-light/bonjour.gif,png/bonjour.png
+:tm_cool:,Cool,faces,gif-dark/cool.gif,gif-light/cool.gif,png/cool.png
+:tm_sleepy:,Sleepy,faces,gif-dark/sleepy.gif,gif-light/sleepy.gif,png/sleepy.png
+:tm_party:,Party,faces,gif-dark/party.gif,gif-light/party.gif,png/party.png
+:tm_shy:,Shy,faces,gif-dark/shy.gif,gif-light/shy.gif,png/shy.png
+:tm_thinking:,Thinking,faces,gif-dark/thinking.gif,gif-light/thinking.gif,png/thinking.png
+:tm_starstruck:,Star-struck,faces,gif-dark/starstruck.gif,gif-light/starstruck.gif,png/starstruck.png
+:tm_oops:,Oops,faces,gif-dark/oops.gif,gif-light/oops.gif,png/oops.png
+:tm_kiss:,Kiss,faces,gif-dark/kiss.gif,gif-light/kiss.gif,png/kiss.png
+:tm_wavehand:,Wave,reactions,gif-dark/wavehand.gif,gif-light/wavehand.gif,png/wavehand.png
+:tm_sparkles:,Sparkles,reactions,gif-dark/sparkles.gif,gif-light/sparkles.gif,png/sparkles.png
+:tm_yay:,Yay,reactions,gif-dark/yay.gif,gif-light/yay.gif,png/yay.png
+:tm_check:,Done,reactions,gif-dark/check.gif,gif-light/check.gif,png/check.png
+:tm_question:,Hmm?,reactions,gif-dark/question.gif,gif-light/question.gif,png/question.png
+:tm_eyes:,Eyes,reactions,gif-dark/eyes.gif,gif-light/eyes.gif,png/eyes.png
+:tm_sushi:,Sushi,food,gif-dark/sushi.gif,gif-light/sushi.gif,png/sushi.png
+:tm_taco:,Taco,food,gif-dark/taco.gif,gif-light/taco.gif,png/taco.png
+:tm_icecream:,Ice cream,food,gif-dark/icecream.gif,gif-light/icecream.gif,png/icecream.png
+:tm_boba:,Boba,food,gif-dark/boba.gif,gif-light/boba.gif,png/boba.png
+:tm_burger:,Burger,food,gif-dark/burger.gif,gif-light/burger.gif,png/burger.png
+:tm_wine:,Wine,food,gif-dark/wine.gif,gif-light/wine.gif,png/wine.png
+:tm_camera:,Camera,travel,gif-dark/camera.gif,gif-light/camera.gif,png/camera.png
+:tm_sun:,Sunny,travel,gif-dark/sun.gif,gif-light/sun.gif,png/sun.png
+:tm_tuktuk:,Tuk-tuk,travel,gif-dark/tuktuk.gif,gif-light/tuktuk.gif,png/tuktuk.png
+:tm_ticket:,Ticket,travel,gif-dark/ticket.gif,gif-light/ticket.gif,png/ticket.png
+:tm_palm:,Beach,travel,gif-dark/palm.gif,gif-light/palm.gif,png/palm.png
+:tm_compass:,Compass,travel,gif-dark/compass.gif,gif-light/compass.gif,png/compass.png
+:tm_dance:,Dance,meetup,gif-dark/dance.gif,gif-light/dance.gif,png/dance.png
+:tm_highfive:,High five,meetup,gif-dark/highfive.gif,gif-light/highfive.gif,png/highfive.png
+:tm_selfie:,Selfie,meetup,gif-dark/selfie.gif,gif-light/selfie.gif,png/selfie.png
+:tm_splitbill:,Split bill,meetup,gif-dark/splitbill.gif,gif-light/splitbill.gif,png/splitbill.png
+:tm_calendar:,Save the date,meetup,gif-dark/calendar.gif,gif-light/calendar.gif,png/calendar.png
+:tm_group:,Squad,meetup,gif-dark/group.gif,gif-light/group.gif,png/group.png
+:tm_konnichiwa:,Konnichiwa,greetings,gif-dark/konnichiwa.gif,gif-light/konnichiwa.gif,png/konnichiwa.png
+:tm_annyeong:,Annyeong,greetings,gif-dark/annyeong.gif,gif-light/annyeong.gif,png/annyeong.png
+:tm_namaste:,Namaste,greetings,gif-dark/namaste.gif,gif-light/namaste.gif,png/namaste.png
+:tm_xinchao:,Xin chào,greetings,gif-dark/xinchao.gif,gif-light/xinchao.gif,png/xinchao.png

@@ -14,7 +14,7 @@ export type LegalDoc = { title: string; updated: string; intro: string[]; sectio
 // sets them; the texts then use generic wording.
 export type LegalContact = { operator: string | null; email: string | null; webUrl: string | null };
 
-const UPDATED: Record<LegalLanguage, string> = { en: '19 October 2026', th: '19 ตุลาคม 2569' };
+const UPDATED: Record<LegalLanguage, string> = { en: '21 October 2026', th: '21 ตุลาคม 2569' };
 
 type RawDoc = { title: string; intro: string[]; sections: LegalSection[] };
 
@@ -194,9 +194,11 @@ const PRIVACY: Record<LegalLanguage, RawDoc> = {
         heading: '1. What we collect',
         paragraphs: [
           '• Account: your name, email address and account ID from Google sign-in (or Apple on iPhone), and your phone number if phone verification is on.',
-          '• Profile: name, birthday (kept private; others only see your age), profile picture and photos, Instagram username, home country, languages, profession, travel style, interests, countries visited, trips and world clocks. Most of this is optional.',
+          '• Profile: name, birthday (kept private; others only see your age), profile picture and photos, Instagram username, home country, languages, profession, travel style, interests, the vibes you like, countries visited, trips and world clocks. Most of this is optional.',
+          '• Verification (optional): if you ask to be verified, a selfie, a photo of your ID or passport and your gender. Only the TableMeet team looks at the photos, to check that you are who you say, and deletes them as soon as we decide. We keep only that you are verified and your gender. Your gender is never shown to anyone; it is used only to let verified women create, see and join women-only tables and hangouts.',
           '• Activity: tables and hangouts you create or join, check-ins, coupons used, follows, the 👍 / 👎 you give (who gave what stays private), favourite places, day plans and notifications you have read.',
-          '• Messages: chats, photos, voice notes and live locations you send.',
+          '• Messages: chats, photos, voice notes, live locations, icebreaker cards and reactions you send, and bills you split in a chat (the amounts are seen by the people in that chat; TableMeet does not handle payments).',
+          '• Tips: tips you write about places, shown with your name to everyone signed in, and which tips you marked helpful (kept private).',
           '• Stories: the photos and captions you post on the map (shown on the map for 24 hours and on your profile\'s story map for 10 days; deleted, photo included, the next time you open the app after that, or earlier when you delete them or your account).',
           '• Safety: people you block and reports you send.',
           '• Technical: your IP address and device information, which our service providers log when the app connects.',
@@ -218,16 +220,16 @@ const PRIVACY: Record<LegalLanguage, RawDoc> = {
         heading: '3. How we use your data',
         paragraphs: [
           'To run TableMeet (accounts, tables, hangouts, chats, the map), show your profile to other users, unlock coupons and settle with partner venues, keep people safe (reports, blocks, moderation), prevent misuse, and meet legal duties.',
-          'Our legal bases are: providing the service you asked for (contract), our legitimate interests (safety, preventing misuse, improving the app), your consent (location features, Travellers, live location, optional profile details) and legal obligations. You can withdraw consent at any time in the app.',
+          'Our legal bases are: providing the service you asked for (contract), our legitimate interests (safety, preventing misuse, improving the app), your consent (location features, Travellers, live location, optional profile details, verification) and legal obligations. Your ID photo and gender are used only with your explicit consent, given when you send them for verification. You can withdraw consent at any time in the app.',
           'We do not sell your data. People without TableMeet Plus see ads (see section 4).',
         ],
       },
       {
         heading: '4. Who can see your data',
         paragraphs: [
-          '• Other users: your profile (age, not your birthday), what you post in chats to the people in them, and the tables and hangouts you join.',
+          '• Other users: your profile (age, not your birthday; a Verified or Trusted host badge if you have one, never your gender), what you post in chats to the people in them, your tips, and the tables and hangouts you join.',
           '• Partner venue staff: only the coupon page and how many people are checked in.',
-          '• Service providers that run TableMeet for us: Supabase (database, files and sign-in; servers in Singapore), Google (sign-in), Apple (sign-in on iPhone), OpenFreeMap (map tiles: receives your IP address when the map loads), Photon by komoot (place search: receives what you type), Wikimedia Commons (place photos), Expo and Google Firebase Cloud Messaging (phone notifications: they receive the notification text and your phone\'s push token) and Vercel (our website).',
+          '• Service providers that run TableMeet for us: Supabase (database, files and sign-in; servers in Singapore), Google (sign-in), Apple (sign-in on iPhone), OpenFreeMap (map tiles: receives your IP address when the map loads), Photon by komoot (place search: receives what you type), Wikimedia Commons (place photos), Frankfurter (currency rates in the bill calculator: receives your IP address), Expo and Google Firebase Cloud Messaging (phone notifications: they receive the notification text and your phone\'s push token) and Vercel (our website).',
           '• Google AdMob (ads, for people without TableMeet Plus): when an ad is shown, Google receives your device\'s advertising ID, IP address and basic device information to show and measure ads. In the EEA, UK and Switzerland you are asked for consent first. You can reset or delete the advertising ID in your phone\'s settings.',
           '• Other websites only if you open their links (for example travel deals or ticket pages).',
           '• Authorities, when the law requires it.',
@@ -242,7 +244,7 @@ const PRIVACY: Record<LegalLanguage, RawDoc> = {
       {
         heading: '6. How long we keep it',
         paragraphs: [
-          'We keep your data while your account exists. Travellers locations are kept for up to 2 hours, and unsent messages are removed straight away.',
+          'We keep your data while your account exists. Travellers locations are kept for up to 2 hours, unsent messages are removed straight away, and verification photos are deleted as soon as we approve or reject them.',
           'Coupon records (venue, time, staff login and the names of the people checked in) are kept for up to 5 years for accounting with venues, also after an account is deleted.',
         ],
       },
@@ -288,9 +290,11 @@ const PRIVACY: Record<LegalLanguage, RawDoc> = {
         heading: '1. ข้อมูลที่เราเก็บ',
         paragraphs: [
           '• บัญชี: ชื่อ อีเมล และรหัสบัญชีจากการเข้าสู่ระบบด้วย Google (หรือ Apple บน iPhone) และหมายเลขโทรศัพท์หากเปิดการยืนยันเบอร์โทร',
-          '• โปรไฟล์: ชื่อ วันเกิด (เก็บเป็นความลับ ผู้อื่นเห็นเพียงอายุ) รูปโปรไฟล์และรูปภาพ ชื่อผู้ใช้ Instagram ประเทศ ภาษา อาชีพ สไตล์การเที่ยว ความสนใจ ประเทศที่เคยไป ทริป และนาฬิกาโลก ส่วนใหญ่ไม่บังคับ',
+          '• โปรไฟล์: ชื่อ วันเกิด (เก็บเป็นความลับ ผู้อื่นเห็นเพียงอายุ) รูปโปรไฟล์และรูปภาพ ชื่อผู้ใช้ Instagram ประเทศ ภาษา อาชีพ สไตล์การเที่ยว ความสนใจ บรรยากาศที่ชอบ ประเทศที่เคยไป ทริป และนาฬิกาโลก ส่วนใหญ่ไม่บังคับ',
+          '• การยืนยันตัวตน (ไม่บังคับ): หากคุณขอยืนยันตัวตน เราได้รับเซลฟี่ รูปบัตรประชาชนหรือหนังสือเดินทาง และเพศของคุณ เฉพาะทีมงาน TableMeet เท่านั้นที่ดูรูปเพื่อตรวจสอบว่าเป็นคุณจริง และลบรูปทันทีเมื่อตัดสินแล้ว เราเก็บเพียงว่าคุณยืนยันตัวตนแล้วและเพศของคุณ เพศของคุณไม่แสดงให้ใครเห็น และใช้เพื่อให้ผู้หญิงที่ยืนยันแล้วสร้าง เห็น และเข้าร่วมโต๊ะและแฮงเอาท์เฉพาะผู้หญิงเท่านั้น',
           '• กิจกรรม: โต๊ะและแฮงเอาท์ที่คุณสร้างหรือเข้าร่วม การเช็กอิน คูปองที่ใช้ การติดตาม 👍 / 👎 ที่คุณให้ (ใครให้อะไรเป็นความลับ) สถานที่โปรด แผนเที่ยว และการแจ้งเตือนที่อ่านแล้ว',
-          '• ข้อความ: แชท รูปภาพ ข้อความเสียง และตำแหน่งสดที่คุณส่ง',
+          '• ข้อความ: แชท รูปภาพ ข้อความเสียง ตำแหน่งสด การ์ดทำความรู้จัก และรีแอคชันที่คุณส่ง รวมถึงบิลที่คุณหารในแชท (คนในแชทนั้นเห็นยอดเงิน TableMeet ไม่ได้รับหรือโอนเงิน)',
+          '• เคล็ดลับ: เคล็ดลับเกี่ยวกับสถานที่ที่คุณเขียน ซึ่งแสดงพร้อมชื่อของคุณให้ทุกคนที่ลงชื่อเข้าใช้เห็น และเคล็ดลับที่คุณกดว่ามีประโยชน์ (เก็บเป็นความลับ)',
           '• สตอรี่: รูปภาพและคำบรรยายที่คุณโพสต์บนแผนที่ (แสดงบนแผนที่ 24 ชั่วโมง และบนแผนที่สตอรี่ในโปรไฟล์ของคุณ 10 วัน หลังจากนั้นจะถูกลบพร้อมรูปภาพเมื่อคุณเปิดแอปครั้งถัดไป หรือก่อนหน้านั้นเมื่อคุณลบเองหรือลบบัญชี)',
           '• ความปลอดภัย: ผู้ที่คุณบล็อกและรายงานที่คุณส่ง',
           '• ข้อมูลทางเทคนิค: ที่อยู่ IP และข้อมูลอุปกรณ์ ซึ่งผู้ให้บริการของเราบันทึกเมื่อแอปเชื่อมต่อ',
@@ -312,16 +316,16 @@ const PRIVACY: Record<LegalLanguage, RawDoc> = {
         heading: '3. เราใช้ข้อมูลของคุณอย่างไร',
         paragraphs: [
           'เพื่อให้บริการ TableMeet (บัญชี โต๊ะ แฮงเอาท์ แชท แผนที่) แสดงโปรไฟล์ของคุณให้ผู้ใช้อื่น ปลดล็อกคูปองและชำระบัญชีกับร้านพาร์ทเนอร์ ดูแลความปลอดภัย (รายงาน การบล็อก การดูแลเนื้อหา) ป้องกันการใช้งานในทางที่ผิด และปฏิบัติตามกฎหมาย',
-          'ฐานทางกฎหมายของเราคือ การให้บริการที่คุณขอ (สัญญา) ประโยชน์โดยชอบด้วยกฎหมาย (ความปลอดภัย ป้องกันการใช้ในทางที่ผิด และปรับปรุงแอป) ความยินยอมของคุณ (ฟีเจอร์ตำแหน่ง นักเดินทาง ตำแหน่งสด และข้อมูลโปรไฟล์ที่ไม่บังคับ) และหน้าที่ตามกฎหมาย คุณถอนความยินยอมได้ทุกเมื่อในแอป',
+          'ฐานทางกฎหมายของเราคือ การให้บริการที่คุณขอ (สัญญา) ประโยชน์โดยชอบด้วยกฎหมาย (ความปลอดภัย ป้องกันการใช้ในทางที่ผิด และปรับปรุงแอป) ความยินยอมของคุณ (ฟีเจอร์ตำแหน่ง นักเดินทาง ตำแหน่งสด ข้อมูลโปรไฟล์ที่ไม่บังคับ และการยืนยันตัวตน) และหน้าที่ตามกฎหมาย คุณถอนความยินยอมได้ทุกเมื่อในแอป รูปบัตรและเพศของคุณใช้เฉพาะเมื่อคุณให้ความยินยอมโดยชัดแจ้ง ซึ่งคุณให้เมื่อส่งเพื่อยืนยันตัวตน',
           'เราไม่ขายข้อมูลของคุณ ผู้ที่ไม่มี TableMeet Plus จะเห็นโฆษณา (ดูข้อ 4)',
         ],
       },
       {
         heading: '4. ใครเห็นข้อมูลของคุณได้',
         paragraphs: [
-          '• ผู้ใช้อื่น: โปรไฟล์ของคุณ (อายุ ไม่ใช่วันเกิด) สิ่งที่คุณโพสต์ในแชทสำหรับคนในแชทนั้น และโต๊ะหรือแฮงเอาท์ที่คุณเข้าร่วม',
+          '• ผู้ใช้อื่น: โปรไฟล์ของคุณ (อายุ ไม่ใช่วันเกิด ป้ายยืนยันตัวตนแล้วหรือโฮสต์ที่ไว้ใจได้หากคุณมี แต่ไม่แสดงเพศของคุณ) สิ่งที่คุณโพสต์ในแชทสำหรับคนในแชทนั้น เคล็ดลับของคุณ และโต๊ะหรือแฮงเอาท์ที่คุณเข้าร่วม',
           '• พนักงานร้านพาร์ทเนอร์: เห็นเพียงหน้าคูปองและจำนวนคนที่เช็กอิน',
-          '• ผู้ให้บริการที่ช่วยเราให้บริการ TableMeet: Supabase (ฐานข้อมูล ไฟล์ และการเข้าสู่ระบบ เซิร์ฟเวอร์ที่สิงคโปร์) Google (การเข้าสู่ระบบ) Apple (การเข้าสู่ระบบบน iPhone) OpenFreeMap (ภาพแผนที่ ได้รับที่อยู่ IP ของคุณเมื่อโหลดแผนที่) Photon โดย komoot (ค้นหาสถานที่ ได้รับคำที่คุณพิมพ์) Wikimedia Commons (รูปสถานที่) Expo และ Google Firebase Cloud Messaging (การแจ้งเตือนในโทรศัพท์ ได้รับข้อความแจ้งเตือนและรหัสการแจ้งเตือนของโทรศัพท์คุณ) และ Vercel (เว็บไซต์ของเรา)',
+          '• ผู้ให้บริการที่ช่วยเราให้บริการ TableMeet: Supabase (ฐานข้อมูล ไฟล์ และการเข้าสู่ระบบ เซิร์ฟเวอร์ที่สิงคโปร์) Google (การเข้าสู่ระบบ) Apple (การเข้าสู่ระบบบน iPhone) OpenFreeMap (ภาพแผนที่ ได้รับที่อยู่ IP ของคุณเมื่อโหลดแผนที่) Photon โดย komoot (ค้นหาสถานที่ ได้รับคำที่คุณพิมพ์) Wikimedia Commons (รูปสถานที่) Frankfurter (อัตราแลกเปลี่ยนในเครื่องคิดเลขหารบิล ได้รับที่อยู่ IP ของคุณ) Expo และ Google Firebase Cloud Messaging (การแจ้งเตือนในโทรศัพท์ ได้รับข้อความแจ้งเตือนและรหัสการแจ้งเตือนของโทรศัพท์คุณ) และ Vercel (เว็บไซต์ของเรา)',
           '• Google AdMob (โฆษณา สำหรับผู้ที่ไม่ได้เป็นสมาชิก TableMeet Plus): เมื่อแสดงโฆษณา Google จะได้รับรหัสโฆษณาของอุปกรณ์ ที่อยู่ IP และข้อมูลพื้นฐานของอุปกรณ์ เพื่อแสดงและวัดผลโฆษณา ผู้ใช้ในเขตเศรษฐกิจยุโรป สหราชอาณาจักร และสวิตเซอร์แลนด์จะถูกขอความยินยอมก่อน คุณรีเซ็ตหรือลบรหัสโฆษณาได้ในการตั้งค่าโทรศัพท์',
           '• เว็บไซต์อื่น เฉพาะเมื่อคุณเปิดลิงก์ของเขา (เช่น ดีลท่องเที่ยวหรือหน้าขายตั๋ว)',
           '• หน่วยงานรัฐ เมื่อกฎหมายกำหนด',
@@ -336,7 +340,7 @@ const PRIVACY: Record<LegalLanguage, RawDoc> = {
       {
         heading: '6. ระยะเวลาการเก็บข้อมูล',
         paragraphs: [
-          'เราเก็บข้อมูลของคุณตราบเท่าที่บัญชียังอยู่ ตำแหน่งในหน้านักเดินทางเก็บไม่เกิน 2 ชั่วโมง และข้อความที่ยกเลิกการส่งจะถูกลบทันที',
+          'เราเก็บข้อมูลของคุณตราบเท่าที่บัญชียังอยู่ ตำแหน่งในหน้านักเดินทางเก็บไม่เกิน 2 ชั่วโมง ข้อความที่ยกเลิกการส่งจะถูกลบทันที และรูปที่ใช้ยืนยันตัวตนจะถูกลบทันทีเมื่อเราอนุมัติหรือปฏิเสธ',
           'บันทึกการใช้คูปอง (ร้าน เวลา บัญชีพนักงาน และชื่อของผู้ที่เช็กอิน) เก็บไว้ไม่เกิน 5 ปีเพื่อการบัญชีกับร้าน แม้บัญชีจะถูกลบแล้ว',
         ],
       },

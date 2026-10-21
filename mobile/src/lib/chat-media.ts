@@ -133,6 +133,12 @@ export async function startLiveLocation(ref: ChatRef, minutes: LiveMinutes): Pro
 }
 
 // Edit the text of one of my messages.
+// An icebreaker card ('ice:<deck>:<n>') or a table / hangout invite ('meetup:<id>') into the chat.
+export async function sendChatCard(ref: ChatRef, card: string): Promise<ChatErrorKey | null> {
+  const { error } = await supabase.rpc('send_chat_card', { p_chat_kind: ref.kind, p_chat_id: ref.id, p_card: card });
+  return chatError(error);
+}
+
 export async function editMessage(kind: ChatKind, messageId: string, body: string): Promise<ChatErrorKey | null> {
   const { error } = await supabase.rpc('edit_chat_message', { p_chat_kind: kind, p_message_id: messageId, p_body: body });
   return chatError(error);

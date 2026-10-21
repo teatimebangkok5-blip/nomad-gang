@@ -48,9 +48,20 @@ export type OpenMeetup = MeetupPlace & {
   join_mode?: JoinMode;
   // My join request to a private one that isn't approved yet.
   my_request?: 'pending' | 'declined' | null;
+  // The host's vibe tag.
+  vibe?: Vibe | null;
+  // "Heading to X in 15 min": a short hangout starting within the hour.
+  pitstop?: boolean;
+  // Only verified women see and join it.
+  women_only?: boolean;
 };
 
 export type JoinMode = 'open' | 'private';
+
+// Vibe tags the host picks; "cowork" is the daytime "Work & coffee" mode.
+export const VIBES = ['chill', 'party', 'foodies', 'networking', 'cowork'] as const;
+export type Vibe = (typeof VIBES)[number];
+export const VIBE_EMOJI: Record<Vibe, string> = { chill: '🤫', party: '🍻', foodies: '📸', networking: '💼', cowork: '💻' };
 
 // Expected cost per person: 0 free, 1 under ฿300, 2 ฿300–700, 3 ฿700–1,500, 4 over ฿1,500.
 export const COST_LEVELS = [0, 1, 2, 3, 4] as const;
@@ -73,6 +84,11 @@ export type MeetupDetail = MeetupPlace & {
   meeting_point: string | null;
   challenge_id: string | null;
   join_mode: JoinMode;
+  vibe: Vibe | null;
+  pitstop: boolean;
+  women_only: boolean;
+  // A second round started from this table / hangout.
+  second_round_of: string | null;
   members: MeetupMember[];
   // The place's official website (OpenStreetMap), if any.
   place_website: string | null;
@@ -103,6 +119,13 @@ const KNOWN_ERRORS = [
   'already_member',
   'blocked',
   'request_declined',
+  'invalid_vibe',
+  'not_verified_woman',
+  'women_only',
+  'not_now',
+  'too_far',
+  'already_invited',
+  'too_many_invites',
 ] as const;
 export type MeetupErrorKey = (typeof KNOWN_ERRORS)[number] | 'generic';
 
@@ -166,9 +189,10 @@ export async function createHangout(input: {
   maxPeople: number;
   title: string;
   description: string;
+  womenOnly?: boolean;
 }): Promise<Result<string>> {
   const { where } = input;
-  const { data, error } = await supabase.rpc('create_hangout', {
+  const { data, error } = await supabase.rpc(input.womenOnly ? 'create_women_only_hangout' : 'create_hangout', {
     p_title: input.title,
     p_description: input.description,
     p_starts_at: input.startsAt.toISOString(),
@@ -228,6 +252,55 @@ export async function setMeetupJoinMode(id: string, mode: JoinMode) {
   if (mode === 'open') return;
   const { error } = await supabase.rpc('set_meetup_join_mode', { p_meetup_id: id, p_mode: mode });
   if (error) console.warn('Making the table private failed', error.message);
+}
+
+// The host's vibe tag; for a "Work & coffee" table also its length (1–8 hours instead of 3).
+export async function setMeetupVibe(id: string, vibe: Vibe | null, hours?: number) {
+  if (!vibe) return;
+  const { error } = await supabase.rpc('set_meetup_vibe', { p_meetup_id: id, p_vibe: vibe, p_hours: hours ?? null });
+  if (error) console.warn('Saving the vibe failed', error.message);
+}
+
+// A women-only table (only a verified woman can make one; only verified women see it).
+export async function createWomenOnlyTable(input: {
+  venueId: string | null;
+  placeId: string | null;
+  startsAt: Date;
+  maxPeople: number;
+  title: string;
+}): Promise<Result<string>> {
+  const { data, error } = await supabase.rpc('create_women_only_table', {
+    p_venue_id: input.venueId,
+    p_place_id: input.placeId,
+    p_starts_at: input.startsAt.toISOString(),
+    p_max_people: input.maxPeople,
+    p_title: input.title,
+  });
+  return result(data as string | null, error);
+}
+
+// "Heading to X in 15 min": starts 0–60 minutes from now, 30–120 minutes long, 2–8 people.
+export async function createPitstop(input: {
+  where: HangoutWhere;
+  title: string;
+  startsInMinutes: number;
+  durationMinutes: number;
+  maxPeople: number;
+}): Promise<Result<string>> {
+  const { where } = input;
+  const { data, error } = await supabase.rpc('create_pitstop', {
+    p_title: input.title,
+    p_starts_in_minutes: input.startsInMinutes,
+    p_duration_minutes: input.durationMinutes,
+    p_max_people: input.maxPeople,
+    p_venue_id: where.type === 'venue' ? where.venueId : null,
+    p_place_id: where.type === 'place' ? where.placeId : null,
+    p_spot_lat: where.type === 'spot' ? where.lat : null,
+    p_spot_lng: where.type === 'spot' ? where.lng : null,
+    p_spot_name: where.type === 'spot' ? where.name : null,
+    p_time_zone: where.type === 'spot' ? where.timeZone : null,
+  });
+  return result(data as string | null, error);
 }
 
 export async function requestToJoin(id: string): Promise<Result<null>> {
@@ -393,6 +466,7 @@ async function fetchMeetup(id: string): Promise<MeetupDetail | null | 'error'> {
     .select(
       'id, kind, time_zone, venue_id, place_id, place:places(name, name_en, name_th, lat, lng, website), spot_name, spot_lat, spot_lng, ' +
         'host_id, title, description, starts_at, ends_at, max_people, status, cost_level, meeting_point, challenge_id, join_mode, ' +
+        'vibe, pitstop, women_only, second_round_of, ' +
         'meetup_members(user_id, joined_at, profiles(display_name, avatar_path))',
     )
     .eq('id', id)

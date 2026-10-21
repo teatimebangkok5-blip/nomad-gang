@@ -5,6 +5,7 @@ import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
+import { ChatAvatar } from '@/components/chat-avatar';
 import { ChatView } from '@/components/chat-view';
 import { Icon } from '@/components/icon';
 import { ScreenHeader } from '@/components/screen-header';
@@ -72,6 +73,8 @@ export default function DirectChatScreen() {
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
       <ScreenHeader
         title={name}
+        divider
+        avatar={state ? <ChatAvatar name={name} photoPath={state.otherAvatar} size={40} userId={userId} /> : undefined}
         right={
           myId && (
             <Pressable

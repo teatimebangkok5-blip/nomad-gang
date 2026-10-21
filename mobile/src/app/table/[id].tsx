@@ -11,12 +11,14 @@ import { Button } from '@/components/button';
 import { CouponBox } from '@/components/coupon-box';
 import { LevelBadge } from '@/components/level-badge';
 import { Icon, type IconName } from '@/components/icon';
-import { DealTag, KindTag, StatusTag, dealBadge } from '@/components/meetup-card';
+import { DealTag, KindTag, StatusTag, VibeTag, WomenOnlyTag, dealBadge } from '@/components/meetup-card';
 import { PlanTimeline } from '@/components/plan-timeline';
 import { RewardCard } from '@/components/reward-card';
 import { PlanMap } from '@/components/plan-view';
 import { RoundButton } from '@/components/round-button';
 import { ScreenHeader } from '@/components/screen-header';
+import { RoundInvites, SecondRoundPrompt } from '@/components/second-round';
+import { VerifiedBadge } from '@/components/verified-badge';
 import { VenueMap } from '@/components/venue-map';
 import { avatarColor, Radius, Raised, Spacing, Type } from '@/constants/theme';
 import { localized, useLanguage } from '@/i18n';
@@ -44,6 +46,7 @@ import { usePlanForMeetup } from '@/lib/plans';
 import { REWARD_MIN_PEOPLE, useRewards } from '@/lib/rewards';
 import { useMyFeedback } from '@/lib/profiles';
 import { venuePhotoUrl } from '@/lib/supabase';
+import { secondRoundOpen } from '@/lib/second-round';
 import { PROMOTION_EMOJI, useVenues } from '@/lib/venues';
 import { makeStyles, useColors } from '@/lib/theme';
 
@@ -214,7 +217,7 @@ export default function TableScreen() {
 
         <View style={styles.body}>
           <View style={styles.tags}>
-            <KindTag hangout={isHangout} />
+            <KindTag hangout={isHangout} pitstop={meetup.pitstop} />
             {cancelled || ended ? (
               <View style={styles.endedTag}>
                 <Text style={styles.endedText}>
@@ -231,6 +234,8 @@ export default function TableScreen() {
                 <Text style={styles.privateText}>{t('privacy.private')}</Text>
               </View>
             )}
+            {meetup.women_only && <WomenOnlyTag />}
+            {meetup.vibe && <VibeTag vibe={meetup.vibe} />}
           </View>
 
           <View style={styles.titles}>
@@ -328,6 +333,14 @@ export default function TableScreen() {
                   </View>
                 </View>
               )}
+
+          {/* Continuing the night? Members, from 30 minutes before the end until 3 hours after. */}
+          {isMember && !cancelled && !meetup.second_round_of && secondRoundOpen(meetup.ends_at, openedAt) && (
+            <SecondRoundPrompt meetupId={id} />
+          )}
+
+          {/* A second round's host invites other groups nearby. */}
+          {isHost && open && meetup.second_round_of && <RoundInvites roundId={id} />}
 
           {/* Check in (Rewards Passport + a partner venue's coupon), until 3 days after the end. */}
           {isMember && !cancelled && endsAt > openedAt - 3 * 24 * 60 * 60 * 1000 && (
@@ -449,9 +462,12 @@ export default function TableScreen() {
                       <LevelBadge userId={member.user_id} size={44} />
                     </View>
                     <View style={styles.flex}>
-                      <Text style={styles.memberName} numberOfLines={1}>
-                        {member.user_id === userId ? t('tables.you') : member.display_name}
-                      </Text>
+                      <View style={styles.memberNameRow}>
+                        <Text style={styles.memberName} numberOfLines={1}>
+                          {member.user_id === userId ? t('tables.you') : member.display_name}
+                        </Text>
+                        <VerifiedBadge userId={member.user_id} size={15} withHost={member.user_id === meetup.host_id} />
+                      </View>
                       {open && isMember && (
                         <Text style={[styles.memberSub, here && styles.memberHere]}>
                           {here ? t('coupon.memberCheckedIn') : t('coupon.memberNotYet')}
@@ -683,7 +699,8 @@ const useStyles = makeStyles((Colors) => ({
   avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   avatarText: { fontSize: 14, fontWeight: '800', color: Colors.onBrand },
   avatarImage: { width: 44, height: 44 },
-  memberName: { ...Type.body, fontWeight: '700', color: Colors.text },
+  memberNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  memberName: { ...Type.body, fontWeight: '700', color: Colors.text, flexShrink: 1 },
   memberSub: { ...Type.small, fontSize: 12, fontWeight: '600', color: Colors.textMuted },
   memberHere: { color: Colors.ok },
   hostTag: {

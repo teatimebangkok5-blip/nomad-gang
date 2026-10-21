@@ -210,6 +210,68 @@ Product spec and tech stack below are agreed. Built so far:
   → Delete (private) / Leave (group, table / hangout); swipe left → Pin / Archive (`set_chat_flag(kind, id, 'pin' |
   'archive', on)`, stored in `chat_state.pinned_at / archived_at`). `my_chats` returns `pinned` (listed first) and
   `archived` (only under the Archived filter, not counted in the home badge).
+- **TableMeet emoji, reactions, chat redesign** (added 2026-10-21, `*_chat_reactions.sql`). The founder's pack of 72
+  emoji (faces, reactions, food, travel, meetup, greetings) is vector source `mobile/scripts/emoji/tm-emoji.js`;
+  `node scripts/gen-emoji.mjs` (needs `web/node_modules` for sharp, ~10 min) renders `assets/emoji/still/*.png`
+  (120 px) and `assets/emoji/anim/*.webp` (176 px animated WebP with transparency, one set for both themes, ~4.3 MB)
+  and writes `src/lib/tm-emoji-data.ts` (greeting words drawn with Figtree ExtraBold). **Messages store the emoji
+  character** each one stands for (`CHARS` in the script: 😂, 🍜, 🛺, …), so push, inbox and other apps read
+  normally; chats draw the TableMeet picture for those characters, also typed on the phone keyboard (not inside skin
+  tone / ZWJ sequences). **Greetings** have no character: sent at once as `:tm_<id>:` stickers; `emojiPreview()` /
+  `push_preview` show "👋 Sawasdee" (สวัสดี in Thai). Parsing: `src/lib/tm-emoji.ts`; UI: `src/components/tm-emoji.tsx`
+  (`EmojiText` inline stills in RN `Image` inside `Text`, `BigEmoji`, `EmojiPanel`, `EmojiAvatar`). A message that is
+  only 1–3 emoji shows big and **animated** without a bubble; everything else uses stills (founder's choice).
+  **Reactions**: press and hold any message → 6 quick reactions + all (no greetings), Copy, Edit / Unsend for mine;
+  chips with counts under the message, tap = add / take back mine. `chat_reactions` (one per person and message,
+  emoji id, readable by whoever can read the message via the message tables' own RLS, not across a block; taking
+  back sets `emoji = null` so Realtime delivers it), written only by `react_to_message(kind, message, emoji|null)`
+  (same write rule as the chat: `chat_access(…, true)`; not on unsent). App: `useChatReactions` in
+  `src/lib/reactions.ts`. **Design** (founder's mockup): my bubbles violet, composer + · pill box · emoji button
+  (swaps the keyboard for the panel) · send only when there's text; chat headers show a picture + subtitle
+  (`ScreenHeader` props `avatar`, `divider`): table / hangout = emoji by venue type + "4 going · Today 19:30",
+  private = their photo, group = its emoji + "Members: N". Profile pictures next to others' messages stay.
+- **Vibes, Work & coffee, pit-stops** (added 2026-10-21, `*_vibes_daytime_pitstops.sql`). `meetups.vibe` (chill /
+  party / foodies / networking / cowork, `VIBE_EMOJI` in `src/lib/meetups.ts`), set after creating with
+  `set_meetup_vibe(meetup, vibe, hours)`; a **Work & coffee** (`cowork`) table lasts 1–8 h instead of 3. Vibe chips are
+  in `MeetupExtras`. `profiles.vibes` (`set_my_vibes`, Edit profile; `src/lib/vibes.ts`) marks matching cards "Your
+  vibe". 21 OSM co-working spaces added as places (kind `coworking`, purpose `food`, icon `cowork.png`). **Pit-stops**
+  ("Heading to X in 15 min"): ⚡ amber button on home → `src/app/pitstop.tsx` (activity chips boba / coffee / drinks /
+  food / market / tuk-tuk / walk, place = near me or search, leaving now–60 min, 30–120 min, 2–8 people) →
+  `create_pitstop`: a short hangout (`meetups.pitstop`), max 1 open per person (also one of the 3 open hangouts);
+  ⚡ amber pins on home.
+- **Icebreakers + split the bill** (added 2026-10-21, `*_icebreakers_split_bills.sql`). New message kinds `card`
+  (`ice:<deck>:<number>` or `meetup:<id>` invites, `send_chat_card`) and `bill` (body = `chat_bills` id,
+  `create_bill`); private chats only after the request is accepted. Chat **+** menu → Icebreaker (decks travel /
+  food / would-you-rather / trivia / twenty in `src/lib/icebreakers.ts`, wording EN + TH in the app; **keep card
+  numbers stable**, add at the end) and Split the bill (`src/app/split-bill.tsx`, `src/lib/bills.ts`,
+  `BillBubble`): **calculator only, no payments** (founder). Equal or per-person parts, partner discount, service 10%,
+  VAT 7% (Thai "++": service first, then VAT), tip; the server computes each share (`part × (1−discount) × (1+service)
+  × (1+VAT) × (1+tip)`, 2 decimals); payer's share counts as paid; `set_bill_paid` (payer ticks anyone, others
+  themselves). "≈" amounts in other currencies from Frankfurter (ECB rates, no key, cached 12 h,
+  `src/lib/currency.ts`).
+- **Insider tips** (added 2026-10-21, `*_place_tips.sql`): `PlaceTips` (`src/components/place-tips.tsx`,
+  `src/lib/tips.ts`) on the place cards of home and the Hangout map: one tip (3–280 chars) per person per place or
+  venue, max 20 a day, "Helpful" votes (not your own), most helpful first; only via `place_tips()`, `save_tip`,
+  `delete_tip`, `vote_tip`. Reports (`reports.context = 'tip'`) hide a tip for the reporter at once and for everyone
+  at 3 open reports. Admin **/admin/tips** (`admin_tips`, `admin_clear_tip_reports`, delete).
+- **Verification, badges, women-only** (added 2026-10-21, `*_verification_women_only.sql`). Settings → Get verified
+  (`src/app/verify.tsx`, `src/lib/verification.ts`): gender + selfie + ID photo → private `verifications` bucket
+  (`<user id>/…`) → `submit_verification` (one waiting at a time, 3 a month). The founder decides at
+  **/admin/verifications** (signed links; `admin_decide_verification` returns the paths and the panel **deletes both
+  photos at once**; revoke possible). The approved gender sits in `profile_verification` (no API access): **nobody can
+  read anyone's gender**; the app only gets `user_badges` (verified, trusted_host = 3+ ended meetups with 3+ people
+  hosted and ≥ 90% 👍 of ≥ 3 ratings) and `my_verification`. `VerifiedBadge` on profiles and member lists.
+  **Women-only** tables / hangouts (`meetups.women_only`, "Women only" switch in `MeetupExtras` for verified women,
+  `create_women_only_table` / `create_women_only_hangout`): only verified women (and admins) can see, join or request
+  them (read policies, trigger, notifications, profile events, the bell); the flag can't be turned off.
+- **Second round** (added 2026-10-21, `*_second_round.sql`): from 30 min before a table / hangout ends until 3 h after,
+  members see "Continuing the night? 🍻" (`SecondRoundPrompt`) → `src/app/second-round/[id].tsx`: bars / pubs / clubs
+  and partner bars / rooftops within 1.5 km (`second_round_places`) → `create_second_round`: a party pit-stop
+  (`meetups.second_round_of`) + a `meetup:<id>` invite card in the first chat. Its host can invite other groups within
+  2 km that are on now or ended < 2 h ago (`second_round_targets`, `invite_table`; max 3 per 12 h, once per target,
+  not across a block or into women-only groups they can't see) → push + bell `table_invite` (`RoundInvites`).
+- Privacy Policy updated 2026-10-21 for verification (explicit consent, photos deleted on decision, gender never
+  shown), tips, bills and Frankfurter.
 - **Login without SMS for now** (founder's decision 2026-10-16): `app_settings.require_phone_verification` (default
   false) and `EXPO_PUBLIC_REQUIRE_PHONE` (default false) let Google accounts in without the phone check; turn both on
   once SMS is set up. With `EXPO_PUBLIC_SKIP_LOGIN=false`, a leftover anonymous guest session is signed out on start.

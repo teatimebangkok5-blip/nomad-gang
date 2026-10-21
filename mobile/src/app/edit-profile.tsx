@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, T
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
+import { Chip } from '@/components/chip';
 import { FieldLabel } from '@/components/profile-fields';
 import {
   BasicsFields,
@@ -19,8 +20,10 @@ import {
 } from '@/components/profile-form';
 import { ScreenHeader } from '@/components/screen-header';
 import { Radius, Spacing, Type } from '@/constants/theme';
+import { VIBE_EMOJI, VIBES, type Vibe } from '@/lib/meetups';
 import { fetchMyDetails, saveMyProfile, type ProfileErrorKey } from '@/lib/profiles';
 import { makeStyles, useColors } from '@/lib/theme';
+import { saveMyVibes, useMyVibes } from '@/lib/vibes';
 
 // Edit profile: everything the first-time questions asked, on one page. Photos are changed on the profile itself.
 export default function EditProfileScreen() {
@@ -30,6 +33,10 @@ export default function EditProfileScreen() {
   const [draft, setDraft] = useState<ProfileDraft | null | 'error'>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ProfileErrorKey | null>(null);
+  // My vibes: null until changed here (then saved with the rest).
+  const myVibes = useMyVibes();
+  const [vibes, setVibes] = useState<Vibe[] | null>(null);
+  const shownVibes = vibes ?? myVibes;
 
   useEffect(() => {
     fetchMyDetails().then((details) => {
@@ -45,6 +52,7 @@ export default function EditProfileScreen() {
   async function save(current: ProfileDraft) {
     setSaving(true);
     setError(null);
+    if (vibes !== null) await saveMyVibes(vibes);
     const result = await saveMyProfile(current);
     setSaving(false);
     if (result) {
@@ -88,6 +96,22 @@ export default function EditProfileScreen() {
           <TravelStyleField {...fields} />
           <FieldLabel>{t('about.interests')}</FieldLabel>
           <InterestsField {...fields} />
+          <FieldLabel>{t('vibes.mine')}</FieldLabel>
+          <Text style={styles.vibesHint}>{t('vibes.mineHint')}</Text>
+          <View style={styles.vibes}>
+            {VIBES.map((vibe) => {
+              const on = shownVibes.includes(vibe);
+              return (
+                <Chip
+                  key={vibe}
+                  tone="violet"
+                  label={`${VIBE_EMOJI[vibe]} ${t(`vibes.${vibe}`)}`}
+                  selected={on}
+                  onPress={() => setVibes(on ? shownVibes.filter((v) => v !== vibe) : [...shownVibes, vibe])}
+                />
+              );
+            })}
+          </View>
           {error && (
             <Text accessibilityRole="alert" style={styles.error}>
               {t(`profile.errors.${error}`)}
@@ -108,6 +132,8 @@ const useStyles = makeStyles((Colors) => ({
   spinner: { marginTop: Spacing.xxl * 2 },
   center: { ...Type.body, color: Colors.textSecondary, textAlign: 'center', marginTop: Spacing.xxl },
   content: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xxl },
+  vibes: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  vibesHint: { ...Type.small, color: Colors.textSecondary, marginBottom: Spacing.sm },
   error: {
     ...Type.small,
     color: Colors.danger,

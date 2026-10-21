@@ -5,6 +5,7 @@ import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Text, V
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FavoriteButton } from '@/components/favorite-button';
+import { PlaceTips } from '@/components/place-tips';
 import { GlossyFill } from '@/components/glossy';
 import { Button } from '@/components/button';
 import { Chip } from '@/components/chip';
@@ -47,12 +48,14 @@ import {
   meetupPlaceName,
   setMeetupDetails,
   setMeetupJoinMode,
+  setMeetupVibe,
   useOpenMeetups,
   type CostLevel,
   type HangoutWhere,
   type JoinMode,
   type MeetupErrorKey,
   type OpenMeetup,
+  type Vibe,
 } from '@/lib/meetups';
 import { areaAt, setMeetupArea } from '@/lib/rewards';
 import { COUPONS_ENABLED } from '@/lib/coupons';
@@ -436,6 +439,7 @@ function SelectionCard({
   const Colors = useColors();
   const { t } = useTranslation();
   const language = useLanguage();
+  const [showTips, setShowTips] = useState(false);
 
   let name = '';
   let note: string | null = null;
@@ -517,6 +521,18 @@ function SelectionCard({
       ) : note ? (
         <Text style={styles.placeNote}>{note}</Text>
       ) : null}
+
+      {favorite &&
+        (showTips ? (
+          <ScrollView style={styles.tipsScroll} nestedScrollEnabled>
+            <PlaceTips target={favorite} />
+          </ScrollView>
+        ) : (
+          <Pressable accessibilityRole="button" onPress={() => setShowTips(true)} style={({ pressed }) => [styles.tipsToggle, pressed && styles.pressed]}>
+            <Text style={styles.tipsToggleText}>💡 {t('tips.title')}</Text>
+            <Icon name="chevronRight" size={18} color={Colors.violetText} />
+          </Pressable>
+        ))}
 
       {hangouts.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.placeHangouts}>
@@ -653,6 +669,8 @@ function HangoutForm({ chosen, initialTitle, onChange }: { chosen: Chosen; initi
   const [meetingPoint, setMeetingPoint] = useState('');
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [joinMode, setJoinMode] = useState<JoinMode>('open');
+  const [vibe, setVibe] = useState<Vibe | null>(null);
+  const [womenOnly, setWomenOnly] = useState(false);
   const [spotName, setSpotName] = useState(chosen.type === 'spot' ? chosen.name : '');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<MeetupErrorKey | null>(null);
@@ -705,6 +723,7 @@ function HangoutForm({ chosen, initialTitle, onChange }: { chosen: Chosen; initi
       maxPeople,
       title: title.trim(),
       description: description.trim(),
+      womenOnly,
     });
     if (result.error) {
       setCreating(false);
@@ -715,6 +734,7 @@ function HangoutForm({ chosen, initialTitle, onChange }: { chosen: Chosen; initi
       setMeetupDetails(result.data, cost, meetingPoint),
       setMeetupChallenge(result.data, challengeId),
       setMeetupJoinMode(result.data, joinMode),
+      setMeetupVibe(result.data, vibe),
     ]);
     setCreating(false);
     const found = await area;
@@ -853,6 +873,10 @@ function HangoutForm({ chosen, initialTitle, onChange }: { chosen: Chosen; initi
             onChallenge={setChallengeId}
             joinMode={joinMode}
             onJoinMode={setJoinMode}
+            vibe={vibe}
+            onVibe={setVibe}
+            womenOnly={womenOnly}
+            onWomenOnly={setWomenOnly}
             tone="violet"
           />
 
@@ -913,6 +937,9 @@ const useStyles = makeStyles((Colors) => ({
   placeCard: { padding: Spacing.md, gap: Spacing.md },
   placeHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   placeNote: { ...Type.small, color: Colors.textSecondary },
+  tipsScroll: { maxHeight: 260 },
+  tipsToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingVertical: 4 },
+  tipsToggleText: { ...Type.label, color: Colors.violetText },
   emojiBadge: {
     width: 44,
     height: 44,

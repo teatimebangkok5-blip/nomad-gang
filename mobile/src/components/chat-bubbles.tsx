@@ -71,7 +71,7 @@ export function VoiceBubble({ message, mine, onLongPress }: BubbleProps) {
   const status = useAudioPlayerStatus(player);
   const total = message.duration_ms ?? (status.duration ? status.duration * 1000 : 0);
   const progress = total > 0 ? Math.min(1, (status.currentTime * 1000) / total) : 0;
-  const color = mine ? Colors.onBrand : Colors.text;
+  const color = mine ? Colors.white : Colors.text;
 
   // Back to the start when it finishes, so the next tap plays it again.
   useEffect(() => {
@@ -97,7 +97,7 @@ export function VoiceBubble({ message, mine, onLongPress }: BubbleProps) {
         {url === null ? (
           <ActivityIndicator color={color} size="small" />
         ) : (
-          <Icon name={status.playing ? 'pause' : 'play'} size={22} color={mine ? Colors.orange : Colors.white} />
+          <Icon name={status.playing ? 'pause' : 'play'} size={22} color={mine ? Colors.violet : Colors.white} />
         )}
       </Pressable>
       <View style={styles.voiceBody}>
@@ -140,7 +140,7 @@ export function LocationBubble({ message, mine, chatKind, onLongPress }: BubbleP
         : minutesAgo < 60
           ? t('chat.updatedMinutes', { count: minutesAgo })
           : t('chat.updatedAt', { time: clock(message.location_updated_at as string) });
-  const color = mine ? Colors.onBrand : Colors.text;
+  const color = mine ? Colors.white : Colors.text;
 
   return (
     <Pressable
@@ -150,7 +150,7 @@ export function LocationBubble({ message, mine, chatKind, onLongPress }: BubbleP
       onLongPress={onLongPress}
       style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs, styles.location]}>
       <View style={styles.locationTop}>
-        <View style={[styles.locationIcon, live && styles.locationIconLive]}>
+        <View style={[styles.locationIcon, live && styles.locationIconLive, live && mine && styles.locationIconLiveMine]}>
           <Icon name="liveLocation" size={22} color={Colors.white} />
         </View>
         <View style={styles.flex}>
@@ -167,7 +167,7 @@ export function LocationBubble({ message, mine, chatKind, onLongPress }: BubbleP
           accessibilityRole="button"
           onPress={() => stopLiveLocation(chatKind, message.id)}
           style={({ pressed }) => [styles.stop, pressed && styles.pressed]}>
-          <Icon name="stop" size={16} color={Colors.onBrand} />
+          <Icon name="stop" size={16} color={Colors.white} />
           <Text style={styles.stopText}>{t('chat.stopSharing')}</Text>
         </Pressable>
       )}
@@ -182,7 +182,7 @@ const useStyles = makeStyles((Colors) => ({
   flex: { flex: 1 },
   pressed: { opacity: 0.75 },
   bubble: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.lg },
-  bubbleMine: { backgroundColor: Colors.orange, borderBottomRightRadius: Radius.sm },
+  bubbleMine: { backgroundColor: Colors.violet, borderBottomRightRadius: Radius.sm },
   bubbleTheirs: { backgroundColor: Colors.surfaceRaised, borderBottomLeftRadius: Radius.sm },
   photo: {
     width: PHOTO_W,
@@ -210,16 +210,16 @@ const useStyles = makeStyles((Colors) => ({
   viewerImage: { width: '100%', height: '85%' },
   voice: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, width: 240 },
   playButton: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  playMine: { backgroundColor: Colors.onBrand },
+  playMine: { backgroundColor: Colors.white },
   playTheirs: { backgroundColor: Colors.violet },
   voiceBody: { flex: 1 },
   track: { height: 4, borderRadius: 2, backgroundColor: Colors.border, overflow: 'hidden' },
   trackMine: { backgroundColor: 'rgba(0,0,0,0.18)' },
   trackFill: { height: 4, backgroundColor: Colors.violet },
-  trackFillMine: { backgroundColor: Colors.onBrand },
+  trackFillMine: { backgroundColor: Colors.white },
   voiceMeta: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
   meta: { fontSize: 12, lineHeight: 16, color: Colors.textMuted },
-  metaMine: { color: Colors.onBrand, opacity: 0.8 },
+  metaMine: { color: Colors.white, opacity: 0.8 },
   location: { width: 250 },
   locationTop: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   locationIcon: {
@@ -231,6 +231,7 @@ const useStyles = makeStyles((Colors) => ({
     backgroundColor: Colors.textMuted,
   },
   locationIconLive: { backgroundColor: Colors.violet },
+  locationIconLiveMine: { backgroundColor: 'rgba(255, 255, 255, 0.25)' },
   locationTitle: { ...Type.label, fontSize: 15 },
   stop: {
     flexDirection: 'row',
@@ -241,8 +242,8 @@ const useStyles = makeStyles((Colors) => ({
     minHeight: 34,
     borderRadius: Radius.pill,
     borderWidth: 1.5,
-    borderColor: Colors.onBrand,
+    borderColor: Colors.white,
   },
-  stopText: { ...Type.label, color: Colors.onBrand },
+  stopText: { ...Type.label, color: Colors.white },
   time: { fontSize: 11, lineHeight: 14, color: Colors.textMuted, alignSelf: 'flex-end', marginTop: 2 },
 }));

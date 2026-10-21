@@ -20,7 +20,8 @@ export type NotificationKind =
   | 'dm_request'
   | 'follow'
   | 'promotion'
-  | 'reward';
+  | 'reward'
+  | 'table_invite';
 
 export type AppNotification = {
   id: string;

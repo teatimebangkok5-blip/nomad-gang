@@ -1966,5 +1966,377 @@ check("no level across a block", r.rows?.length === 1 && r.rows[0].user_id === v
 r = await tryQuery("anon", null, `select * from public.user_levels($1)`, [[v1]]);
 check("signed-out callers get no levels", !!r.error);
 
+// --- Chat reactions
+const [rx1, rx2, rx3, rx4] = [1, 2, 3, 4].map((n) => `3b000000-0000-4000-8000-00000000000${n}`);
+await db.exec(`insert into auth.users (id, email, raw_user_meta_data, phone_confirmed_at) values
+  ${[rx1, rx2, rx3, rx4].map((id, i) => `('${id}', 'react${i}@x.com', '{"full_name": "Reactor ${i + 1}"}', now())`).join(", ")}`);
+const react = (who, kind, id, emoji) =>
+  tryQuery("authenticated", who, `select public.react_to_message($1, $2, $3)`, [kind, id, emoji]);
+const reactionsOn = async (who, id) =>
+  (await tryQuery("authenticated", who, `select user_id, emoji, chat_id from public.chat_reactions where message_id = $1 and emoji is not null order by user_id`, [id])).rows ?? [];
+const reactMeetup = (await db.query(`insert into public.meetups (kind, spot_name, spot_lat, spot_lng, host_id, title, starts_at, ends_at, max_people)
+  values ('hangout', 'Lumphini', 13.73, 100.54, $1, 'Picnic', now() + interval '1 day', now() + interval '1 day 2 hours', 6) returning id`, [rx1])).rows[0].id;
+await db.query(`insert into public.meetup_members (meetup_id, user_id) values ($1, $2), ($1, $3), ($1, $4) on conflict do nothing`, [reactMeetup, rx1, rx2, rx4]);
+const reactMsg = (await db.query(`insert into public.meetup_messages (meetup_id, sender_id, body) values ($1, $2, 'Bring snacks 🍜') returning id`, [reactMeetup, rx1])).rows[0].id;
+r = await react(rx2, "meetup", reactMsg, "fire");
+check("a member reacts to a message", !r.error);
+let reactions = await reactionsOn(rx1, reactMsg);
+check("the chat sees the reaction, with its chat", reactions.length === 1 && reactions[0].emoji === "fire" && reactions[0].chat_id === reactMeetup);
+r = await react(rx2, "meetup", reactMsg, "lol");
+reactions = await reactionsOn(rx1, reactMsg);
+check("one reaction per person: a new one replaces it", reactions.length === 1 && reactions[0].emoji === "lol");
+r = await react(rx2, "meetup", reactMsg, "sawasdee");
+check("greetings aren't reactions", /invalid_reaction/.test(r.error ?? ""));
+r = await react(rx2, "meetup", reactMsg, "<b>");
+check("only the app's emoji", /invalid_reaction/.test(r.error ?? ""));
+r = await react(rx3, "meetup", reactMsg, "fire");
+check("people outside the chat can't react", /not_found/.test(r.error ?? ""));
+check("nor see its reactions", (await reactionsOn(rx3, reactMsg)).length === 0);
+r = await tryQuery("authenticated", rx2, `insert into public.chat_reactions (chat_kind, chat_id, meetup_message_id, user_id, emoji) values ('meetup', $1, $2, $3, 'fire')`, [reactMeetup, reactMsg, rx3]);
+check("reactions are only written through react_to_message", !!r.error);
+r = await tryQuery("anon", null, `select public.react_to_message('meetup', $1, 'fire')`, [reactMsg]);
+check("signed-out callers can't react", !!r.error);
+await react(rx4, "meetup", reactMsg, "heart");
+check("several people react", (await reactionsOn(rx2, reactMsg)).length === 2);
+await db.query(`insert into public.blocks (blocker_id, blocked_id) values ($1, $2)`, [rx1, rx4]);
+reactions = await reactionsOn(rx1, reactMsg);
+check("no reactions across a block", reactions.length === 1 && reactions[0].user_id === rx2);
+r = await react(rx4, "meetup", reactMsg, "fire");
+check("can't react to a blocked person's message", /not_found/.test(r.error ?? ""));
+r = await react(rx2, "meetup", reactMsg, null);
+check("take a reaction back", !r.error && (await reactionsOn(rx2, reactMsg)).every((row) => row.user_id !== rx2));
+r = await tryQuery("service_role", null, `select count(*)::int n from public.chat_reactions where message_id = $1 and user_id = $2 and emoji is null`, [reactMsg, rx2]);
+check("taking it back keeps the row (so Realtime hears it)", r.rows?.[0]?.n === 1);
+await tryQuery("authenticated", rx1, `select public.unsend_chat_message('meetup', $1)`, [reactMsg]);
+r = await react(rx2, "meetup", reactMsg, "fire");
+check("no reactions on unsent messages", /not_found/.test(r.error ?? ""));
+
+const reactGroup = (await db.query(`insert into public.chat_groups (name, emoji, owner_id) values ('Picnic crew', '🧺', $1) returning id`, [rx1])).rows[0].id;
+await db.query(`insert into public.chat_group_members (group_id, user_id) values ($1, $2), ($1, $3)`, [reactGroup, rx1, rx2]);
+const groupMsg = (await db.query(`insert into public.chat_group_messages (group_id, sender_id, body) values ($1, $2, 'Hi all') returning id`, [reactGroup, rx1])).rows[0].id;
+await db.query(`insert into public.chat_group_members (group_id, user_id, joined_at) values ($1, $2, now() + interval '1 second')`, [reactGroup, rx3]);
+r = await react(rx2, "group", groupMsg, "clap");
+check("react in a group chat", !r.error && (await reactionsOn(rx1, groupMsg)).length === 1);
+r = await react(rx3, "group", groupMsg, "clap");
+check("not to messages from before I joined the group", /not_found/.test(r.error ?? ""));
+check("nor see reactions on them", (await reactionsOn(rx3, groupMsg)).length === 0);
+r = await react(rx2, "meetup", groupMsg, "clap");
+check("a message must be in the chat kind given", /not_found/.test(r.error ?? ""));
+await db.query(`delete from public.chat_groups where id = $1`, [reactGroup]);
+r = await tryQuery("service_role", null, `select count(*)::int n from public.chat_reactions where message_id = $1`, [groupMsg]);
+check("reactions go with their message", r.rows?.[0]?.n === 0);
+
+const [ra, rb] = [rx2, rx3].sort();
+const reactThread = (await db.query(`insert into public.direct_threads (user_a, user_b, requested_by) values ($1, $2, $3) returning id`, [ra, rb, rx2])).rows[0].id;
+const dmMsg = (await db.query(`insert into public.direct_messages (thread_id, sender_id, body) values ($1, $2, 'Coffee? ☕') returning id`, [reactThread, rx2])).rows[0].id;
+r = await react(rx2, "dm", dmMsg, "coffee");
+check("the requester can't react before a reply (same as writing)", /not_found/.test(r.error ?? ""));
+r = await react(rx3, "dm", dmMsg, "coffee");
+check("the receiver of a request can react, like replying", !r.error && (await reactionsOn(rx2, dmMsg)).length === 1);
+await db.query(`update public.direct_threads set status = 'declined' where id = $1`, [reactThread]);
+r = await react(rx2, "dm", dmMsg, "coffee");
+check("nor after it's declined", /not_found/.test(r.error ?? ""));
+await db.query(`update public.direct_threads set status = 'accepted' where id = $1`, [reactThread]);
+r = await react(rx2, "dm", dmMsg, "coffee");
+check("react in an accepted private chat", !r.error && (await reactionsOn(rx3, dmMsg)).length === 2);
+check("others can't see private chat reactions", (await reactionsOn(rx1, dmMsg)).length === 0);
+
+r = await db.query(`select public.push_preview('text', ':tm_sawasdee:', 'th') th, public.push_preview('text', ':tm_hola: see you 🍻', 'en') en`);
+check("greeting stickers read as words in notifications", r.rows[0].th === "👋 สวัสดี" && r.rows[0].en === "👋 Hola see you 🍻");
+
+// --- Vibes, Work & coffee, pit-stops
+const [vb1, vb2] = [1, 2].map((n) => `3c000000-0000-4000-8000-00000000000${n}`);
+await db.exec(`insert into auth.users (id, email, raw_user_meta_data, phone_confirmed_at) values
+  ${[vb1, vb2].map((id, i) => `('${id}', 'vibe${i}@x.com', '{"full_name": "Viber ${i + 1}"}', now())`).join(", ")}`);
+const vibeSpotHangout = (who, title) =>
+  tryQuery("authenticated", who, `select public.create_hangout($1, '', $2, 120, 6, null, null, 13.74, 100.53, 'Benjakitti') as id`, [title, inHours(3)]);
+r = await vibeSpotHangout(vb1, "Rooftop warm-up");
+const vibeHangout = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", vb1, `select public.set_meetup_vibe($1, 'party')`, [vibeHangout]);
+check("the host sets a vibe", !r.error);
+r = await tryQuery("authenticated", vb2, `select public.set_meetup_vibe($1, 'chill')`, [vibeHangout]);
+check("only the host sets the vibe", /not_host/.test(r.error ?? ""));
+r = await tryQuery("authenticated", vb1, `select public.set_meetup_vibe($1, 'rave')`, [vibeHangout]);
+check("only known vibes", /invalid_vibe/.test(r.error ?? ""));
+r = await tryQuery("authenticated", vb1, `select public.set_meetup_vibe($1, 'cowork', 5)`, [vibeHangout]);
+check("hours are only for Work & coffee tables", /invalid_duration/.test(r.error ?? ""));
+r = await tryQuery("authenticated", vb2, `select vibe, pitstop from public.list_open_meetups() where id = $1`, [vibeHangout]);
+check("the open list has the vibe", r.rows?.[0]?.vibe === "party" && r.rows[0].pitstop === false);
+r = await tryQuery("authenticated", vb2, `select id from public.places where kind = 'coworking' and purpose = 'food'`);
+check("co-working spaces are places for tables", (r.rows?.length ?? 0) === 21);
+const coworkPlace = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", vb2, `select public.create_meetup_at_place($1, $2, 4) as id`, [coworkPlace, inHours(1)]);
+check("a table at a co-working space", !r.error);
+const coworkTable = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", vb2, `select public.set_meetup_vibe($1, 'cowork', 9)`, [coworkTable]);
+check("Work & coffee lasts at most 8 hours", /invalid_duration/.test(r.error ?? ""));
+r = await tryQuery("authenticated", vb2, `select public.set_meetup_vibe($1, 'cowork', 6)`, [coworkTable]);
+r = await tryQuery("authenticated", vb2, `select extract(epoch from ends_at - starts_at)::int s, vibe from public.meetups where id = $1`, [coworkTable]);
+check("Work & coffee: the table lasts the hours picked", r.rows?.[0]?.s === 6 * 3600 && r.rows[0].vibe === "cowork");
+r = await tryQuery("authenticated", vb1, `select public.set_my_vibes(array['party', 'chill', 'party'])`);
+r = await tryQuery("authenticated", vb1, `select vibes from public.profiles where id = $1`, [vb1]);
+check("my vibes are saved once each", JSON.stringify(r.rows?.[0]?.vibes) === JSON.stringify(["chill", "party"]));
+r = await tryQuery("authenticated", vb1, `select public.set_my_vibes(array['nope'])`);
+check("only known vibes on profiles", /invalid_vibe/.test(r.error ?? ""));
+await tryQuery("authenticated", vb1, `update public.profiles set vibes = array['nope'] where id = $1`, [vb1]);
+r = await tryQuery("authenticated", vb1, `select vibes from public.profiles where id = $1`, [vb1]);
+check("a direct update can't store unknown vibes", JSON.stringify(r.rows?.[0]?.vibes) === JSON.stringify(["chill", "party"]));
+
+const makePitstop = (who, startsIn, length, size) =>
+  tryQuery("authenticated", who, `select public.create_pitstop('🧋 Boba run', $1, $2, $3, null, null, 13.745, 100.534, 'Siam Square') as id`, [startsIn, length, size]);
+r = await makePitstop(vb2, 90, 45, 4);
+check("a pit-stop starts within the hour", /invalid_time/.test(r.error ?? ""));
+r = await makePitstop(vb2, 15, 200, 4);
+check("a pit-stop is short", /invalid_duration/.test(r.error ?? ""));
+r = await makePitstop(vb2, 15, 45, 12);
+check("a pit-stop is small", /invalid_size/.test(r.error ?? ""));
+r = await makePitstop(vb2, 15, 45, 4);
+check("create a pit-stop", !r.error);
+const pitstopId = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", vb1, `select pitstop, kind, extract(epoch from starts_at - now())::int s from public.list_open_meetups() where id = $1`, [pitstopId]);
+check("everyone sees it as a pit-stop starting soon", r.rows?.[0]?.pitstop === true && r.rows[0].kind === "hangout" && r.rows[0].s > 800 && r.rows[0].s <= 900);
+r = await makePitstop(vb2, 0, 30, 3);
+check("one open pit-stop per person", /too_many_open/.test(r.error ?? ""));
+r = await tryQuery("anon", null, `select public.create_pitstop('x', 5, 30, 3, null, null, 13.7, 100.5, 'x')`);
+check("signed-out callers can't make pit-stops", !!r.error);
+
+// --- Icebreaker cards, split the bill
+const vb3 = "3c000000-0000-4000-8000-000000000003";
+await db.exec(`insert into auth.users (id, email, raw_user_meta_data, phone_confirmed_at) values ('${vb3}', 'vibe3@x.com', '{"full_name": "Viber 3"}', now())`);
+await tryQuery("authenticated", vb2, `select public.join_meetup($1)`, [vibeHangout]);
+const card = (who, body) => tryQuery("authenticated", who, `select public.send_chat_card('meetup', $1, $2) as id`, [vibeHangout, body]);
+r = await card(vb1, "ice:travel:3");
+check("a member deals an icebreaker card into the chat", !r.error);
+r = await tryQuery("authenticated", vb2, `select kind, body from public.meetup_messages where meetup_id = $1 and kind = 'card'`, [vibeHangout]);
+check("the others see the card", r.rows?.[0]?.body === "ice:travel:3");
+r = await card(vb1, "hello there");
+check("only real cards", /invalid_card/.test(r.error ?? ""));
+r = await card(vb1, "meetup:00000000-0000-4000-8000-000000000000");
+check("an invite needs a real table / hangout", /invalid_card/.test(r.error ?? ""));
+r = await card(vb2, `meetup:${pitstopId}`);
+check("invite the chat to another hangout", !r.error);
+r = await card(vb3, "ice:food:1");
+check("outsiders can't post cards", /not_found/.test(r.error ?? ""));
+r = await tryQuery("authenticated", vb2, `insert into public.meetup_messages (meetup_id, sender_id, kind, body) values ($1, $2, 'card', 'ice:food:1')`, [vibeHangout, vb2]);
+check("cards can't be inserted directly", !!r.error);
+
+const bill = (who, shares, extra = {}) =>
+  tryQuery("authenticated", who, `select public.create_bill('meetup', $1, 'Dinner', $2, $3, $4, $5, $6, $7::jsonb) as id`,
+    [vibeHangout, extra.currency ?? "THB", extra.discount ?? 15, 10, 7, 0, JSON.stringify(shares)]);
+r = await bill(vb1, [{ user_id: vb1, subtotal: 600 }, { user_id: vb2, subtotal: 400 }]);
+check("the payer splits a bill", !r.error);
+const billId = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", vb2, `select user_id, amount::float a, paid_at is not null paid from public.chat_bill_shares where bill_id = $1 order by user_id`, [billId]);
+check("15% off, then 10% service and 7% VAT on top; the payer's own share is paid",
+  r.rows?.length === 2 && r.rows[0].a === 600.27 && r.rows[0].paid === true && r.rows[1].a === 400.18 && r.rows[1].paid === false);
+r = await tryQuery("authenticated", vb2, `select total::float t, subtotal::float s from public.chat_bills where id = $1`, [billId]);
+check("the bill's total", r.rows?.[0]?.t === 1000.45 && r.rows[0].s === 1000);
+r = await tryQuery("authenticated", vb2, `select count(*)::int n from public.meetup_messages where meetup_id = $1 and kind = 'bill' and body = $2`, [vibeHangout, billId]);
+check("the bill is posted in the chat", r.rows?.[0]?.n === 1);
+r = await tryQuery("authenticated", vb3, `select count(*)::int n from public.chat_bills where id = $1`, [billId]);
+check("outsiders can't see the bill", r.rows?.[0]?.n === 0);
+r = await bill(vb1, [{ user_id: vb1, subtotal: 100 }, { user_id: vb3, subtotal: 100 }]);
+check("only people in the chat", /not_in_chat/.test(r.error ?? ""));
+r = await bill(vb3, [{ user_id: vb3, subtotal: 100 }]);
+check("only someone in the chat can split", /not_in_chat/.test(r.error ?? ""));
+r = await bill(vb1, [{ user_id: vb1, subtotal: 100 }, { user_id: vb1, subtotal: 100 }]);
+check("each person once", /invalid_bill/.test(r.error ?? ""));
+r = await bill(vb1, [{ user_id: vb1, subtotal: 0 }]);
+check("a bill needs an amount", /invalid_bill/.test(r.error ?? ""));
+r = await bill(vb1, [{ user_id: vb1, subtotal: 10 }], { currency: "baht" });
+check("a currency code", /invalid_bill/.test(r.error ?? ""));
+r = await tryQuery("authenticated", vb2, `select public.set_bill_paid($1, $2, true)`, [billId, vb2]);
+check("tick my own share as paid", !r.error);
+r = await tryQuery("authenticated", vb2, `select public.set_bill_paid($1, $2, false)`, [billId, vb1]);
+check("but not someone else's", /not_found/.test(r.error ?? ""));
+r = await tryQuery("authenticated", vb1, `select public.set_bill_paid($1, $2, false)`, [billId, vb2]);
+r = await tryQuery("authenticated", vb1, `select paid_at from public.chat_bill_shares where bill_id = $1 and user_id = $2`, [billId, vb2]);
+check("the payer can untick anyone", !r.error && r.rows?.[0]?.paid_at === null);
+r = await tryQuery("authenticated", vb2, `update public.chat_bill_shares set amount = 0 where bill_id = $1 returning 1`, [billId]);
+check("shares can't be changed directly", !!r.error || r.rows?.length === 0);
+r = await db.query(`select public.push_preview('bill', 'x', 'en') b, public.push_preview('card', 'ice:food:2', 'th') c, public.push_preview('card', 'meetup:x', 'en') m`);
+check("cards and bills read as words in notifications", r.rows[0].b === "🧾 Split the bill" && r.rows[0].c === "🎲 การ์ดละลายพฤติกรรม" && r.rows[0].m === "🍻 Join us for the next round");
+
+// --- Insider tips
+const vb4 = "3c000000-0000-4000-8000-000000000004";
+await db.exec(`insert into auth.users (id, email, raw_user_meta_data, phone_confirmed_at) values ('${vb4}', 'vibe4@x.com', '{"full_name": "Viber 4"}', now())`);
+const tipPlace = (await db.query(`select id from public.places where purpose = 'food' order by osm_id limit 1`)).rows[0].id;
+const tipsOn = async (who) => (await tryQuery("authenticated", who, `select * from public.place_tips($1)`, [tipPlace])).rows ?? [];
+r = await tryQuery("authenticated", vb1, `select public.save_tip($1, null, 'Order the crab omelette, ask for the terrace') as id`, [tipPlace]);
+check("leave a tip on a place", !r.error);
+const tipId = r.rows?.[0]?.id;
+let tips = await tipsOn(vb2);
+check("others read it with the author", tips.length === 1 && tips[0].display_name === "Viber 1" && tips[0].mine === false && tips[0].helpful === 0);
+r = await tryQuery("authenticated", vb1, `select public.save_tip($1, null, 'Sunset from the terrace at 6 pm!') as id`, [tipPlace]);
+tips = await tipsOn(vb2);
+check("one tip per person and place: saving again replaces it", r.rows?.[0]?.id === tipId && tips.length === 1 && tips[0].body.startsWith("Sunset"));
+r = await tryQuery("authenticated", vb1, `select public.save_tip($1, null, 'ok')`, [tipPlace]);
+check("a tip needs a few words", /invalid_tip/.test(r.error ?? ""));
+r = await tryQuery("authenticated", vb1, `select public.save_tip($1, $2, 'Both at once')`, [tipPlace, venueId]);
+check("a tip is on one place", /invalid_tip/.test(r.error ?? ""));
+r = await tryQuery("authenticated", vb2, `select public.vote_tip($1, true)`, [tipId]);
+tips = await tipsOn(vb3);
+check("mark a tip helpful", !r.error && tips[0]?.helpful === 1);
+check("I see that I voted", (await tipsOn(vb2))[0]?.voted === true);
+r = await tryQuery("authenticated", vb1, `select public.vote_tip($1, true)`, [tipId]);
+check("not on your own tip", /own_tip/.test(r.error ?? ""));
+r = await tryQuery("authenticated", vb2, `select * from public.place_tips where id = $1`, [tipId]);
+check("tips are only read through place_tips", !!r.error);
+r = await tryQuery("authenticated", vb2, `insert into public.reports (reporter_id, reported_id, context, context_id, reason) values ($1, $2, 'tip', $3, 'Spam')`, [vb2, vb1, tipId]);
+check("report a tip", !r.error);
+check("the reporter stops seeing it at once", (await tipsOn(vb2)).length === 0 && (await tipsOn(vb3)).length === 1);
+await tryQuery("authenticated", vb3, `insert into public.reports (reporter_id, reported_id, context, context_id, reason) values ($1, $2, 'tip', $3, 'Spam')`, [vb3, vb1, tipId]);
+await tryQuery("authenticated", user, `insert into public.reports (reporter_id, reported_id, context, context_id, reason) values ($1, $2, 'tip', $3, 'Spam')`, [user, vb1, tipId]);
+check("3 open reports hide it for everyone", (await tipsOn(vb4)).length === 0);
+r = await tryQuery("authenticated", vb4, `select * from public.admin_tips(true)`);
+check("only admins list reported tips", /not_allowed/.test(r.error ?? ""));
+r = await tryQuery("authenticated", admin, `select id, open_reports from public.admin_tips(true)`);
+check("the founder sees reported tips", r.rows?.some((row) => row.id === tipId && row.open_reports === 3));
+await tryQuery("authenticated", admin, `select public.admin_clear_tip_reports($1)`, [tipId]);
+check("cleared reports show it again", (await tipsOn(vb4)).length === 1);
+await db.query(`insert into public.blocks (blocker_id, blocked_id) values ($1, $2)`, [vb4, vb1]);
+check("no tips across a block", (await tipsOn(vb4)).length === 0);
+r = await tryQuery("authenticated", vb2, `select public.delete_tip($1)`, [tipId]);
+check("can't delete someone else's tip", /not_found/.test(r.error ?? ""));
+r = await tryQuery("authenticated", vb1, `select public.delete_tip($1)`, [tipId]);
+check("delete my tip", !r.error && (await tipsOn(vb3)).length === 0);
+
+// --- Verification, badges, women-only
+const [wo1, wo2, man1] = [1, 2, 3].map((n) => `3d000000-0000-4000-8000-00000000000${n}`);
+await db.exec(`insert into auth.users (id, email, raw_user_meta_data, phone_confirmed_at) values
+  ${[wo1, wo2, man1].map((id, i) => `('${id}', 'verify${i}@x.com', '{"full_name": "Verify ${i + 1}"}', now())`).join(", ")}`);
+const verifyUpload = (who, name) =>
+  tryQuery("authenticated", who, `insert into storage.objects (bucket_id, name) values ('verifications', $1) returning name`, [name]);
+r = await verifyUpload(wo1, `${man1}/selfie.jpg`);
+check("verification photos only go in my own folder", !!r.error);
+await verifyUpload(wo1, `${wo1}/selfie.jpg`);
+await verifyUpload(wo1, `${wo1}/id.jpg`);
+r = await tryQuery("authenticated", man1, `select name from storage.objects where bucket_id = 'verifications'`);
+check("nobody else can open my ID photos", !r.error && r.rows.length === 0);
+r = await tryQuery("authenticated", wo1, `select public.submit_verification('woman', $1, $2)`, [`${wo1}/selfie.jpg`, `${wo1}/missing.jpg`]);
+check("both photos must be uploaded", /invalid_verification/.test(r.error ?? ""));
+r = await tryQuery("authenticated", wo1, `select public.submit_verification('woman', $1, $2)`, [`${wo1}/selfie.jpg`, `${wo1}/id.jpg`]);
+check("send a selfie and an ID for checking", !r.error);
+r = await tryQuery("authenticated", wo1, `select public.submit_verification('woman', $1, $2)`, [`${wo1}/selfie.jpg`, `${wo1}/id.jpg`]);
+check("one waiting request at a time", /verification_pending/.test(r.error ?? ""));
+r = await tryQuery("authenticated", wo1, `select * from public.my_verification()`);
+check("I see my request waiting", r.rows?.[0]?.status === "pending" && r.rows[0].verified === false);
+r = await tryQuery("authenticated", wo1, `select * from public.verification_requests`);
+check("requests aren't readable directly", !!r.error);
+r = await tryQuery("authenticated", wo1, `select * from public.admin_verification_requests('pending')`);
+check("only admins list requests", /not_allowed/.test(r.error ?? ""));
+r = await tryQuery("authenticated", admin, `select id, selfie_path, email from public.admin_verification_requests('pending') where user_id = $1`, [wo1]);
+check("the founder sees the request with its photos", r.rows?.[0]?.selfie_path === `${wo1}/selfie.jpg` && r.rows[0].email === "verify0@x.com");
+const wo1Request = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", admin, `select name from storage.objects where bucket_id = 'verifications' and name like $1`, [`${wo1}/%`]);
+check("the founder can open the photos", r.rows?.length === 2);
+r = await tryQuery("authenticated", admin, `select * from public.admin_decide_verification($1, true, 'woman', null)`, [wo1Request]);
+check("approving returns the photos to delete", r.rows?.[0]?.selfie_path === `${wo1}/selfie.jpg` && r.rows[0].id_path === `${wo1}/id.jpg`);
+r = await tryQuery("service_role", null, `select selfie_path from public.verification_requests where id = $1`, [wo1Request]);
+check("the request forgets the photos", r.rows?.[0]?.selfie_path === null);
+r = await tryQuery("authenticated", admin, `delete from storage.objects where bucket_id = 'verifications' and name like $1 returning name`, [`${wo1}/%`]);
+check("the founder deletes them", r.rows?.length === 2);
+r = await tryQuery("authenticated", wo1, `select verified, woman from public.my_verification()`);
+check("I'm verified as a woman", r.rows?.[0]?.verified === true && r.rows[0].woman === true);
+// man1: approved as a man; wo2: rejected.
+for (const [who, gender] of [[man1, "man"], [wo2, "woman"]]) {
+  await verifyUpload(who, `${who}/s.jpg`);
+  await verifyUpload(who, `${who}/i.jpg`);
+  await tryQuery("authenticated", who, `select public.submit_verification($1, $2, $3)`, [gender, `${who}/s.jpg`, `${who}/i.jpg`]);
+}
+const requestOf = async (who) => (await tryQuery("authenticated", admin, `select id from public.admin_verification_requests('pending') where user_id = $1`, [who])).rows?.[0]?.id;
+await tryQuery("authenticated", admin, `select * from public.admin_decide_verification($1, true, null, null)`, [await requestOf(man1)]);
+await tryQuery("authenticated", admin, `select * from public.admin_decide_verification($1, false, null, 'The selfie is too dark')`, [await requestOf(wo2)]);
+r = await tryQuery("authenticated", wo2, `select verified, status, reason from public.my_verification()`);
+check("a rejected request tells me why", r.rows?.[0]?.verified === false && r.rows[0].status === "rejected" && r.rows[0].reason === "The selfie is too dark");
+r = await tryQuery("authenticated", man1, `select user_id, verified from public.user_badges($1) order by user_id`, [[wo1, wo2, man1]]);
+check("badges: verified people", r.rows?.length === 3 && r.rows.filter((b) => b.verified).length === 2);
+r = await tryQuery("authenticated", man1, `select public.is_verified_woman($1)`, [wo1]);
+check("nobody can ask for someone's gender", !!r.error);
+
+r = await tryQuery("authenticated", man1, `select public.create_women_only_hangout('Girls brunch', '', $1, 120, 6, null, null, 13.74, 100.55, 'Ari')`, [inHours(4)]);
+check("only verified women create women-only ones", /not_verified_woman/.test(r.error ?? ""));
+r = await tryQuery("authenticated", wo1, `select public.create_women_only_hangout('Girls brunch', '', $1, 120, 6, null, null, 13.74, 100.55, 'Ari') as id`, [inHours(4)]);
+check("a verified woman creates a women-only hangout", !r.error);
+const womenHangout = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", wo1, `select public.create_women_only_table(null, $1, $2, 4, 'Ladies lunch') as id`, [tipPlace, inHours(5)]);
+check("and a women-only table", !r.error);
+const womenTable = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", man1, `select count(*)::int n from public.list_open_meetups() where id in ($1, $2)`, [womenHangout, womenTable]);
+check("men don't see women-only ones", r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", wo2, `select count(*)::int n from public.meetups where id = $1`, [womenHangout]);
+check("nor unverified women", r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", man1, `select count(*)::int n from public.meetup_members where meetup_id = $1`, [womenHangout]);
+check("nor who goes", r.rows?.[0]?.n === 0);
+r = await tryQuery("authenticated", admin, `select women_only from public.list_open_meetups() where id = $1`, [womenHangout]);
+check("admins see them, marked women-only", r.rows?.[0]?.women_only === true);
+r = await tryQuery("authenticated", man1, `select public.join_meetup($1)`, [womenHangout]);
+check("men can't join one", !!r.error);
+r = await tryQuery("authenticated", wo2, `select public.join_meetup($1)`, [womenHangout]);
+check("nor unverified women", /women_only/.test(r.error ?? ""));
+await tryQuery("authenticated", admin, `update public.meetups set women_only = false where id = $1`, [womenHangout]);
+await db.query(`update public.meetups set women_only = false where id = $1`, [womenHangout]);
+r = await db.query(`select women_only from public.meetups where id = $1`, [womenHangout]);
+check("the flag can't be switched off later", r.rows[0].women_only === true);
+r = await tryQuery("authenticated", man1, `select * from public.profile_meetups($1)`, [wo1]);
+check("her profile hides women-only events from men", !r.error && r.rows.length === 0);
+r = await tryQuery("authenticated", wo1, `select count(*)::int n from public.profile_meetups($1)`, [wo1]);
+check("but shows them to verified women", r.rows?.[0]?.n === 2);
+r = await tryQuery("authenticated", man1, `select public.create_meetup_at_place($1, $2, 4) as id`, [tipPlace, inHours(6)]);
+r = await db.query(`select women_only from public.meetups where id = $1`, [r.rows?.[0]?.id]);
+check("ordinary tables stay open to everyone", r.rows[0]?.women_only === false);
+
+r = await tryQuery("authenticated", man1, `select meetup_id from public.my_notifications(100, 13.74, 100.54)`);
+check("the bell lists new groups nearby but not women-only ones for men",
+  r.rows?.some((n) => n.meetup_id === vibeHangout) && !r.rows.some((n) => n.meetup_id === womenHangout || n.meetup_id === womenTable));
+
+// --- Second round
+const [sr1, sr2, sr3, sr4, sr5] = [1, 2, 3, 4, 5].map((n) => `3e000000-0000-4000-8000-00000000000${n}`);
+await db.exec(`insert into auth.users (id, email, raw_user_meta_data, phone_confirmed_at) values
+  ${[sr1, sr2, sr3, sr4, sr5].map((id, i) => `('${id}', 'round${i}@x.com', '{"full_name": "Round ${i + 1}"}', now())`).join(", ")}`);
+const bar = (await db.query(`select p.id, p.lat, p.lng from public.places p where p.kind = 'bar'
+  and not exists (select 1 from public.venues v where v.place_id = p.id) order by p.osm_id limit 1`)).rows[0];
+const groupAt = async (host, members, lat, lng, startsH, endsH) => {
+  const id = (await db.query(`insert into public.meetups (kind, spot_name, spot_lat, spot_lng, host_id, title, starts_at, ends_at, max_people)
+    values ('hangout', 'Spot', $1, $2, $3, 'Dinner', now() + make_interval(mins => $4::int), now() + make_interval(mins => $5::int), 8) returning id`,
+    [lat, lng, host, Math.round(startsH * 60), Math.round(endsH * 60)])).rows[0].id;
+  for (const who of members) await db.query(`insert into public.meetup_members (meetup_id, user_id) values ($1, $2) on conflict do nothing`, [id, who]);
+  return id;
+};
+const firstTable = await groupAt(sr1, [sr1, sr2], bar.lat + 0.002, bar.lng, -2.5, 0.2);
+const otherTable = await groupAt(sr3, [sr3, sr4], bar.lat - 0.003, bar.lng, -1, 1);
+const farTable = await groupAt(sr5, [sr5], bar.lat + 0.1, bar.lng, -1, 1);
+r = await tryQuery("authenticated", sr5, `select * from public.second_round_places($1)`, [firstTable]);
+check("only the group sees second-round ideas", /not_now/.test(r.error ?? ""));
+r = await tryQuery("authenticated", sr2, `select place_id, distance_m from public.second_round_places($1)`, [firstTable]);
+check("bars within 1.5 km, nearest first", !r.error && r.rows.some((p) => p.place_id === bar.id) && r.rows.every((p, i) => p.distance_m <= 1500 && (i === 0 || r.rows[i - 1].distance_m <= p.distance_m)));
+const notYet = await groupAt(sr5, [sr5, sr2], bar.lat, bar.lng, 1, 4);
+r = await tryQuery("authenticated", sr2, `select * from public.second_round_places($1)`, [notYet]);
+check("not long before the end", /not_now/.test(r.error ?? ""));
+r = await tryQuery("authenticated", sr2, `select public.create_second_round($1, 'Next round 🍻', null, $2, 15, 90, 6) as id`, [firstTable, bar.id]);
+check("a member starts the second round", !r.error);
+const round = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", sr1, `select pitstop, second_round_of, vibe from public.meetups where id = $1`, [round]);
+check("it's a party pit-stop linked to the first table", r.rows?.[0]?.pitstop === true && r.rows[0].second_round_of === firstTable && r.rows[0].vibe === "party");
+r = await tryQuery("authenticated", sr1, `select body from public.meetup_messages where meetup_id = $1 and kind = 'card'`, [firstTable]);
+check("the first chat gets the invite card", r.rows?.[0]?.body === `meetup:${round}`);
+r = await tryQuery("authenticated", sr1, `select * from public.second_round_targets($1)`, [round]);
+check("only its host invites other groups", /not_host/.test(r.error ?? ""));
+r = await tryQuery("authenticated", sr2, `select id from public.second_round_targets($1)`, [round]);
+const targetIds = r.rows?.map((row) => row.id) ?? [];
+check("groups nearby that are on now", targetIds.includes(otherTable) && !targetIds.includes(farTable) && !targetIds.includes(firstTable) && !targetIds.includes(round));
+r = await tryQuery("authenticated", sr2, `select public.invite_table($1, $2)`, [round, farTable]);
+check("not groups far away", /too_far/.test(r.error ?? ""));
+r = await tryQuery("authenticated", sr2, `select public.invite_table($1, $2)`, [round, otherTable]);
+check("invite a nearby table", !r.error);
+r = await tryQuery("authenticated", sr2, `select public.invite_table($1, $2)`, [round, otherTable]);
+check("once per table", /already_invited/.test(r.error ?? ""));
+r = await tryQuery("authenticated", sr4, `select kind, meetup_id, actor_name from public.my_notifications(100)`);
+check("its members get a bell invite", r.rows?.some((n) => n.kind === "table_invite" && n.meetup_id === round && n.actor_name === "Round 2"));
+r = await tryQuery("authenticated", sr5, `select kind from public.my_notifications(100)`);
+check("nobody else does", !r.rows?.some((n) => n.kind === "table_invite"));
+r = await tryQuery("authenticated", sr2, `select * from public.meetup_invites`);
+check("invites aren't readable directly", !!r.error);
+
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

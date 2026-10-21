@@ -81,6 +81,7 @@ export default function SettingsScreen() {
           <OptionRow icon="verified" label={`✨ ${t('plus.open')}`} onPress={() => router.push('/plus')} />
           <OptionRow icon="event" label={`🎫 ${t('passport.title')}`} onPress={() => router.push('/passport')} />
           <OptionRow icon="deal" label={`🎁 ${t('rewards.title')}`} onPress={() => router.push('/rewards')} />
+          <OptionRow icon="shield" label={`🛡️ ${t('verify.open')}`} onPress={() => router.push('/verify')} />
         </View>
 
         <Text style={styles.sectionTitle}>{t('settings.appearance')}</Text>

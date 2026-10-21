@@ -18,6 +18,7 @@ import { markNotificationsSeen, useNotifications, type AppNotification } from '@
 import { profilePhotoUrl } from '@/lib/photos';
 import { HANGOUT_CATEGORIES, PROMOTION_EMOJI } from '@/lib/venues';
 import { makeStyles, useColors } from '@/lib/theme';
+import { emojiPreview } from '@/lib/tm-emoji';
 
 const KIND_EMOJI: Record<AppNotification['kind'], string> = {
   new_table: '👥',
@@ -31,6 +32,7 @@ const KIND_EMOJI: Record<AppNotification['kind'], string> = {
   follow: '➕',
   promotion: '🏷️',
   reward: '🎁',
+  table_invite: '🍻',
 };
 
 // Notifications: new tables and hangouts, people joining yours, messages, new followers and new venue deals and
@@ -138,6 +140,7 @@ function openNotification(item: AppNotification) {
     case 'joined':
     case 'join_request':
     case 'request_approved':
+    case 'table_invite':
       if (item.meetup_id) router.push({ pathname: '/table/[id]', params: { id: item.meetup_id } });
       return;
     case 'chat_message':
@@ -189,12 +192,14 @@ function notificationText(item: AppNotification, t: TFunction, language: Languag
       };
     case 'request_approved':
       return { title: t('notifications.requestApproved', { name }), detail: meetupLabel || null };
+    case 'table_invite':
+      return { title: t('notifications.tableInvite', { name }), detail: meetupLabel || null };
     case 'chat_message':
-      return { title: t('notifications.chatMessage', { name, chat: meetupLabel }), detail: item.body };
+      return { title: t('notifications.chatMessage', { name, chat: meetupLabel }), detail: item.body && emojiPreview(item.body, language) };
     case 'direct_message':
-      return { title: t('notifications.directMessage', { name }), detail: item.body };
+      return { title: t('notifications.directMessage', { name }), detail: item.body && emojiPreview(item.body, language) };
     case 'dm_request':
-      return { title: t('notifications.dmRequest', { name }), detail: item.body };
+      return { title: t('notifications.dmRequest', { name }), detail: item.body && emojiPreview(item.body, language) };
     case 'follow':
       return { title: t('notifications.follow', { name }), detail: null };
     case 'reward':

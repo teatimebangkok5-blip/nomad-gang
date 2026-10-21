@@ -98,7 +98,7 @@ export type MapPin = {
   // Name shown beside the pin (e.g. the partner venue's name).
   label?: string;
   // Violet for tables at places and travellers; orange (default) for partner venues; story = brand ring.
-  tone?: 'orange' | 'violet' | 'story';
+  tone?: 'orange' | 'violet' | 'story' | 'amber';
   // A photo in the ball instead of the emoji (story pins: the poster's profile picture).
   image?: string | null;
   // Read out by screen readers.
@@ -539,11 +539,13 @@ function routePadding(mapPadding: { top: number; right: number; bottom: number; 
 }
 
 // 3D pin: glossy gradient ball (light top -> deep bottom) with a white rim, a shine, the tail, and a soft shadow on
-// the ground. Orange → pink for tables and partner venues, violet for hangouts / travellers. A selected pin is bigger.
+// the ground. Orange → pink for tables and partner venues, violet for hangouts / travellers, amber for pit-stops. A
+// selected pin is bigger.
 const PIN_GRADIENTS = {
   orange: ['#FFB547', '#FE593B', '#FF1F78'],
   violet: ['#B79DFF', '#7B4DFF', '#4B22C9'],
   story: ['#FF1F78', '#FE593B', '#FFB547'],
+  amber: ['#FFE07A', '#FFB800', '#E07800'],
 } as const;
 
 function PinView({ pin }: { pin: MapPin }) {

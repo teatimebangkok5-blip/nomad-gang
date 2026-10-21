@@ -13,6 +13,7 @@ import { AboutTab, EventsTab, TravelTab, TripsTab, worldPercent, type ProfileTab
 import { ScreenHeader } from '@/components/screen-header';
 import { StoryShare } from '@/components/story-card';
 import { Radius, Raised, RaisedSmall, Spacing, Type } from '@/constants/theme';
+import { VerifiedBadge } from '@/components/verified-badge';
 import { useLanguage } from '@/i18n';
 import { useAuth } from '@/lib/auth';
 import { usePassportSummary } from '@/lib/passport';
@@ -253,9 +254,12 @@ export default function ProfileScreen() {
             <LevelBadge userId={profile.id} size={AVATAR} corner="bottomLeft" />
           </Pressable>
 
-          <Text style={styles.name}>
-            {profile.age !== null ? t('profile.nameAge', { name: profile.display_name, age: profile.age }) : profile.display_name}
-          </Text>
+          <View style={styles.nameRow}>
+            <Text style={styles.name}>
+              {profile.age !== null ? t('profile.nameAge', { name: profile.display_name, age: profile.age }) : profile.display_name}
+            </Text>
+            <VerifiedBadge userId={profile.id} size={22} withHost />
+          </View>
           {profile.home_country && (
             <Text style={styles.from}>
               {t('profile.from', { country: `${flagEmoji(profile.home_country)} ${countryName(profile.home_country, language)}` })}
@@ -512,7 +516,15 @@ const useStyles = makeStyles((Colors) => ({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  name: { ...Type.display, fontSize: 28, lineHeight: 36, color: Colors.text, marginTop: Spacing.md, textAlign: 'center' },
+  nameRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  name: { ...Type.display, fontSize: 28, lineHeight: 36, color: Colors.text, textAlign: 'center' },
   from: { ...Type.body, color: Colors.textSecondary, marginTop: 2 },
   followsYou: {
     ...Type.small,

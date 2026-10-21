@@ -9,7 +9,7 @@ export function openSafetyMenu(input: {
   name: string;
   myId: string;
   otherId: string;
-  context: 'traveller' | 'direct' | 'table' | 'story';
+  context: 'traveller' | 'direct' | 'table' | 'story' | 'tip';
   contextId?: string;
   onBlocked: () => void;
   onReported?: () => void;

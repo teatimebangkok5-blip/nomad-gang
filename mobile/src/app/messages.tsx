@@ -16,6 +16,7 @@ import { useAuth } from '@/lib/auth';
 import { bangkokDay, bangkokMinutes, deviceZone, formatClock, formatDayLabel } from '@/lib/bangkok-time';
 import { leaveChat, setChatFlag, useChats, type ChatKind, type ChatSummary } from '@/lib/messages';
 import { makeStyles, useColors } from '@/lib/theme';
+import { emojiPreview } from '@/lib/tm-emoji';
 import type { TFunction } from 'i18next';
 
 type Filter = 'all' | ChatKind | 'archived';
@@ -253,7 +254,13 @@ function ChatRow({
           ? t('messages.lastLocation')
           : chat.last_kind === 'unsent'
             ? t('messages.lastUnsent')
-            : chat.last_body;
+            : chat.last_kind === 'card'
+              ? chat.last_body?.startsWith('meetup:')
+                ? t('messages.lastInvite')
+                : t('messages.lastIcebreaker')
+              : chat.last_kind === 'bill'
+                ? t('messages.lastBill')
+                : chat.last_body && emojiPreview(chat.last_body, language);
   const preview = lastText
     ? `${chat.last_sender_id === myId ? t('travellers.youPrefix') : chat.chat_kind !== 'dm' && chat.last_sender_name ? `${chat.last_sender_name}: ` : ''}${lastText}`
     : t('messages.noMessagesYet');

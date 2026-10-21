@@ -43,7 +43,7 @@ export function placeName(place: Pick<Place, 'name' | 'name_en' | 'name_th'>, la
 // OpenStreetMap amenity/shop → the app's place type (for the pin emoji).
 export function placeCategory(kind: string): VenueCategory {
   if (['bar', 'pub', 'biergarten'].includes(kind)) return 'bar';
-  if (['cafe', 'coffee', 'tea', 'bakery', 'pastry', 'ice_cream', 'confectionery', 'deli'].includes(kind)) return 'cafe';
+  if (['cafe', 'coffee', 'tea', 'bakery', 'pastry', 'ice_cream', 'confectionery', 'deli', 'coworking'].includes(kind)) return 'cafe';
   return 'restaurant';
 }
 
@@ -87,6 +87,7 @@ export const PLACE_ICON_COLORS = {
   food: '#F08A24',
   fastfood: '#F08A24',
   cafe: '#A0673A',
+  cowork: '#4F63D2',
   bakery: '#C9772E',
   icecream: '#E8508C',
   bar: '#B83FA0',
@@ -116,6 +117,7 @@ const KIND_ICON: Record<string, PlaceIcon> = {
   cafe: 'cafe',
   coffee: 'cafe',
   tea: 'cafe',
+  coworking: 'cowork',
   bakery: 'bakery',
   pastry: 'bakery',
   confectionery: 'bakery',

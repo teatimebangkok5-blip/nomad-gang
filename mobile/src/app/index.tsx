@@ -27,6 +27,7 @@ import { LanguageToggle } from '@/components/language-toggle';
 import { LevelBadge } from '@/components/level-badge';
 import { Logo } from '@/components/logo';
 import { MeetupCard } from '@/components/meetup-card';
+import { PlaceTips } from '@/components/place-tips';
 import { stopName } from '@/components/plan-timeline';
 import { MapSearchBar, MapSearchResults } from '@/components/map-search';
 import { PROMOTION_ICON } from '@/components/promo-filter';
@@ -114,11 +115,12 @@ export default function HomeScreen() {
   });
 
   // Tables share a 👥 pin per venue or place (partner venues themselves aren't pinned on home), hangouts share a 🙌
-  // pin per place or spot. Pin keys: v:<venue id>, p:<place id>, h:<location key>.
+  // pin per place or spot, pit-stops a ⚡ pin. Pin keys: v:<venue id>, p:<place id>, h:<location key>, k:<location key>.
   const pinGroups = new Map<string, OpenMeetup[]>();
   for (const meetup of visibleMeetups) {
-    const key =
-      meetup.venue_id && diningVenueIds.has(meetup.venue_id)
+    const key = meetup.pitstop
+      ? `k:${meetupLocationKey(meetup)}`
+      : meetup.venue_id && diningVenueIds.has(meetup.venue_id)
         ? `v:${meetup.venue_id}`
         : meetup.kind === 'hangout'
           ? `h:${meetupLocationKey(meetup)}`
@@ -178,12 +180,13 @@ export default function HomeScreen() {
     const at = meetupCoords(list[0], venueById);
     if (!at) return [];
     const hangouts = key.startsWith('h:');
+    const pitstops = key.startsWith('k:');
     return [
       {
         key,
         ...at,
-        emoji: hangouts ? '🙌' : '👥',
-        tone: hangouts ? ('violet' as const) : ('orange' as const),
+        emoji: pitstops ? '⚡' : hangouts ? '🙌' : '👥',
+        tone: pitstops ? ('amber' as const) : hangouts ? ('violet' as const) : ('orange' as const),
         count: list.reduce((sum, meetup) => sum + meetup.member_count, 0),
         selected: key === selectedPinKey,
       },
@@ -386,6 +389,20 @@ export default function HomeScreen() {
               pointerEvents="none"
             />
             <View style={styles.cornerButtons} pointerEvents="box-none">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('pitstop.open')}
+                onPress={() => router.push('/pitstop')}
+                style={({ pressed }) => [styles.pitstopButton, pressed && styles.pressed]}>
+                <LinearGradient
+                  colors={['#FFE07A', '#FFB800', '#F59300']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                />
+                <Icon name="bolt" size={22} color="#3A2300" />
+                <Text style={styles.pitstopText}>{t('pitstop.button')}</Text>
+              </Pressable>
               <RoundButton size={52} icon="listBulleted" label={t('tables.showList')} onPress={() => setListOpen(true)} />
               <RoundButton
                 size={52}
@@ -643,6 +660,12 @@ function PlaceSheet({
             <Text style={styles.sheetBody}>{t('tables.noDealHere')}</Text>
           )}
 
+          {favorite && (
+            <View style={styles.tipsSpace}>
+              <PlaceTips target={favorite} />
+            </View>
+          )}
+
           {meetups.length > 0 && (
             <>
               <Text style={styles.sheetSection}>{t('home.happeningHere')}</Text>
@@ -810,6 +833,23 @@ const useStyles = makeStyles((Colors) => ({
   locationPillText: { ...Type.label, fontSize: 13, color: Colors.text },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: Spacing.xl, gap: Spacing.sm + 2 },
   cornerButtons: { flexDirection: 'row', justifyContent: 'flex-end', gap: Spacing.sm, paddingHorizontal: 14 },
+  pitstopButton: {
+    marginRight: 'auto',
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: 26,
+    overflow: 'hidden',
+    elevation: 6,
+    shadowColor: '#FFB800',
+    shadowOpacity: 0.4,
+    shadowRadius: 9,
+    shadowOffset: { width: 0, height: 5 },
+  },
+  tipsSpace: { marginTop: Spacing.lg },
+  pitstopText: { ...Type.label, fontSize: 15, fontWeight: '800', color: '#3A2300' },
   pop: { paddingTop: 14, gap: Spacing.sm },
   popSingle: { paddingHorizontal: 14 },
   popRow: { gap: Spacing.md - 2, paddingHorizontal: 14 },

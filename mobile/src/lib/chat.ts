@@ -6,8 +6,9 @@ import { supabase, uniqueChannelName } from '@/lib/supabase';
 // Table chat (meetup_messages), direct messages (direct_threads / direct_messages), block and report.
 // The rules live in the database (supabase/migrations/*_chat_and_travellers.sql).
 
-// 'unsent': the sender took it back (shown as "Message unsent").
-export type MessageKind = 'text' | 'photo' | 'voice' | 'location' | 'unsent';
+// 'unsent': the sender took it back (shown as "Message unsent"). 'card': an icebreaker card ('ice:<deck>:<n>') or a
+// table / hangout invite ('meetup:<id>'); 'bill': a split bill (body = its id).
+export type MessageKind = 'text' | 'photo' | 'voice' | 'location' | 'unsent' | 'card' | 'bill';
 
 export type ChatMessage = {
   id: string;
@@ -134,7 +135,7 @@ async function fetchDirect(otherId: string, myId: string) {
   const [a, b] = myId < otherId ? [myId, otherId] : [otherId, myId];
   const [{ data: thread }, { data: other }] = await Promise.all([
     supabase.from('direct_threads').select('id, status, requested_by').eq('user_a', a).eq('user_b', b).maybeSingle(),
-    supabase.from('profiles').select('display_name').eq('id', otherId).maybeSingle(),
+    supabase.from('profiles').select('display_name, avatar_path').eq('id', otherId).maybeSingle(),
   ]);
   let messages: ChatMessage[] = [];
   if (thread) {
@@ -149,13 +150,19 @@ async function fetchDirect(otherId: string, myId: string) {
   return {
     thread: (thread as DirectThread | null) ?? null,
     otherName: (other as { display_name: string } | null)?.display_name ?? '',
+    otherAvatar: (other as { avatar_path: string | null } | null)?.avatar_path ?? null,
     messages,
   };
 }
 
 // One conversation with another person (by their user id), whether or not it has started yet.
 export function useDirectChat(otherId: string, myId: string | undefined) {
-  const [state, setState] = useState<{ thread: DirectThread | null; otherName: string; messages: ChatMessage[] } | null>(
+  const [state, setState] = useState<{
+    thread: DirectThread | null;
+    otherName: string;
+    otherAvatar: string | null;
+    messages: ChatMessage[];
+  } | null>(
     null,
   );
 
@@ -218,7 +225,7 @@ export async function blockUser(myId: string, otherId: string): Promise<ChatErro
 export async function reportUser(input: {
   myId: string;
   otherId: string;
-  context: 'traveller' | 'direct' | 'table' | 'story';
+  context: 'traveller' | 'direct' | 'table' | 'story' | 'tip';
   contextId?: string;
   reason: string;
 }): Promise<ChatErrorKey | null> {

@@ -13,10 +13,16 @@ export function ScreenHeader({
   subtitle,
   right,
   onBack,
+  avatar,
+  divider = false,
 }: {
   title?: string;
   subtitle?: string;
   right?: ReactNode;
+  // A picture before the title (chat screens: the person, group or table).
+  avatar?: ReactNode;
+  // A line under the bar (chat screens).
+  divider?: boolean;
   // Instead of going back (e.g. back to step 1 of the same screen).
   onBack?: () => void;
 }) {
@@ -24,12 +30,13 @@ export function ScreenHeader({
   const { t } = useTranslation();
 
   return (
-    <View style={styles.bar}>
+    <View style={[styles.bar, divider && styles.divider]}>
       <RoundButton
         icon="back"
         label={t('common.back')}
         onPress={onBack ?? (() => (router.canGoBack() ? router.back() : router.replace('/')))}
       />
+      {avatar}
       <View style={styles.titles}>
         {title ? (
           <Text style={styles.title} numberOfLines={1}>
@@ -57,6 +64,7 @@ const useStyles = makeStyles((Colors) => ({
     paddingBottom: Spacing.sm,
     minHeight: 60,
   },
+  divider: { borderBottomWidth: 1, borderBottomColor: Colors.border },
   titles: { flex: 1 },
   title: { ...Type.heading, fontSize: 18, fontWeight: '800', color: Colors.text },
   subtitle: { ...Type.small, fontSize: 12, fontWeight: '600', color: Colors.textSecondary },

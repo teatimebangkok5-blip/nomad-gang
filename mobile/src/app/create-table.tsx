@@ -10,7 +10,7 @@ import { Button } from '@/components/button';
 import { Chip } from '@/components/chip';
 import { FormFooter, FormInput, FormSection, IconBadge, PlaceSummary, Stepper } from '@/components/form-parts';
 import { Icon } from '@/components/icon';
-import { MeetupExtras } from '@/components/meetup-extras';
+import { COWORK_HOURS, MeetupExtras } from '@/components/meetup-extras';
 import { MapHeader } from '@/components/map-header';
 import { MapSearchBar, MapSearchResults } from '@/components/map-search';
 import { PromoFilter } from '@/components/promo-filter';
@@ -27,11 +27,14 @@ import { AREA_ZOOM, PLACE_ZOOM, useMapSearch, type SearchResult } from '@/lib/ma
 import {
   createMeetup,
   createMeetupAtPlace,
+  createWomenOnlyTable,
   setMeetupDetails,
   setMeetupJoinMode,
+  setMeetupVibe,
   type CostLevel,
   type JoinMode,
   type MeetupErrorKey,
+  type Vibe,
 } from '@/lib/meetups';
 import { COUPONS_ENABLED } from '@/lib/coupons';
 import { fetchPlace, placeCategory, placeName, usePlacesInView, type Place } from '@/lib/places';
@@ -86,6 +89,9 @@ export default function CreateTableScreen() {
   const [meetingPoint, setMeetingPoint] = useState('');
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [joinMode, setJoinMode] = useState<JoinMode>('open');
+  const [vibe, setVibe] = useState<Vibe | null>(null);
+  const [hours, setHours] = useState(COWORK_HOURS.start);
+  const [womenOnly, setWomenOnly] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<MeetupErrorKey | null>(null);
 
@@ -138,9 +144,11 @@ export default function CreateTableScreen() {
     setError(null);
     setCreating(true);
     const common = { startsAt: fromBangkok(day, minutes), maxPeople, title: title.trim() };
-    const result = chosen
-      ? await createMeetup({ venueId: chosen.id, ...common })
-      : await createMeetupAtPlace({ placeId: (place as Place).id, ...common });
+    const result = womenOnly
+      ? await createWomenOnlyTable({ venueId: chosen?.id ?? null, placeId: chosen ? null : (place as Place).id, ...common })
+      : chosen
+        ? await createMeetup({ venueId: chosen.id, ...common })
+        : await createMeetupAtPlace({ placeId: (place as Place).id, ...common });
     if (result.error) {
       setCreating(false);
       setError(result.error);
@@ -150,6 +158,7 @@ export default function CreateTableScreen() {
       setMeetupDetails(result.data, cost, meetingPoint),
       setMeetupChallenge(result.data, challengeId),
       setMeetupJoinMode(result.data, joinMode),
+      setMeetupVibe(result.data, vibe, vibe === 'cowork' ? hours : undefined),
     ]);
     setCreating(false);
     router.replace({ pathname: '/table/[id]', params: { id: result.data } });
@@ -354,6 +363,12 @@ export default function CreateTableScreen() {
             onChallenge={setChallengeId}
             joinMode={joinMode}
             onJoinMode={setJoinMode}
+            vibe={vibe}
+            onVibe={setVibe}
+            hours={hours}
+            onHours={setHours}
+            womenOnly={womenOnly}
+            onWomenOnly={setWomenOnly}
             tone="orange"
           />
 

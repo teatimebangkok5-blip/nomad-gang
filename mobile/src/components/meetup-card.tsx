@@ -9,10 +9,11 @@ import { Radius, Raised, Spacing, Type } from '@/constants/theme';
 import { localized, useLanguage } from '@/i18n';
 import { bangkokDay, bangkokMinutes, formatClock, formatDayLabel } from '@/lib/bangkok-time';
 import { areaName, meetupStatus, pulseLine, statusLabel, type MeetupStatus } from '@/lib/feed';
-import { meetupPlaceName, type OpenMeetup } from '@/lib/meetups';
+import { meetupPlaceName, VIBE_EMOJI, type OpenMeetup, type Vibe } from '@/lib/meetups';
 import { useChallenges } from '@/lib/passport';
 import type { Venue, VenueDeal } from '@/lib/venues';
 import { makeStyles, useColors } from '@/lib/theme';
+import { useMyVibes } from '@/lib/vibes';
 
 // A table or hangout in the home pop-up, the List and on place cards. Tapping it opens the table screen (join
 // there). Compact (default): kind, status, deal, title, one line of where / when / cost and the live "pulse".
@@ -48,6 +49,8 @@ export function MeetupCard({
   const where = [meetup.title ? placeLabel : null, area ? t('feed.near', { area }) : null].filter(Boolean).join(' · ');
   const badge = venue?.deal ? dealBadge(venue.deal, t) : null;
   const count = `${meetup.member_count}/${meetup.max_people}`;
+  const myVibes = useMyVibes();
+  const yourVibe = Boolean(meetup.vibe && myVibes.includes(meetup.vibe));
 
   return (
     <Pressable
@@ -56,9 +59,11 @@ export function MeetupCard({
       style={({ pressed }) => [styles.card, compact ? styles.cardCompact : styles.cardFull, pressed && styles.pressed]}>
       <GlossyFill />
       <View style={styles.tags}>
-        <KindTag hangout={hangout} small={compact} />
+        <KindTag hangout={hangout} pitstop={meetup.pitstop} small={compact} />
         <StatusTag status={status} joined={meetup.joined} small={compact} />
+        {meetup.vibe && <VibeTag vibe={meetup.vibe} small={compact} short={compact} />}
         {badge && <DealTag label={badge} small={compact} />}
+        {meetup.women_only && <WomenOnlyTag small={compact} short />}
         {meetup.join_mode === 'private' && (
           <Text style={styles.lock} accessibilityLabel={t('privacy.private')}>
             🔒
@@ -105,6 +110,7 @@ export function MeetupCard({
         <Text style={styles.pulse} numberOfLines={1}>
           {pulseLine(meetup, venue, t, language)}
         </Text>
+        {yourVibe && <Text style={styles.yourVibe}>✨ {t('vibes.yours')}</Text>}
       </View>
     </Pressable>
   );
@@ -116,14 +122,49 @@ export function dealBadge(deal: Pick<VenueDeal, 'kind' | 'title_en'>, t: TFuncti
   return percent ? `−${percent}%` : t(`promoFilter.${deal.kind}`);
 }
 
-// 👥 Table / 🙌 Hangout.
-export function KindTag({ hangout, small = false }: { hangout: boolean; small?: boolean }) {
+// 👥 Table / 🙌 Hangout / ⚡ Pit-stop.
+export function KindTag({ hangout, pitstop = false, small = false }: { hangout: boolean; pitstop?: boolean; small?: boolean }) {
   const styles = useStyles();
   const { t } = useTranslation();
+  if (pitstop) {
+    return (
+      <View style={[styles.tag, small && styles.tagSmall, styles.tagPitstop]}>
+        <Text style={[styles.tagText, small && styles.tagTextSmall, styles.pitstopText]}>⚡ {t('pitstop.tag')}</Text>
+      </View>
+    );
+  }
   return (
     <View style={[styles.tag, small && styles.tagSmall, hangout ? styles.tagViolet : styles.tagOrange]}>
       <Text style={[styles.tagText, small && styles.tagTextSmall, hangout ? styles.violetText : styles.orangeText]}>
         {hangout ? `🙌 ${t('hangouts.hangout')}` : `👥 ${t('tables.table')}`}
+      </Text>
+    </View>
+  );
+}
+
+// 🍻 Party & pre-game (short: just the emoji, for compact cards).
+export function VibeTag({ vibe, small = false, short = false }: { vibe: Vibe; small?: boolean; short?: boolean }) {
+  const styles = useStyles();
+  const { t } = useTranslation();
+  return (
+    <View
+      style={[styles.tag, small && styles.tagSmall, styles.tagNeutral]}
+      accessibilityLabel={t(`vibes.${vibe}`)}>
+      <Text style={[styles.tagText, small && styles.tagTextSmall, styles.neutralText]} numberOfLines={1}>
+        {short ? VIBE_EMOJI[vibe] : `${VIBE_EMOJI[vibe]} ${t(`vibes.${vibe}`)}`}
+      </Text>
+    </View>
+  );
+}
+
+// ♀ Women only.
+export function WomenOnlyTag({ small = false, short = false }: { small?: boolean; short?: boolean }) {
+  const styles = useStyles();
+  const { t } = useTranslation();
+  return (
+    <View style={[styles.tag, small && styles.tagSmall, styles.tagPink]} accessibilityLabel={t('women.only')}>
+      <Text style={[styles.tagText, small && styles.tagTextSmall, styles.pinkText]}>
+        {short ? '♀' : `♀ ${t('women.only')}`}
       </Text>
     </View>
   );
@@ -186,6 +227,10 @@ const useStyles = makeStyles((Colors) => ({
   tagOrange: { backgroundColor: Colors.orangeTint },
   tagViolet: { backgroundColor: Colors.violetTint },
   tagPink: { backgroundColor: Colors.pinkTint },
+  tagNeutral: { backgroundColor: Colors.surfaceRaised, flexShrink: 1 },
+  tagPitstop: { backgroundColor: Colors.amberTint },
+  neutralText: { color: Colors.textSecondary },
+  pitstopText: { color: Colors.amberText },
   statusTag: { flexShrink: 1, gap: 5 },
   tagText: { fontSize: 12, lineHeight: 16, fontWeight: '800' },
   tagTextSmall: { fontSize: 11, lineHeight: 14 },
@@ -222,4 +267,5 @@ const useStyles = makeStyles((Colors) => ({
     borderColor: 'rgba(255, 31, 120, 0.3)',
   },
   pulse: { ...Type.small, fontSize: 12, lineHeight: 16, color: Colors.textMuted, flex: 1 },
+  yourVibe: { ...Type.small, fontSize: 11, lineHeight: 15, fontWeight: '800', color: Colors.violetText },
 }));

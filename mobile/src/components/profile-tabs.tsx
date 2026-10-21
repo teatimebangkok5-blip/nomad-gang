@@ -23,9 +23,11 @@ import {
   travelStyleLabel,
   WORLD_COUNTRY_COUNT,
 } from '@/lib/profile-options';
+import { VIBE_EMOJI } from '@/lib/meetups';
 import { saveVisitedCountries, useProfileMeetups, type Profile, type ProfileMeetup } from '@/lib/profiles';
 import { makeStyles, useColors } from '@/lib/theme';
 import { useTrips, type Trip } from '@/lib/trips';
+import { useProfileVibes } from '@/lib/vibes';
 
 // The four tabs under a profile: About, Travel (countries visited), Trips and Events (tables and hangouts).
 
@@ -71,7 +73,13 @@ export function AboutTab({
   const styles = useStyles();
   const { t } = useTranslation();
   const language = useLanguage();
-  const empty = profile.languages.length === 0 && !profile.profession && !profile.travel_style && profile.interests.length === 0;
+  const vibes = useProfileVibes(profile.id);
+  const empty =
+    profile.languages.length === 0 &&
+    !profile.profession &&
+    !profile.travel_style &&
+    profile.interests.length === 0 &&
+    vibes.length === 0;
 
   return (
     <View>
@@ -102,6 +110,15 @@ export function AboutTab({
         <Section title={t('about.travelStyle')}>
           <View style={styles.tags}>
             <Tag label={travelStyleLabel(t, profile.travel_style)} />
+          </View>
+        </Section>
+      )}
+      {vibes.length > 0 && (
+        <Section title={t('vibes.title')}>
+          <View style={styles.tags}>
+            {vibes.map((vibe) => (
+              <Tag key={vibe} label={`${VIBE_EMOJI[vibe]} ${t(`vibes.${vibe}`)}`} />
+            ))}
           </View>
         </Section>
       )}

@@ -38,6 +38,10 @@ export type ThemeColors = {
   pinkText: string;
   // Success text: "Checked in ✓", "Open now", "Free entry".
   ok: string;
+  // Pit-stops ("⚡ Heading there in 15 min"): fill, tint behind text, and text on plain backgrounds / the tint.
+  amber: string;
+  amberTint: string;
+  amberText: string;
   // Text field background.
   field: string;
   // Top-of-map fade: opaque → transparent.
@@ -74,6 +78,9 @@ export const darkColors: ThemeColors = {
   violetText: '#B9A2FF',
   pinkText: '#FF6FA3',
   ok: '#5FD39A',
+  amber: '#FFB800',
+  amberTint: 'rgba(255, 184, 0, 0.16)',
+  amberText: '#FFCF5C',
   field: '#120A1E',
   fade: ['rgba(10, 6, 18, 0.94)', 'rgba(10, 6, 18, 0.7)', 'rgba(10, 6, 18, 0)'],
   surfaceGradient: ['#2A1D40', '#160D24'],
@@ -107,6 +114,9 @@ export const lightColors: ThemeColors = {
   violetText: '#5A2FE0',
   pinkText: '#C2004C',
   ok: '#1E7F4F',
+  amber: '#FFB800',
+  amberTint: 'rgba(255, 184, 0, 0.18)',
+  amberText: '#8A5300',
   field: '#FFFFFF',
   fade: ['rgba(251, 248, 254, 0.95)', 'rgba(251, 248, 254, 0.75)', 'rgba(251, 248, 254, 0)'],
   surfaceGradient: ['#FFFFFF', '#F3EEF9'],

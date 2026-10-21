@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '@/components/button';
 import { ChatAvatar } from '@/components/chat-avatar';
 import { Chip } from '@/components/chip';
-import { FormFooter, FormSection } from '@/components/form-parts';
+import { FormFooter, FormSection, Stepper } from '@/components/form-parts';
 import { GlossyFill } from '@/components/glossy';
 import { Icon } from '@/components/icon';
 import { ScreenHeader } from '@/components/screen-header';
@@ -21,6 +21,8 @@ import { makeStyles, useColors } from '@/lib/theme';
 
 const DISCOUNTS = [0, 10, 15, 20] as const;
 const TIPS = [0, 5, 10, 15] as const;
+// People who aren't in the chat (the server allows up to 50).
+const MAX_GUESTS = 50;
 
 // "1,250.50" → 1250.5 (null if it isn't a number).
 function parseAmount(text: string): number | null {
@@ -46,8 +48,10 @@ export default function SplitBillScreen() {
   const [currency, setCurrency] = useState<string>('THB');
   const [mode, setMode] = useState<'equal' | 'parts'>('equal');
   const [total, setTotal] = useState('');
-  // Equal mode: who shares it (everyone at first). Parts mode: each person's part as typed.
+  // Equal mode: who shares it (everyone at first) plus people who aren't in the chat. Parts mode: each person's part
+  // as typed.
   const [left, setLeft] = useState<Set<string>>(() => new Set());
+  const [guests, setGuests] = useState(0);
   const [parts, setParts] = useState<Record<string, string>>({});
   const [discount, setDiscount] = useState<number>(partnerDiscount ?? 0);
   const [service, setService] = useState(false);
@@ -60,16 +64,21 @@ export default function SplitBillScreen() {
   const people = members ?? [];
   const sharing = people.filter((member) => !left.has(member.user_id));
   const totalValue = parseAmount(total);
+  const guestCount = mode === 'equal' ? guests : 0;
+  const headCount = sharing.length + guestCount;
+  // Equal mode: the members ticked take the first parts (with any leftover satang), the people outside the chat the rest.
+  const equalParts = mode === 'equal' && totalValue && sharing.length > 0 ? splitEqually(totalValue, headCount) : [];
   const subtotals: { userId: string; subtotal: number }[] =
     mode === 'equal'
-      ? totalValue
-        ? splitEqually(totalValue, sharing.length).map((subtotal, i) => ({ userId: sharing[i].user_id, subtotal }))
-        : []
+      ? equalParts.slice(0, sharing.length).map((subtotal, i) => ({ userId: sharing[i].user_id, subtotal }))
       : people
           .map((member) => ({ userId: member.user_id, subtotal: parseAmount(parts[member.user_id] ?? '') ?? 0 }))
           .filter((share) => share.subtotal > 0);
+  const guestParts = equalParts.slice(sharing.length);
+  const guestSubtotal = Math.round(guestParts.reduce((sum, part) => sum + part, 0) * 100) / 100;
+  const guestOwed = shareAmount(guestSubtotal, rates);
   const owed = subtotals.map((share) => ({ ...share, amount: shareAmount(share.subtotal, rates) }));
-  const grandTotal = owed.reduce((sum, share) => sum + share.amount, 0);
+  const grandTotal = owed.reduce((sum, share) => sum + share.amount, 0) + guestOwed;
   const canPost = owed.length > 0 && grandTotal > 0;
 
   function toggleMember(userId: string) {
@@ -84,7 +93,14 @@ export default function SplitBillScreen() {
   async function post() {
     setBusy(true);
     setError(null);
-    const result = await createBill({ chat, title, currency, rates, shares: subtotals });
+    const result = await createBill({
+      chat,
+      title,
+      currency,
+      rates,
+      shares: subtotals,
+      guests: guestSubtotal > 0 ? { count: guestCount, subtotal: guestSubtotal } : undefined,
+    });
     setBusy(false);
     if (result) {
       setError(t(`bill.errors.${result}`));
@@ -146,9 +162,24 @@ export default function SplitBillScreen() {
             </FormSection>
           )}
 
+          {mode === 'equal' && (
+            <Stepper
+              tone="violet"
+              label={t('bill.people')}
+              hint={t('bill.peopleHint')}
+              value={String(headCount)}
+              canDecrease={guests > 0}
+              canIncrease={guests < MAX_GUESTS}
+              onDecrease={() => setGuests((n) => Math.max(0, n - 1))}
+              onIncrease={() => setGuests((n) => Math.min(MAX_GUESTS, n + 1))}
+            />
+          )}
+
           <FormSection label={mode === 'equal' ? t('bill.whoShares') : t('bill.eachPart')}>
             {members === null ? (
               <ActivityIndicator color={Colors.accent} />
+            ) : people.length === 0 ? (
+              <Text style={styles.error}>{t('bill.membersFailed')}</Text>
             ) : (
               people.map((member) => {
                 const share = owed.find((item) => item.userId === member.user_id);
@@ -187,6 +218,31 @@ export default function SplitBillScreen() {
                   </View>
                 );
               })
+            )}
+            {guestCount > 0 && (
+              <View style={styles.person}>
+                <GlossyFill />
+                <View style={styles.guestIcon}>
+                  <Icon name="group" size={18} color={Colors.violetText} />
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.personName} numberOfLines={1}>
+                    {t('bill.guests', { count: guestCount })}
+                  </Text>
+                  {guestParts.length > 0 && (
+                    <Text style={styles.personOwes}>
+                      {t('bill.each', { amount: formatMoney(shareAmount(guestParts[guestParts.length - 1], rates), currency, language) })}
+                    </Text>
+                  )}
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('bill.removeGuests')}
+                  onPress={() => setGuests(0)}
+                  hitSlop={8}>
+                  <Icon name="close" size={22} color={Colors.textMuted} />
+                </Pressable>
+              </View>
             )}
           </FormSection>
 
@@ -283,6 +339,14 @@ const useStyles = makeStyles((Colors) => ({
   },
   personName: { ...Type.label, fontSize: 15, color: Colors.text },
   personOwes: { ...Type.small, fontWeight: '700', color: Colors.violetText },
+  guestIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.violetTint,
+  },
   partInput: {
     width: 110,
     minHeight: 40,

@@ -20,6 +20,9 @@ export type Bill = {
   tip_pct: number;
   subtotal: number;
   total: number;
+  // People counted on the bill who aren't in the chat: how many and what they owe together (no ticks).
+  guests: number;
+  guest_amount: number;
   created_at: string;
 };
 
@@ -51,7 +54,7 @@ export function splitEqually(total: number, people: number): number[] {
 
 export type ChatMember = { user_id: string; display_name: string; avatar_path: string | null };
 
-// The people in a chat, for picking who shares the bill.
+// The people in a chat, for picking who shares the bill (empty if they couldn't be loaded).
 export function useChatMembers(chat: ChatRef | null) {
   const [members, setMembers] = useState<ChatMember[] | null>(null);
   const kind = chat?.kind;
@@ -71,9 +74,12 @@ export function useChatMembers(chat: ChatRef | null) {
         .select('user_a, user_b')
         .eq('id', id)
         .maybeSingle()
-        .then(async ({ data }) => {
+        .then(async ({ data, error }) => {
+          if (error) console.warn('Loading chat members failed', error.message);
           const ids = data ? [data.user_a as string, data.user_b as string] : [];
-          const { data: people } = await supabase.from('profiles').select('id, display_name, avatar_path').in('id', ids);
+          const { data: people } = ids.length
+            ? await supabase.from('profiles').select('id, display_name, avatar_path').in('id', ids)
+            : { data: [] };
           setMembers(
             ((people ?? []) as { id: string; display_name: string; avatar_path: string | null }[]).map((p) => ({
               user_id: p.id,
@@ -87,10 +93,14 @@ export function useChatMembers(chat: ChatRef | null) {
     const query =
       kind === 'meetup'
         ? supabase.from('meetup_members').select('user_id, profiles(display_name, avatar_path)').eq('meetup_id', id)
-        : supabase.from('chat_group_members').select('user_id, profiles(display_name, avatar_path)').eq('group_id', id);
+        : // chat_group_members links to profiles twice (user_id, added_by), so name the link to use.
+          supabase
+            .from('chat_group_members')
+            .select('user_id, profiles!chat_group_members_user_id_fkey(display_name, avatar_path)')
+            .eq('group_id', id);
     query.then(({ data, error }) => {
       if (error) console.warn('Loading chat members failed', error.message);
-      else setMembers(toMembers((data ?? []) as unknown as Row[]));
+      setMembers(error ? [] : toMembers((data ?? []) as unknown as Row[]));
     });
   }, [kind, id]);
   return members;
@@ -102,8 +112,12 @@ export async function createBill(input: {
   currency: string;
   rates: BillRates;
   shares: { userId: string; subtotal: number }[];
+  // People who aren't in the chat (split equally only): how many, and their parts together.
+  guests?: { count: number; subtotal: number };
 }): Promise<'invalid_bill' | 'not_in_chat' | 'generic' | null> {
+  const guests = input.guests && input.guests.count > 0 ? input.guests : null;
   const { error } = await supabase.rpc('create_bill', {
+    ...(guests ? { p_guests: guests.count, p_guest_subtotal: guests.subtotal } : {}),
     p_chat_kind: input.chat.kind,
     p_chat_id: input.chat.id,
     p_title: input.title.trim(),
@@ -146,7 +160,13 @@ export function useBill(billId: string | null) {
         profiles: { display_name: string; avatar_path: string | null } | null;
       };
       setState({
-        bill: { ...(bill.data as Bill), subtotal: Number(bill.data.subtotal), total: Number(bill.data.total) },
+        bill: {
+          ...(bill.data as Bill),
+          subtotal: Number(bill.data.subtotal),
+          total: Number(bill.data.total),
+          guests: Number(bill.data.guests ?? 0),
+          guest_amount: Number(bill.data.guest_amount ?? 0),
+        },
         shares: ((shares.data ?? []) as unknown as Row[])
           .map(({ profiles, ...row }) => ({
             ...row,

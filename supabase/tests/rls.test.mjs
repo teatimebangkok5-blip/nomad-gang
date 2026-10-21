@@ -2145,6 +2145,21 @@ r = await bill(vb1, [{ user_id: vb1, subtotal: 0 }]);
 check("a bill needs an amount", /invalid_bill/.test(r.error ?? ""));
 r = await bill(vb1, [{ user_id: vb1, subtotal: 10 }], { currency: "baht" });
 check("a currency code", /invalid_bill/.test(r.error ?? ""));
+const guestBill = (who, guests, guestSubtotal) =>
+  tryQuery("authenticated", who,
+    `select public.create_bill('meetup', $1, 'Dinner', 'THB', 0, 10, 0, 0, $2::jsonb, p_guests => $3, p_guest_subtotal => $4) as id`,
+    [vibeHangout, JSON.stringify([{ user_id: vb1, subtotal: 250 }, { user_id: vb2, subtotal: 250 }]), guests, guestSubtotal]);
+r = await guestBill(vb1, 2, 500);
+check("people who aren't in the chat count too", !r.error);
+r = await tryQuery("authenticated", vb2, `select guests, guest_subtotal::float gs, guest_amount::float ga, subtotal::float s, total::float t from public.chat_bills where id = $1`, [r.rows?.[0]?.id]);
+check("their part is on the bill but has no share rows",
+  r.rows?.[0]?.guests === 2 && r.rows[0].gs === 500 && r.rows[0].ga === 550 && r.rows[0].s === 1000 && r.rows[0].t === 1100);
+r = await guestBill(vb1, 2, 0);
+check("guests need an amount", /invalid_bill/.test(r.error ?? ""));
+r = await guestBill(vb1, 0, 100);
+check("an amount needs guests", /invalid_bill/.test(r.error ?? ""));
+r = await guestBill(vb1, 51, 100);
+check("at most 50 guests", /invalid_bill/.test(r.error ?? ""));
 r = await tryQuery("authenticated", vb2, `select public.set_bill_paid($1, $2, true)`, [billId, vb2]);
 check("tick my own share as paid", !r.error);
 r = await tryQuery("authenticated", vb2, `select public.set_bill_paid($1, $2, false)`, [billId, vb1]);

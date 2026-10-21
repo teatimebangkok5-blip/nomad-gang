@@ -248,7 +248,9 @@ Product spec and tech stack below are agreed. Built so far:
   VAT 7% (Thai "++": service first, then VAT), tip; the server computes each share (`part × (1−discount) × (1+service)
   × (1+VAT) × (1+tip)`, 2 decimals); payer's share counts as paid; `set_bill_paid` (payer ticks anyone, others
   themselves). "≈" amounts in other currencies from Frankfurter (ECB rates, no key, cached 12 h,
-  `src/lib/currency.ts`).
+  `src/lib/currency.ts`). **Number of people** stepper when splitting equally (`*_bill_guests.sql`): + adds people who
+  aren't in the chat (0–50); they're on the bill as `chat_bills.guests` / `guest_subtotal` / `guest_amount`
+  (`create_bill(…, p_guests, p_guest_subtotal)`, defaults 0), with no share rows or ticks.
 - **Insider tips** (added 2026-10-21, `*_place_tips.sql`): `PlaceTips` (`src/components/place-tips.tsx`,
   `src/lib/tips.ts`) on the place cards of home and the Hangout map: one tip (3–280 chars) per person per place or
   venue, max 20 a day, "Helpful" votes (not your own), most helpful first; only via `place_tips()`, `save_tip`,

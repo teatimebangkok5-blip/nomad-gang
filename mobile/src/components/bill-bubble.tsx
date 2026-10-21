@@ -128,6 +128,24 @@ export function BillBubble({ billId, myId, onLongPress }: { billId: string; myId
             </View>
           );
         })}
+        {bill.guests > 0 && (
+          <View style={styles.share}>
+            <View style={styles.guestIcon}>
+              <Icon name="group" size={14} color={Colors.violetText} />
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.shareName} numberOfLines={1}>
+                {t('bill.guests', { count: bill.guests })}
+              </Text>
+              <Text style={styles.shareConverted}>
+                {t('bill.each', { amount: formatMoney(bill.guest_amount / bill.guests, bill.currency, language) })}
+              </Text>
+            </View>
+            <Text style={styles.amount}>{formatMoney(bill.guest_amount, bill.currency, language)}</Text>
+            {/* No tick: the payer settles with them outside the app. Keeps the amounts lined up. */}
+            <View style={styles.tickSpace} />
+          </View>
+        )}
       </View>
 
       <View style={styles.foot}>
@@ -181,6 +199,15 @@ const useStyles = makeStyles((Colors) => ({
   },
   tickOn: { backgroundColor: Colors.ok, borderColor: Colors.ok },
   tickOff: { borderColor: Colors.border },
+  tickSpace: { width: 26 },
+  guestIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.violetTint,
+  },
   foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: Spacing.sm },
   progress: { ...Type.small, fontSize: 12, fontWeight: '700', color: Colors.textSecondary },
   currency: { ...Type.small, fontSize: 12, fontWeight: '800', color: Colors.violetText },

@@ -278,7 +278,13 @@ Product spec and tech stack below are agreed. Built so far:
   chooser in the bottom card, "Create hangout" + "Create event" on every selection card, `?mode=event`, and
   **"Paste a Google Maps link"** (`resolveMapsLink` / `parseMapsText` in `src/lib/events.ts`: place `!3d!4d`, `?q=`,
   `@lat,lng` or plain coordinates; short `maps.app.goo.gl` links are fetched to follow the redirect, Google hosts only)
-  → a dropped pin with the place's name. Step 2 = `src/components/event-form.tsx` (`ChosenPlace` type shared with
+  → a dropped pin with the place's name. The founder's Jio network can't reach `maps.app.goo.gl` (DNS gives a
+  server that refuses), so `resolveMapsLink` also takes Google's whole share text ("Name
+Address
+link"), tries
+  the link on the phone (6 s), then asks the server: `resolve_maps_link(url)` (`*_resolve_maps_link.sql`, pgsql-http
+  `http` extension, Google Maps short links only, not `?link=`, redirects to Google only, 30 a person an hour), and
+  finally searches the name / address with Photon. Step 2 = `src/components/event-form.tsx` (`ChosenPlace` type shared with
   create-hangout): up to 2 photos (public `event-photos` bucket `<user id>/…`, `pickAndUploadPhoto(…, 'cover', …)` 4:3),
   name, category (music / art / sports / workshop / language / party / food / outdoors / other, `EVENT_EMOJI`),
   description ≤ 2,000, meeting point, **Free / Paid** (price in THB and/or USD, "≈ $" suggestion from Frankfurter,
@@ -401,7 +407,9 @@ Product spec and tech stack below are agreed. Built so far:
   initialize + preload; one shared promise), `showLaunchAd()` once per app start and `onAppReopened()` → `showOpenAd()`
   when the app returns after ≥ 30 s in the background **while home is focused** (`useFocusEffect` in `index.tsx`);
   Google's own close button. Photo pickers call `skipNextOpenAd()`; ads older than 4 h are reloaded; an ad still
-  loading at launch shows only if it arrives within 6 s. Never for Plus members (`plus.member`). Terms (§7) and
+  loading at launch shows only if it arrives within 6 s. Never for Plus members (`plus.member`). **Max 2 ads a day per person** (founder, 2026-10-22): counted on the
+  phone per account (`setAdsUser` from home) and phone calendar day when an ad opens (`tm.ads.<user>` = `day:count`);
+  after 2 none are shown or loaded until the next day. Terms (§7) and
   Privacy (AdMob, advertising ID, EEA consent) updated.
 - **Map stories** (added 2026-10-19, `*_map_stories.sql`): camera button first in the home row (before Plan my day)
   → `src/app/post-story.tsx` (take / pick a photo, caption ≤ 150) → `post_story(path, caption, lat, lng)`: pinned on

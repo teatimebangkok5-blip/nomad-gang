@@ -272,14 +272,20 @@ export function streetViewUrl(lat: number, lng: number): string {
   return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`;
 }
 
-const GOOGLE_HOST = /^(?:[a-z0-9-]+\.)*(?:google\.[a-z.]{2,6}|goo\.gl)$/i;
+// Links to Google's own addresses (React Native's URL can't read hostnames, so this checks the text).
+const GOOGLE_LINK = /^https:\/\/(?:[a-z0-9-]+\.)*(?:google\.[a-z.]{2,6}|goo\.gl)(?:[/?#]|$)/i;
+// A Google Maps short share link (it has to be opened to see where it leads).
+const SHORT_LINK = /^https:\/\/(?:maps\.app\.goo\.gl|goo\.gl\/maps)\/[A-Za-z0-9_-]{4,64}/i;
+const LINK_IN_TEXT = /https?:\/\/[^\s<>"']+/i;
+
+type MapsPoint = { lat: number; lng: number; name: string | null };
 
 function validCoords(lat: number, lng: number) {
   return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 85 && Math.abs(lng) <= 180 && (lat !== 0 || lng !== 0);
 }
 
-// The point (and place name, if any) in a Google Maps link, or plain "13.7563, 100.5018" text. Null if none.
-export function parseMapsText(text: string): { lat: number; lng: number; name: string | null } | null {
+// The point (and place name, if any) in a Google Maps link or page, or plain "13.7563, 100.5018" text. Null if none.
+export function parseMapsText(text: string): MapsPoint | null {
   let decoded = text.trim();
   try {
     decoded = decodeURIComponent(decoded);
@@ -288,8 +294,10 @@ export function parseMapsText(text: string): { lat: number; lng: number; name: s
   }
   const patterns = [
     /!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/, // the place itself
-    /[?&](?:q|query|ll|destination|center|viewpoint|daddr)=(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/,
+    /[?&;](?:q|query|ll|destination|center|viewpoint|daddr)=(-?\d{1,2}\.\d+)(?:\s*,\s*|%2C)(-?\d{1,3}\.\d+)/i,
+    /center=(-?\d{1,2}\.\d+)(?:,|%2C)(-?\d{1,3}\.\d+)/i, // the page's map picture
     /@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/, // where the map was looking
+    /\[null,null,(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)\]/,
     /^(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)$/,
   ];
   for (const pattern of patterns) {
@@ -298,34 +306,103 @@ export function parseMapsText(text: string): { lat: number; lng: number; name: s
       const lat = Number(match[1]);
       const lng = Number(match[2]);
       if (!validCoords(lat, lng)) continue;
-      const place = /\/maps\/place\/([^/@?]+)/.exec(decoded)?.[1]?.replace(/\+/g, ' ').trim();
+      const place = /\/maps\/place\/([^/@?"]+)/.exec(decoded)?.[1]?.replace(/\+/g, ' ').trim();
       return { lat, lng, name: place ? place.slice(0, 80) : null };
     }
   }
   return null;
 }
 
-// Reads a pasted Google Maps link. Short share links (maps.app.goo.gl/…) are opened first to see where they lead;
-// only Google's own addresses are opened. Null if no point was found.
-export async function resolveMapsLink(text: string): Promise<{ lat: number; lng: number; name: string | null } | null> {
+// What a Google Maps address searches for ("?q=Lumphini Park, Bangkok", "/maps/place/Wat+Arun"), if anything.
+function searchTextIn(url: string): string | null {
+  let decoded = url;
+  try {
+    decoded = decodeURIComponent(url);
+  } catch {
+    // Keep it.
+  }
+  const found = /[?&](?:q|query)=([^&#]+)/.exec(decoded)?.[1] ?? /\/maps\/place\/([^/@?#]+)/.exec(decoded)?.[1];
+  const text = found?.replace(/\+/g, ' ').trim();
+  return text && !/^-?\d/.test(text) ? text : null;
+}
+
+// Opens the link on the phone (6 seconds at most). The final address, and the point if it or the page has one.
+async function openHere(url: string): Promise<{ found: MapsPoint | null; finalUrl: string | null }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    const finalUrl = response.url || url;
+    // Only read pages from Google.
+    if (!GOOGLE_LINK.test(finalUrl)) return { found: null, finalUrl: null };
+    const fromUrl = parseMapsText(finalUrl);
+    if (fromUrl) return { found: fromUrl, finalUrl };
+    const body = await response.text();
+    const fromPage = parseMapsText(body.slice(0, 2_000_000));
+    const name = /<meta content="([^"]{1,200})" (?:itemprop="name"|property="og:title")/.exec(body)?.[1]?.split(' · ')[0]?.trim();
+    return { found: fromPage ? { ...fromPage, name: fromPage.name ?? name ?? null } : null, finalUrl };
+  } catch (error) {
+    console.warn('Opening the maps link on the phone failed', error);
+    return { found: null, finalUrl: null };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// The first place Photon (free OpenStreetMap search) finds for a name or address, near `near` if given.
+async function searchPlace(query: string, near: { lat: number; lng: number } | null): Promise<MapsPoint | null> {
+  const params = new URLSearchParams({ q: query.slice(0, 200), limit: '1' });
+  if (near) {
+    params.set('lat', near.lat.toFixed(3));
+    params.set('lon', near.lng.toFixed(3));
+  }
+  try {
+    const response = await fetch(`https://photon.komoot.io/api/?${params}`);
+    if (!response.ok) return null;
+    const body = (await response.json()) as {
+      features?: { geometry?: { coordinates?: [number, number] }; properties?: { name?: string } }[];
+    };
+    const feature = body.features?.[0];
+    const [lng, lat] = feature?.geometry?.coordinates ?? [NaN, NaN];
+    return validCoords(lat, lng) ? { lat, lng, name: feature?.properties?.name ?? query.slice(0, 80) } : null;
+  } catch (error) {
+    console.warn('Searching the place failed', error);
+    return null;
+  }
+}
+
+// Reads what was pasted from Google Maps: a link, the share text around it ("Lumphini Park\nRama IV Rd…\nhttps://…"),
+// or coordinates. In order: a point in the text itself; open a Google link on the phone; ask our server to open a
+// short link (some networks can't reach maps.app.goo.gl); search the place's name / address. Null if nothing worked.
+export async function resolveMapsLink(text: string, near: { lat: number; lng: number } | null = null): Promise<MapsPoint | null> {
   const direct = parseMapsText(text);
   if (direct) return direct;
-  let url: URL;
-  try {
-    url = new URL(text.trim());
-  } catch {
+  const link = LINK_IN_TEXT.exec(text)?.[0]?.replace(/[).,]+$/, '') ?? null;
+  // The words around the link: Google's share text starts with the place's name, then its address.
+  const lines = text
+    .replace(LINK_IN_TEXT, '\n')
+    .split(/\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  let searchText: string | null = lines.length ? lines.join(', ') : null;
+
+  if (link && GOOGLE_LINK.test(link)) {
+    const here = await openHere(link);
+    if (here.found) return { ...here.found, name: here.found.name ?? lines[0] ?? null };
+    searchText = searchText ?? (here.finalUrl ? searchTextIn(here.finalUrl) : searchTextIn(link));
+    if (SHORT_LINK.test(link)) {
+      const { data, error } = await supabase.rpc('resolve_maps_link', { p_url: link });
+      if (error) console.warn('Server lookup of the maps link failed', error.message);
+      const row = (data as MapsPoint[] | null)?.[0];
+      if (row && validCoords(row.lat, row.lng)) return { lat: row.lat, lng: row.lng, name: row.name ?? lines[0] ?? null };
+    }
+  } else if (link) {
+    // Not a Google link: nothing to open.
     return null;
   }
-  if (url.protocol !== 'https:' || !GOOGLE_HOST.test(url.hostname)) return null;
-  try {
-    const response = await fetch(url.toString());
-    const found = parseMapsText(response.url);
-    if (found) return found;
-    // Some redirects only carry the point in the page itself.
-    const body = await response.text();
-    return parseMapsText(/https:\/\/www\.google\.[a-z.]+\/maps\/[^"'\s]+/.exec(body)?.[0] ?? '');
-  } catch (error) {
-    console.warn('Opening the maps link failed', error);
-    return null;
-  }
+
+  if (!searchText) return null;
+  // The name alone first (most precise), then name + address.
+  const byName = lines[0] ? await searchPlace(lines[0], near) : null;
+  return byName ?? (lines.length > 1 || !lines[0] ? await searchPlace(searchText, near) : null);
 }

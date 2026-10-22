@@ -2553,5 +2553,26 @@ await tryQuery("authenticated", ev1, `select public.cancel_meetup($1)`, [announc
 r = await updateEvent(ev1, announceEvent);
 check("cancelled events can't be edited", /meetup_cancelled/.test(r.error ?? ""));
 
+// --- Google Maps share links
+for (const bad of ["https://maps.app.goo.gl/?link=https%3A%2F%2Fexample.org", "http://maps.app.goo.gl/AbCd1234",
+  "https://example.org/maps/AbCd1234", "https://maps.app.goo.gl.evil.com/AbCd1234"]) {
+  r = await tryQuery("authenticated", ev1, `select * from public.resolve_maps_link($1)`, [bad]);
+  check(`only Google Maps short links are opened (${bad})`, /invalid_link/.test(r.error ?? ""));
+}
+r = await tryQuery("anon", null, `select * from public.resolve_maps_link('https://maps.app.goo.gl/AbCd1234')`);
+check("signed-in people only", !!r.error);
+r = await tryQuery("authenticated", ev1, `select * from public.resolve_maps_link('https://maps.app.goo.gl/AbCd1234?g_st=ac')`);
+check("a request that can't be made just finds nothing", !r.error && r.rows.length === 0);
+r = await db.query(`select * from public.maps_point_in($1)`,
+  ['<meta content="Lumphini Park · Rama IV Rd" property="og:title"><meta content="https://maps.google.com/maps/api/staticmap?center=13.7307%2C100.5418&amp;zoom=15" property="og:image">']);
+check("the point and name are read from the Google Maps page", r.rows[0]?.lat === 13.7307 && r.rows[0].lng === 100.5418 && r.rows[0].name === "Lumphini Park");
+r = await db.query(`select * from public.maps_point_in($1)`, ["https://www.google.com/maps/place/Wat+Arun/@13.74,100.48,17z/data=!3m1!4b1!4m6!3m5!8m2!3d13.7437!4d100.4888"]);
+check("and from a place link (the place, not the view)", r.rows[0]?.lat === 13.7437 && r.rows[0].lng === 100.4888 && r.rows[0].name === "Wat Arun");
+await db.exec(`insert into public.maps_link_lookups (user_id) select '${ev1}' from generate_series(1, 30)`);
+r = await tryQuery("authenticated", ev1, `select * from public.resolve_maps_link('https://maps.app.goo.gl/AbCd1234')`);
+check("max 30 lookups an hour", /too_many_requests/.test(r.error ?? ""));
+r = await tryQuery("authenticated", ev1, `select * from public.maps_link_lookups`);
+check("lookups aren't readable", !!r.error);
+
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

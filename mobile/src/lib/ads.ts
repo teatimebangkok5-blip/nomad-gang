@@ -9,6 +9,9 @@ import mobileAds, { AdEventType, AdsConsent, AppOpenAd, TestIds } from 'react-na
 // Quick trips out of the app (a photo picker, the maps app, a share sheet) don't count as opening it: the app has to
 // have been in the background for at least MIN_AWAY_MS, and the photo pickers call skipNextOpenAd().
 //
+// At most MAX_ADS_PER_DAY ads a day per person (founder, 2026-10-22): counted on the phone for each account and
+// calendar day (the phone's date) when an ad actually opens; after that, no more ads until tomorrow.
+//
 // The ad unit comes from EXPO_PUBLIC_ADMOB_APP_OPEN_ID (Google's test ad until it's set). The AdMob app ID is in
 // app.json (react-native-google-mobile-ads plugin) and needs a new native build when it changes.
 
@@ -18,15 +21,18 @@ const MIN_AWAY_MS = 30 * 1000;
 const MAX_AD_AGE_MS = 4 * 60 * 60 * 1000;
 // If the ad isn't ready yet when the app opens, show it only if it arrives within this time.
 const WAIT_FOR_AD_MS = 6 * 1000;
+const MAX_ADS_PER_DAY = 2;
 
 let preparing: Promise<void> | null = null;
 let ad: AppOpenAd | null = null;
 let loadedAt: number | null = null;
+let loading = false;
 let showing = false;
 let wantedAt: number | null = null;
 let skipNext = false;
 let backgroundSince: number | null = null;
 let launchAdDone = false;
+let adsUser: string | null = null;
 const resumeListeners = new Set<() => void>();
 
 AppState.addEventListener('change', (next) => {
@@ -43,9 +49,47 @@ AppState.addEventListener('change', (next) => {
   }
 });
 
+// Today's count for this account, kept as "<day>:<count>" (one small value per account).
+function countKey() {
+  return `tm.ads.${adsUser ?? 'guest'}`;
+}
+
+function today() {
+  const now = new Date();
+  return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+}
+
+function shownToday(): number {
+  try {
+    const [day, count] = (localStorage.getItem(countKey()) ?? '').split(':');
+    return day === today() ? Number(count) || 0 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function countShown() {
+  try {
+    localStorage.setItem(countKey(), `${today()}:${shownToday() + 1}`);
+  } catch {
+    // Not saved: the next ad may show anyway.
+  }
+}
+
+function limitReached() {
+  return shownToday() >= MAX_ADS_PER_DAY;
+}
+
+// Who is signed in, so each account gets its own daily count.
+export function setAdsUser(userId: string | null) {
+  adsUser = userId;
+}
+
+// No new ad once today's are used up (an ad loaded but never shown only lowers the show rate).
 function load() {
-  if (!ad) return;
+  if (!ad || loading || limitReached()) return;
   loadedAt = null;
+  loading = true;
   ad.load();
 }
 
@@ -63,6 +107,7 @@ async function startAds() {
     await mobileAds().initialize();
     ad = AppOpenAd.createForAdRequest(UNIT_ID);
     ad.addAdEventListener(AdEventType.LOADED, () => {
+      loading = false;
       loadedAt = Date.now();
       // The app opened before the ad was ready: show it now if that was only a moment ago.
       if (wantedAt !== null && Date.now() - wantedAt < WAIT_FOR_AD_MS) {
@@ -70,7 +115,9 @@ async function startAds() {
         show();
       }
     });
+    ad.addAdEventListener(AdEventType.OPENED, countShown);
     ad.addAdEventListener(AdEventType.ERROR, () => {
+      loading = false;
       loadedAt = null;
       showing = false;
     });
@@ -86,7 +133,7 @@ async function startAds() {
 }
 
 function show() {
-  if (!ad || showing) return;
+  if (!ad || showing || limitReached()) return;
   showing = true;
   ad.show().catch(() => {
     showing = false;
@@ -94,14 +141,16 @@ function show() {
   });
 }
 
-// Shows the app open ad (not for Plus members). If it's still loading, it shows as soon as it arrives (briefly).
+// Shows the app open ad (not for Plus members, nor after today's 2). If it's still loading, it shows as soon as it
+// arrives (briefly).
 export function showOpenAd(isMember: boolean) {
-  if (isMember || !ad || showing) return;
+  if (isMember || !ad || showing || limitReached()) return;
   if (loadedAt !== null && Date.now() - loadedAt < MAX_AD_AGE_MS) {
     show();
   } else {
+    // Too old, or none loaded yet (e.g. the first one of a new day): load and show it if it comes quickly.
     wantedAt = Date.now();
-    if (loadedAt !== null) load();
+    load();
   }
 }
 

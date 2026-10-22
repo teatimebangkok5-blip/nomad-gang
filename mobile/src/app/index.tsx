@@ -54,7 +54,7 @@ import { useUserLevels } from '@/lib/levels';
 import { useChats } from '@/lib/messages';
 import { useNotifications } from '@/lib/notifications';
 import { useMyName } from '@/lib/profiles';
-import { onAppReopened, showLaunchAd, showOpenAd } from '@/lib/ads';
+import { onAppReopened, setAdsUser, showLaunchAd, showOpenAd } from '@/lib/ads';
 import { usePlus } from '@/lib/plus';
 import { clearMyExpiredStories, groupStories, useStories } from '@/lib/stories';
 import { makeStyles, useColors } from '@/lib/theme';
@@ -153,6 +153,7 @@ export default function HomeScreen() {
   );
   useEffect(() => {
     if (!session || plus.status !== 'ready' || plusMember) return;
+    setAdsUser(session.user.id);
     showLaunchAd(false);
     return onAppReopened(() => {
       if (homeFocused.current) showOpenAd(false);

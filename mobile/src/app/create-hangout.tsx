@@ -476,7 +476,7 @@ export default function CreateHangoutScreen() {
         onClose={search.clear}
       />
 
-      <MapsLinkPanel open={pasteOpen} onClose={() => setPasteOpen(false)} onFound={handleMapsLink} />
+      <MapsLinkPanel open={pasteOpen} near={coords} onClose={() => setPasteOpen(false)} onFound={handleMapsLink} />
 
       <SlideUpPanel open={listOpen} onClose={() => setListOpen(false)} title={t('hangouts.openHangouts')}>
         <ScrollView contentContainerStyle={styles.sheetContent}>
@@ -765,13 +765,16 @@ function currentPlaceOf(event: MeetupDetail): ChosenPlace {
   };
 }
 
-// Paste a Google Maps share link (or "lat, lng") to drop the pin there. Short links are opened to see where they lead.
+// Paste a Google Maps share link, its share text, coordinates ("lat, lng") or a place's name to drop the pin there.
+// Short links are opened to see where they lead (by our server if the phone can't); `near` helps name searches.
 function MapsLinkPanel({
   open,
+  near,
   onClose,
   onFound,
 }: {
   open: boolean;
+  near: { lat: number; lng: number } | null;
   onClose: () => void;
   onFound: (found: { lat: number; lng: number; name: string | null }) => void;
 }) {
@@ -784,7 +787,10 @@ function MapsLinkPanel({
   async function find() {
     setNotFound(false);
     setBusy(true);
-    const found = await resolveMapsLink(text);
+    const found = await resolveMapsLink(text, near).catch((error: unknown) => {
+      console.warn('Reading the maps link failed', error);
+      return null;
+    });
     setBusy(false);
     if (!found) {
       setNotFound(true);
@@ -808,7 +814,7 @@ function MapsLinkPanel({
           placeholder={t('events.pastePlaceholder')}
           autoCapitalize="none"
           autoCorrect={false}
-          keyboardType="url"
+          multiline
           onSubmitEditing={find}
         />
         {notFound && (

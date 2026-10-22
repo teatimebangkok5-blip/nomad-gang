@@ -7,7 +7,7 @@ import type { Venue } from '@/lib/venues';
 // Home feed: filters, status and the "3 going for dinner near Asok" line on each card. Everything comes from real
 // open tables / hangouts (member counts from the database); areas are the public place's neighbourhood.
 
-export const FEED_FILTERS = ['all', 'today', 'tonight', 'daytime', 'pitstop', 'food', 'drinks', 'explore', 'budget'] as const;
+export const FEED_FILTERS = ['all', 'today', 'tonight', 'daytime', 'pitstop', 'events', 'food', 'drinks', 'explore', 'budget'] as const;
 export type FeedFilter = (typeof FEED_FILTERS)[number];
 
 // OpenStreetMap kinds and venue categories that count as "Drinks" rather than "Food".
@@ -50,6 +50,8 @@ export function matchesFilter(meetup: OpenMeetup, filter: FeedFilter, venue: Ven
       return meetup.kind === 'table' && !isDrinks(meetup, venue);
     case 'drinks':
       return isDrinks(meetup, venue);
+    case 'events':
+      return meetup.kind === 'event';
     case 'explore':
       return meetup.kind === 'hangout';
     case 'budget':

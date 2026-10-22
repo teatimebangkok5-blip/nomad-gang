@@ -115,10 +115,13 @@ export default function HomeScreen() {
   });
 
   // Tables share a 👥 pin per venue or place (partner venues themselves aren't pinned on home), hangouts share a 🙌
-  // pin per place or spot, pit-stops a ⚡ pin. Pin keys: v:<venue id>, p:<place id>, h:<location key>, k:<location key>.
+  // pin per place or spot, pit-stops a ⚡ pin, events a 🎟️ pin. Pin keys: v:<venue id>, p:<place id>,
+  // h:<location key>, k:<location key>, e:<location key>.
   const pinGroups = new Map<string, OpenMeetup[]>();
   for (const meetup of visibleMeetups) {
-    const key = meetup.pitstop
+    const key = meetup.kind === 'event'
+      ? `e:${meetupLocationKey(meetup)}`
+      : meetup.pitstop
       ? `k:${meetupLocationKey(meetup)}`
       : meetup.venue_id && diningVenueIds.has(meetup.venue_id)
         ? `v:${meetup.venue_id}`
@@ -181,12 +184,13 @@ export default function HomeScreen() {
     if (!at) return [];
     const hangouts = key.startsWith('h:');
     const pitstops = key.startsWith('k:');
+    const events = key.startsWith('e:');
     return [
       {
         key,
         ...at,
-        emoji: pitstops ? '⚡' : hangouts ? '🙌' : '👥',
-        tone: pitstops ? ('amber' as const) : hangouts ? ('violet' as const) : ('orange' as const),
+        emoji: events ? '🎟️' : pitstops ? '⚡' : hangouts ? '🙌' : '👥',
+        tone: events ? ('event' as const) : pitstops ? ('amber' as const) : hangouts ? ('violet' as const) : ('orange' as const),
         count: list.reduce((sum, meetup) => sum + meetup.member_count, 0),
         selected: key === selectedPinKey,
       },

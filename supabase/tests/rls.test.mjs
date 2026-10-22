@@ -8,11 +8,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const migrationsDir = fileURLToPath(new URL("../migrations/", import.meta.url));
-const migration = readdirSync(migrationsDir)
+// One transaction per file, as Supabase applies them (a new enum value can only be used after its file commits).
+const migrations = readdirSync(migrationsDir)
   .filter((file) => file.endsWith(".sql"))
   .sort()
-  .map((file) => readFileSync(join(migrationsDir, file), "utf8"))
-  .join("\n");
+  .map((file) => readFileSync(join(migrationsDir, file), "utf8"));
 
 const db = new PGlite({ extensions: { postgis, pgcrypto } });
 
@@ -45,7 +45,7 @@ await db.exec(`
     insert into net.calls (url, body) values (url, body) returning id::bigint $$;
 `);
 
-await db.exec(migration);
+for (const migration of migrations) await db.exec(migration);
 console.log("migration applied OK");
 // The checks below were written for the launch rules (phone required); the "no phone check" mode is tested at the end.
 await db.exec(`update public.app_settings set require_phone_verification = true`);
@@ -2352,6 +2352,206 @@ r = await tryQuery("authenticated", sr5, `select kind from public.my_notificatio
 check("nobody else does", !r.rows?.some((n) => n.kind === "table_invite"));
 r = await tryQuery("authenticated", sr2, `select * from public.meetup_invites`);
 check("invites aren't readable directly", !!r.error);
+
+// --- Events
+const [ev1, ev2, ev3, ev4, evV] = [1, 2, 3, 4, 5].map((n) => `3f000000-0000-4000-8000-00000000000${n}`);
+await db.exec(`insert into auth.users (id, email, raw_user_meta_data, phone_confirmed_at) values
+  ${[ev1, ev2, ev3, ev4, evV].map((id, i) => `('${id}', 'event${i}@x.com', '{"full_name": "Event ${i + 1}"}', now())`).join(", ")};
+  insert into public.profile_verification (user_id, gender) values ('${evV}', 'man');`);
+// create_event(title, description, category, starts, ends, max, venue, place, lat, lng, spot name, zone, meeting point,
+//   THB, USD, ticket link, photos, announcements only, join mode, women only)
+const createEvent = (who, opts = {}) => {
+  const o = { title: "Jazz in the park", category: "music", starts: inHours(24), ends: inHours(30), max: 50, thb: null, usd: null,
+    link: null, photos: [], announce: false, mode: "open", women: false, ...opts };
+  return tryQuery("authenticated", who,
+    `select public.create_event($1, 'Bring a blanket', $2, $3, $4, $5, null, null, 13.7307, 100.5418, 'Lumphini Park',
+      'Asia/Bangkok', 'At the clock tower', $6, $7, $8, $9, $10, $11, $12) as id`,
+    [o.title, o.category, o.starts, o.ends, o.max, o.thb, o.usd, o.link, o.photos, o.announce, o.mode, o.women]);
+};
+r = await createEvent(ev1);
+check("anyone creates a free event at a pin", !r.error);
+const freeEvent = r.rows?.[0]?.id;
+r = await db.query(`select kind, cost_level, meeting_point, event_category, time_zone from public.meetups where id = $1`, [freeEvent]);
+check("it's an event, free, with its meeting point", r.rows[0]?.kind === "event" && r.rows[0].cost_level === 0
+  && r.rows[0].meeting_point === "At the clock tower" && r.rows[0].event_category === "music");
+r = await createEvent(ev1, { thb: 500 });
+check("paid events need a verified organiser", /verification_required/.test(r.error ?? ""));
+r = await createEvent(evV, { thb: 500, usd: 15, link: "https://tickets.example.com/jazz", max: 2 });
+check("a verified organiser creates a paid event", !r.error);
+const paidEvent = r.rows?.[0]?.id;
+r = await db.query(`select entry_fee_thb::text, entry_fee_usd::text, cost_level, ticket_url from public.meetups where id = $1`, [paidEvent]);
+check("price in THB and USD, cost band from the price", r.rows[0]?.entry_fee_thb === "500.00" && r.rows[0].entry_fee_usd === "15.00"
+  && r.rows[0].cost_level === 2 && r.rows[0].ticket_url === "https://tickets.example.com/jazz");
+r = await createEvent(evV, { thb: 500, link: "http://tickets.example.com" });
+check("ticket links must be https", /invalid_link/.test(r.error ?? ""));
+r = await createEvent(ev1, { max: 151 });
+check("max 150 people", /invalid_size/.test(r.error ?? ""));
+r = await createEvent(ev1, { max: 150, title: "Big one" });
+check("150 people is fine", !r.error);
+r = await createEvent(ev1, { ends: inHours(24 + 7 * 24 + 1) });
+check("open for at most 7 days", /invalid_duration/.test(r.error ?? ""));
+r = await createEvent(ev1, { starts: inHours(61 * 24), ends: inHours(61 * 24 + 2) });
+check("starts within 60 days", /invalid_time/.test(r.error ?? ""));
+r = await createEvent(ev1, { category: "karaoke" });
+check("a known category", /invalid_category/.test(r.error ?? ""));
+r = await createEvent(ev1, { title: "  " });
+check("events need a title", /title_required/.test(r.error ?? ""));
+r = await createEvent(ev1, { women: true });
+check("women-only events need a verified woman", /not_verified_woman/.test(r.error ?? ""));
+r = await createEvent(ev1, { photos: [`${ev1}/cover.jpg`] });
+check("photos must be uploaded first", /invalid_photo/.test(r.error ?? ""));
+await tryQuery("authenticated", ev1, `insert into storage.objects (bucket_id, name) values ('event-photos', $1)`, [`${ev1}/cover.jpg`]);
+await tryQuery("authenticated", ev2, `insert into storage.objects (bucket_id, name) values ('event-photos', $1)`, [`${ev2}/mine.jpg`]);
+r = await tryQuery("authenticated", ev1, `insert into storage.objects (bucket_id, name) values ('event-photos', $1) returning id`, [`${ev2}/x.jpg`]);
+check("event photos go only into my own folder", !!r.error);
+r = await createEvent(ev1, { photos: [`${ev2}/mine.jpg`] });
+check("not someone else's photo", /invalid_photo/.test(r.error ?? ""));
+r = await createEvent(ev1, { photos: [`${ev1}/cover.jpg`], announce: true });
+check("an event with a cover photo", !r.error);
+const announceEvent = r.rows?.[0]?.id;
+r = await createEvent(ev1);
+check("max 3 open events per person", /too_many_open/.test(r.error ?? ""));
+r = await tryQuery("authenticated", ev2, `select event_category, entry_fee_thb::text as thb, photo_paths from public.list_open_meetups() where id = $1`, [paidEvent]);
+check("the open list carries the event fields", r.rows?.[0]?.event_category === "music" && r.rows[0].thb === "500.00");
+r = await tryQuery("authenticated", ev2, `select photo_paths from public.list_open_meetups() where id = $1`, [announceEvent]);
+check("and the photos", r.rows?.[0]?.photo_paths?.[0] === `${ev1}/cover.jpg`);
+r = await tryQuery("authenticated", ev2, `update public.meetups set entry_fee_thb = 1 where id = $1`, [freeEvent]);
+r = await db.query(`select entry_fee_thb from public.meetups where id = $1`, [freeEvent]);
+check("nobody makes a free event paid directly", r.rows[0]?.entry_fee_thb === null);
+r = await tryQuery("authenticated", ev2, `insert into public.meetups (kind, spot_name, spot_lat, spot_lng, host_id, title, starts_at, ends_at, max_people, event_category)
+  values ('event', 'x', 1, 1, $1, 'x', now(), now() + interval '1 hour', 10, 'music')`, [ev2]);
+check("nor creates one directly", !!r.error);
+
+// Arrival times
+r = await tryQuery("authenticated", ev2, `select public.join_event($1, $2)`, [freeEvent, inHours(31)]);
+check("arrival must be within the event's hours", /invalid_arrival/.test(r.error ?? ""));
+r = await tryQuery("authenticated", ev2, `select public.join_event($1, $2)`, [freeEvent, inHours(26)]);
+check("join an event with my arrival time", !r.error);
+r = await tryQuery("authenticated", ev3, `select user_id, arrival_at from public.meetup_members where meetup_id = $1`, [freeEvent]);
+check("everyone sees who's coming when", r.rows?.some((m) => m.user_id === ev2 && m.arrival_at));
+r = await tryQuery("authenticated", ev2, `select public.set_event_arrival($1, $2)`, [freeEvent, inHours(27)]);
+check("change my arrival time", !r.error);
+r = await tryQuery("authenticated", ev3, `select public.set_event_arrival($1, $2)`, [freeEvent, inHours(27)]);
+check("only members set one", /not_member/.test(r.error ?? ""));
+r = await tryQuery("authenticated", ev2, `select public.join_event($1, null)`, [vibeHangout]);
+check("join_event is for events", /not_event/.test(r.error ?? ""));
+
+// Waiting list (paidEvent has 2 places: the organiser + one)
+r = await tryQuery("authenticated", ev2, `select public.join_waitlist($1, null)`, [paidEvent]);
+check("no line while there's room", /not_full/.test(r.error ?? ""));
+r = await tryQuery("authenticated", ev2, `select public.join_event($1, $2)`, [paidEvent, inHours(25)]);
+check("the last place", !r.error);
+r = await tryQuery("authenticated", ev3, `select public.join_event($1, null)`, [paidEvent]);
+check("then it's full", /meetup_full/.test(r.error ?? ""));
+r = await tryQuery("authenticated", ev3, `select public.join_waitlist($1, $2)`, [paidEvent, inHours(28)]);
+check("join the waiting list", !r.error);
+r = await tryQuery("authenticated", ev4, `select public.join_waitlist($1, null)`, [paidEvent]);
+r = await tryQuery("authenticated", ev4, `select * from public.event_waitlist($1)`, [paidEvent]);
+check("2 waiting, I'm second", r.rows?.[0]?.waiting === 2 && r.rows[0].my_position === 2);
+r = await tryQuery("authenticated", ev2, `select public.join_waitlist($1, null)`, [paidEvent]);
+check("members don't wait", /already_member/.test(r.error ?? ""));
+r = await tryQuery("authenticated", ev3, `insert into public.meetup_waitlist (meetup_id, user_id) values ($1, $2)`, [freeEvent, ev3]);
+check("no direct waiting-list writes", !!r.error);
+r = await tryQuery("authenticated", ev2, `select user_id from public.meetup_waitlist where meetup_id = $1`, [paidEvent]);
+check("others don't see the line", r.rows?.length === 0);
+r = await tryQuery("authenticated", evV, `select user_id from public.meetup_waitlist where meetup_id = $1`, [paidEvent]);
+check("the organiser does", r.rows?.length === 2);
+r = await tryQuery("authenticated", ev2, `select public.leave_meetup($1)`, [paidEvent]);
+r = await db.query(`select user_id, arrival_at from public.meetup_members where meetup_id = $1`, [paidEvent]);
+check("when someone leaves, the first in line is in, with their arrival time",
+  r.rows.some((m) => m.user_id === ev3 && m.arrival_at) && !r.rows.some((m) => m.user_id === ev2));
+r = await tryQuery("authenticated", ev4, `select * from public.event_waitlist($1)`, [paidEvent]);
+check("and the next one moves up", r.rows?.[0]?.waiting === 1 && r.rows[0].my_position === 1);
+r = await tryQuery("authenticated", ev4, `select public.leave_waitlist($1)`, [paidEvent]);
+r = await tryQuery("authenticated", ev4, `select * from public.event_waitlist($1)`, [paidEvent]);
+check("leave the line", r.rows?.[0]?.waiting === 0 && r.rows[0].my_position === null);
+
+// Announcements only
+await tryQuery("authenticated", ev2, `select public.join_event($1, null)`, [announceEvent]);
+r = await tryQuery("authenticated", ev2, `insert into public.meetup_messages (meetup_id, sender_id, body) values ($1, $2, 'hi')`, [announceEvent, ev2]);
+check("members can't post in an announcements-only chat", /announce_only/.test(r.error ?? ""));
+r = await tryQuery("authenticated", ev2, `select public.send_chat_card('meetup', $1, 'ice:travel:1')`, [announceEvent]);
+check("not even cards", !!r.error);
+r = await tryQuery("authenticated", ev1, `insert into public.meetup_messages (meetup_id, sender_id, body) values ($1, $2, 'Doors open at 6') returning id`, [announceEvent, ev1]);
+check("the organiser can", !r.error);
+const announcement = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", ev2, `select public.react_to_message('meetup', $1, 'clap')`, [announcement]);
+check("members still react", !r.error);
+r = await tryQuery("authenticated", ev2, `select public.set_event_announce_only($1, false)`, [announceEvent]);
+check("only the organiser switches it", /not_host/.test(r.error ?? ""));
+await tryQuery("authenticated", ev1, `select public.set_event_announce_only($1, false)`, [announceEvent]);
+r = await tryQuery("authenticated", ev2, `insert into public.meetup_messages (meetup_id, sender_id, body) values ($1, $2, 'hi')`, [announceEvent, ev2]);
+check("then everyone chats again", !r.error);
+r = await tryQuery("authenticated", ev2, `select chat_kind, meetup_kind from public.my_chats() where chat_id = $1`, [announceEvent]);
+check("the event chat is in my inbox as an event", r.rows?.[0]?.meetup_kind === "event");
+
+// Private events
+r = await createEvent(evV, { mode: "private", title: "Secret supper club" });
+const privateEvent = r.rows?.[0]?.id;
+r = await tryQuery("authenticated", ev4, `select public.join_event($1, null)`, [privateEvent]);
+check("private events need a request", /approval_required/.test(r.error ?? ""));
+r = await tryQuery("authenticated", ev4, `select public.request_to_join($1)`, [privateEvent]);
+check("request to join a private event", !r.error);
+
+// --- Editing events
+// update_event(id, title, description, category, starts, ends, max, venue, place, lat, lng, spot name, zone,
+//   meeting point, THB, USD, ticket link, photos, announcements only)
+const updateEvent = (who, id, opts = {}) => {
+  const o = { title: "Jazz in the park", category: "music", starts: inHours(24), ends: inHours(30), max: 50, lat: 13.7307,
+    lng: 100.5418, spot: "Lumphini Park", zone: "Asia/Bangkok", thb: null, usd: null, link: null, photos: [], ...opts };
+  return tryQuery("authenticated", who,
+    `select public.update_event($1, $2, 'Bring a blanket', $3, $4, $5, $6, null, null, $7, $8, $9, $10, 'At the gate',
+      $11, $12, $13, $14, false)`,
+    [id, o.title, o.category, o.starts, o.ends, o.max, o.lat, o.lng, o.spot, o.zone, o.thb, o.usd, o.link, o.photos]);
+};
+r = await updateEvent(ev2, freeEvent, { title: "Hijacked" });
+check("only the organiser edits an event", /not_host/.test(r.error ?? ""));
+r = await updateEvent(ev1, vibeHangout);
+check("update_event is for events", /not_event|not_host/.test(r.error ?? ""));
+await db.query(`delete from net.calls`);
+await db.exec(`insert into public.push_devices (user_id, token, platform, language) values ('${ev2}', 'ExponentPushToken[eventMember2]', 'android', 'en') on conflict do nothing`);
+r = await updateEvent(ev1, freeEvent, { title: "Jazz by the lake", starts: inHours(48), ends: inHours(52), lat: 13.75, lng: 100.49, spot: "Lake stage" });
+check("the organiser changes name, time and place", !r.error);
+r = await db.query(`select title, spot_name, spot_lat, meeting_point, city from public.meetups where id = $1`, [freeEvent]);
+check("the changes are saved", r.rows[0]?.title === "Jazz by the lake" && r.rows[0].spot_name === "Lake stage"
+  && r.rows[0].spot_lat === 13.75 && r.rows[0].meeting_point === "At the gate" && r.rows[0].city === "Bangkok");
+r = await db.query(`select arrival_at from public.meetup_members where meetup_id = $1 and user_id = $2`, [freeEvent, ev2]);
+check("arrival times outside the new hours are cleared", r.rows[0]?.arrival_at === null);
+r = await db.query(`select body from net.calls`);
+check("members get a push about the new time and place", r.rows.some((c) => JSON.stringify(c.body).includes("new time, new place")));
+r = await updateEvent(ev1, freeEvent, { thb: 300 });
+check("making it paid needs a verified organiser", /verification_required/.test(r.error ?? ""));
+r = await updateEvent(ev1, freeEvent, { photos: [`${ev2}/mine.jpg`] });
+check("not someone else's photos", /invalid_photo/.test(r.error ?? ""));
+r = await updateEvent(ev1, freeEvent, { photos: [`${ev1}/cover.jpg`], starts: inHours(48), ends: inHours(52), lat: 13.75, lng: 100.49, spot: "Lake stage" });
+r = await db.query(`select photo_paths from public.meetups where id = $1`, [freeEvent]);
+check("add a photo later", r.rows[0]?.photo_paths?.[0] === `${ev1}/cover.jpg`);
+r = await updateEvent(ev1, freeEvent, { lat: 48.8584, lng: 2.2945, spot: "Eiffel Tower", zone: "Europe/Paris" });
+r = await db.query(`select time_zone, city from public.meetups where id = $1`, [freeEvent]);
+check("move it anywhere in the world; the city is looked up again", r.rows[0]?.time_zone === "Europe/Paris" && r.rows[0].city === null);
+r = await updateEvent(ev1, freeEvent, { lat: 48.8584, lng: 2.2945, spot: "Eiffel Tower", zone: null });
+check("a spot outside Bangkok needs its time zone", /invalid_time_zone/.test(r.error ?? ""));
+r = await updateEvent(ev1, freeEvent, { max: 1 });
+check("not below 2 people", /invalid_size/.test(r.error ?? ""));
+// paidEvent: 2 places, both taken (organiser + ev3); ev4 waits.
+await tryQuery("authenticated", ev4, `select public.join_waitlist($1, null)`, [paidEvent]);
+const paidNow = (await db.query(`select starts_at, ends_at from public.meetups where id = $1`, [paidEvent])).rows[0];
+const editPaid = (opts) => updateEvent(evV, paidEvent, { starts: paidNow.starts_at.toISOString(), ends: paidNow.ends_at.toISOString(), thb: 500, usd: 15, ...opts });
+await tryQuery("authenticated", ev2, `select public.join_event($1, null)`, [paidEvent]);
+r = await editPaid({ max: 3 });
+r = await db.query(`select user_id from public.meetup_members where meetup_id = $1`, [paidEvent]);
+check("more places let the waiting list in", r.rows.some((m) => m.user_id === ev4));
+r = await editPaid({ max: 2 });
+check("not below the people already in", /size_below_members/.test(r.error ?? ""));
+r = await editPaid({ max: 3, thb: 800, usd: null });
+r = await db.query(`select entry_fee_thb::text as thb, entry_fee_usd, cost_level from public.meetups where id = $1`, [paidEvent]);
+check("a new price, and its cost band", r.rows[0]?.thb === "800.00" && r.rows[0].entry_fee_usd === null && r.rows[0].cost_level === 3);
+await db.query(`update public.meetups set starts_at = now() - interval '1 hour' where id = $1`, [paidEvent]);
+r = await editPaid({ max: 3, thb: 800, starts: inHours(2), ends: inHours(5) });
+check("once it has started, the start stays", /invalid_time/.test(r.error ?? ""));
+await tryQuery("authenticated", ev1, `select public.cancel_meetup($1)`, [announceEvent]);
+r = await updateEvent(ev1, announceEvent);
+check("cancelled events can't be edited", /meetup_cancelled/.test(r.error ?? ""));
 
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);

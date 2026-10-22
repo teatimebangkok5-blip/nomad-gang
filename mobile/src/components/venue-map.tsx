@@ -97,8 +97,8 @@ export type MapPin = {
   emoji: string;
   // Name shown beside the pin (e.g. the partner venue's name).
   label?: string;
-  // Violet for tables at places and travellers; orange (default) for partner venues; story = brand ring.
-  tone?: 'orange' | 'violet' | 'story' | 'amber';
+  // Violet for tables at places and travellers; orange (default) for partner venues; story = brand ring; event = pink.
+  tone?: 'orange' | 'violet' | 'story' | 'amber' | 'event';
   // A photo in the ball instead of the emoji (story pins: the poster's profile picture).
   image?: string | null;
   // Read out by screen readers.
@@ -546,6 +546,7 @@ const PIN_GRADIENTS = {
   violet: ['#B79DFF', '#7B4DFF', '#4B22C9'],
   story: ['#FF1F78', '#FE593B', '#FFB547'],
   amber: ['#FFE07A', '#FFB800', '#E07800'],
+  event: ['#FF8FD0', '#FF1F78', '#B0179B'],
 } as const;
 
 function PinView({ pin }: { pin: MapPin }) {

@@ -21,8 +21,9 @@ import { useVenues } from '@/lib/venues';
 // The picture in the header: what kind of place it is.
 const VENUE_EMOJI: Record<string, string> = { cafe: 'coffee', bar: 'beer', rooftop: 'cocktail' };
 
-// Group chat for the people who joined a table or hangout. Only members can read or post (enforced by the database),
-// also after it ends or is cancelled, until they leave the chat in Messages.
+// Group chat for the people who joined a table, hangout or event. Only members can read or post (enforced by the
+// database), also after it ends or is cancelled, until they leave the chat in Messages. An event's organiser can make
+// it announcements-only: then only they post, and members read and react.
 export default function TableChatScreen() {
   const styles = useStyles();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -37,15 +38,17 @@ export default function TableChatScreen() {
 
   const meetup = state.status === 'ready' ? state.meetup : null;
   const venue = meetup?.venue_id ? venues.venues.find((v) => v.id === meetup.venue_id) : undefined;
-  // Hangouts are named by their title, tables by their place.
+  // Hangouts and events are named by their title, tables by their place.
   const placeName =
-    meetup?.kind === 'hangout'
+    meetup?.kind === 'hangout' || meetup?.kind === 'event'
       ? meetup.title
       : venue
         ? localized(venue, 'name', language)
         : (meetup?.place_name ?? '');
-  const chatLabel = meetup?.kind === 'hangout' ? t('hangouts.chat') : t('chat.openChat');
+  const chatLabel =
+    meetup?.kind === 'event' ? t('events.chat') : meetup?.kind === 'hangout' ? t('hangouts.chat') : t('chat.openChat');
   const isMember = Boolean(meetup?.members.some((m) => m.user_id === myId));
+  const announceOnly = Boolean(meetup?.announce_only && meetup.host_id !== myId);
   useMarkChatRead('meetup', isMember ? id : null, messages?.length ?? 0);
 
   // "4 going · Today 19:30", or that it has ended / was cancelled.
@@ -61,7 +64,9 @@ export default function TableChatScreen() {
     : undefined;
   const emojiId = meetup?.pitstop
     ? 'omw'
-    : meetup?.kind === 'hangout'
+    : meetup?.kind === 'event'
+      ? 'ticket'
+      : meetup?.kind === 'hangout'
       ? 'compass'
       : ((venue && VENUE_EMOJI[venue.category]) ?? 'noodles');
   // A partner venue's "15% off" deal, offered first when splitting the bill.
@@ -79,12 +84,17 @@ export default function TableChatScreen() {
         messages={failed && !messages ? [] : messages}
         myId={myId}
         showNames
-        canSend={isMember}
+        canSend={isMember && !announceOnly}
+        canReact={isMember}
         chat={isMember ? { kind: 'meetup', id } : null}
         emptyText={failed ? t('chat.loadFailed') : undefined}
         partnerDiscount={dealPercent}
         banner={
-          meetup && !isMember ? <Text style={styles.notice}>{t('tables.errors.not_allowed')}</Text> : undefined
+          meetup && !isMember ? (
+            <Text style={styles.notice}>{t('tables.errors.not_allowed')}</Text>
+          ) : announceOnly ? (
+            <Text style={styles.notice}>📣 {t('events.announceOnlyNote')}</Text>
+          ) : undefined
         }
         onSend={(body) => (myId ? sendTableMessage(id, myId, body) : Promise.resolve('auth_required'))}
       />

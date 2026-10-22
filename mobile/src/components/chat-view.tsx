@@ -82,6 +82,7 @@ export function ChatView({
   attachHint,
   banner,
   canSend = true,
+  canReact: canReactProp,
   emptyText,
   partnerDiscount,
 }: {
@@ -96,6 +97,8 @@ export function ChatView({
   attachHint?: string;
   banner?: ReactNode;
   canSend?: boolean;
+  // Reactions even when posting isn't allowed (an event's announcements-only chat). Defaults to canSend.
+  canReact?: boolean;
   emptyText?: string;
   // The partner venue's % deal, offered first when splitting the bill.
   partnerDiscount?: number | null;
@@ -122,7 +125,7 @@ export function ChatView({
   const inputRef = useRef<TextInput>(null);
   // Where the cursor was, so emoji go there even while the keyboard is hidden.
   const selection = useRef<Selection | null>(null);
-  const canReact = Boolean(chat && myId && canSend);
+  const canReact = Boolean(chat && myId && (canReactProp ?? canSend));
   const { reactions, react } = useChatReactions(chat, myId);
 
   // Android's back button closes the emoji panel first.

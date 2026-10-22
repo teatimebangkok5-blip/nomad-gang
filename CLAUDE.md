@@ -272,6 +272,38 @@ Product spec and tech stack below are agreed. Built so far:
   (`meetups.second_round_of`) + a `meetup:<id>` invite card in the first chat. Its host can invite other groups within
   2 km that are on now or ended < 2 h ago (`second_round_targets`, `invite_table`; max 3 per 12 h, once per target,
   not across a block or into women-only groups they can't see) → push + bell `table_invite` (`RoundInvites`).
+- **Events** (added 2026-10-22, `*_event_kind.sql` + `*_events.sql`; founder's choices): meetups with `kind = 'event'`
+  (the enum value has its own migration because Postgres can't use a new value in the same transaction; the DB test
+  runner now applies each migration file separately, as Supabase does). Created from the Hangout map: a Hangout / Event
+  chooser in the bottom card, "Create hangout" + "Create event" on every selection card, `?mode=event`, and
+  **"Paste a Google Maps link"** (`resolveMapsLink` / `parseMapsText` in `src/lib/events.ts`: place `!3d!4d`, `?q=`,
+  `@lat,lng` or plain coordinates; short `maps.app.goo.gl` links are fetched to follow the redirect, Google hosts only)
+  → a dropped pin with the place's name. Step 2 = `src/components/event-form.tsx` (`ChosenPlace` type shared with
+  create-hangout): up to 2 photos (public `event-photos` bucket `<user id>/…`, `pickAndUploadPhoto(…, 'cover', …)` 4:3),
+  name, category (music / art / sports / workshop / language / party / food / outdoors / other, `EVENT_EMOJI`),
+  description ≤ 2,000, meeting point, **Free / Paid** (price in THB and/or USD, "≈ $" suggestion from Frankfurter,
+  optional https ticket link; **no payments in the app**, people pay the organiser; **paid needs a verified
+  organiser**, `verification_required`), start (60 days ahead) and end (30 min–7 days later) = **open hours**, 2–150
+  people (stepper 1 / 5 / 10), open / private, women-only, **Announcements only**. `create_event(…)` does it all in one
+  call (max 3 open events; `cost_level` from the price). **Arrival time**: `meetup_members.arrival_at`, picked when
+  joining (`join_event`, `ArrivalSheet`) or later (`set_event_arrival`); the event page shows "Who's coming when"
+  (`WhoWhen`, per hour) and each member's time. **Waiting list** (open events): `meetup_waitlist`, `join_waitlist` /
+  `leave_waitlist` / `event_waitlist`; when a member leaves, a trigger moves the first in line in and pushes "You're
+  in!". **Announcements only**: trigger on `meetup_messages` (every way of posting) + `set_event_announce_only`; members
+  still react (`ChatView` `canReact`). Event page = `table/[id].tsx` (`isEvent`): photo carousel hero (`EventPhotos`),
+  price row, Buy tickets, **Google Maps / Street View** links (`googleMapsPinUrl`, `streetViewUrl`, free URLs), no second
+  round. Pins: pink 🎟️ (`tone: 'event'`) on home (`e:` keys) and the Hangout map; home filter "🎟️ Events"; Messages has
+  an **Events** filter (`meetup_kind = 'event'`; "Tables & hangouts" excludes them). Push wording "event" via
+  `meetup_kind_word`; the bell's `new_table` with `meetup_kind = 'event'` reads "created an event". Account deletion
+  also clears `event-photos`. Privacy Policy mentions events (2026-10-22).
+  **Editing** (`*_edit_events.sql`, organiser only, open and not over): "Edit event" on the event page →
+  `/create-hangout?editEventId=` opens `EventForm` with `edit` (place shown as `ChosenPlace` `'current'`, or the spot
+  with its time zone); "Change" goes back to the map ("Use this place") and keeps what's typed (`EventDraft`, also when
+  creating). `update_event(…)` changes name, category, description, place, start / end (start fixed once started),
+  max people (not below the members; raising it lets the waiting list in via `event_fill_from_waitlist`), meeting
+  point, price, ticket link, photos, announcements only; not who can join / women-only. Arrival times outside new hours
+  are cleared; a new place resets the city; members get a push (`event_update`) when time, place or price change.
+  Removed photos are deleted by the app after saving.
 - Privacy Policy updated 2026-10-21 for verification (explicit consent, photos deleted on decision, gender never
   shown), tips, bills and Frankfurter.
 - **Login without SMS for now** (founder's decision 2026-10-16): `app_settings.require_phone_verification` (default

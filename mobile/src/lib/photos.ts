@@ -9,14 +9,15 @@ import { supabase } from '@/lib/supabase';
 
 const BUCKET = 'profile-photos';
 
-export type PhotoKind = 'avatar' | 'photo';
+// 'cover': a wide event photo (4:3).
+export type PhotoKind = 'avatar' | 'photo' | 'cover';
 
 export function profilePhotoUrl(path: string): string {
   return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
 // Opens the phone's photo picker (with cropping), shrinks and compresses the photo, and uploads it to my folder in
-// `bucket` (profile photos by default; Hidden Gems suggestions use "gem-photos").
+// `bucket` (profile photos by default; Hidden Gems suggestions use "gem-photos", events "event-photos").
 // Returns the new file's path, null if the person cancelled, or 'error'.
 export async function pickAndUploadPhoto(
   myId: string,
@@ -28,14 +29,14 @@ export async function pickAndUploadPhoto(
   const picked = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
     allowsEditing: true,
-    aspect: kind === 'avatar' ? [1, 1] : [4, 5],
+    aspect: kind === 'avatar' ? [1, 1] : kind === 'cover' ? [4, 3] : [4, 5],
     quality: 1,
   });
   if (picked.canceled || !picked.assets[0]) return null;
 
   try {
     const rendered = await ImageManipulator.manipulate(picked.assets[0].uri)
-      .resize({ width: kind === 'avatar' ? 512 : 1080 })
+      .resize({ width: kind === 'avatar' ? 512 : kind === 'cover' ? 1280 : 1080 })
       .renderAsync();
     const saved = await rendered.saveAsync({ compress: 0.8, format: SaveFormat.JPEG, base64: true });
     if (!saved.base64) return 'error';

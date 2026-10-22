@@ -30,7 +30,7 @@ export async function deleteUser(userId: string): Promise<FormState> {
     const { error } = await supabase.storage.from("chat-media").remove(chatFiles.slice(i, i + 100));
     if (error) return { error: `Couldn't delete their chat files: ${error.message}` };
   }
-  for (const bucket of ["profile-photos", "gem-photos", "story-photos", "verifications"]) {
+  for (const bucket of ["profile-photos", "gem-photos", "story-photos", "event-photos", "verifications"]) {
     const { data: photos, error: listError } = await supabase.storage.from(bucket).list(userId, { limit: 1000 });
     if (listError) return { error: `Couldn't list their ${bucket}: ${listError.message}` };
     if (photos?.length) {

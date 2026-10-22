@@ -9,7 +9,8 @@ import { Radius, Raised, Spacing, Type } from '@/constants/theme';
 import { localized, useLanguage } from '@/i18n';
 import { bangkokDay, bangkokMinutes, formatClock, formatDayLabel } from '@/lib/bangkok-time';
 import { areaName, meetupStatus, pulseLine, statusLabel, type MeetupStatus } from '@/lib/feed';
-import { meetupPlaceName, VIBE_EMOJI, type OpenMeetup, type Vibe } from '@/lib/meetups';
+import { EVENT_EMOJI, eventPriceLabel, type EventCategory } from '@/lib/events';
+import { meetupPlaceName, VIBE_EMOJI, type MeetupKind, type OpenMeetup, type Vibe } from '@/lib/meetups';
 import { useChallenges } from '@/lib/passport';
 import type { Venue, VenueDeal } from '@/lib/venues';
 import { makeStyles, useColors } from '@/lib/theme';
@@ -34,12 +35,17 @@ export function MeetupCard({
   const { t } = useTranslation();
   const language = useLanguage();
   const start = new Date(meetup.starts_at);
-  const hangout = meetup.kind === 'hangout';
   const placeLabel = venue ? localized(venue, 'name', language) : meetupPlaceName(meetup, language);
   const [now] = useState(() => new Date());
   const status = meetupStatus(meetup, now);
   const challenge = useChallenges().find((c) => c.id === meetup.challenge_id);
-  const cost = typeof meetup.cost_level === 'number' ? t(`feed.cost.${meetup.cost_level}`) : null;
+  // Events show their entry price ("Free", "฿500 · US$15"); tables and hangouts the expected cost.
+  const cost =
+    meetup.kind === 'event'
+      ? eventPriceLabel({ entry_fee_thb: meetup.entry_fee_thb ?? null, entry_fee_usd: meetup.entry_fee_usd ?? null }, language, t('events.free'))
+      : typeof meetup.cost_level === 'number'
+        ? t(`feed.cost.${meetup.cost_level}`)
+        : null;
   const area = areaName(meetup, language);
   const when = `${formatDayLabel(bangkokDay(start, meetup.time_zone), t, undefined, meetup.time_zone)} ${formatClock(
     bangkokMinutes(start, meetup.time_zone),
@@ -59,7 +65,7 @@ export function MeetupCard({
       style={({ pressed }) => [styles.card, compact ? styles.cardCompact : styles.cardFull, pressed && styles.pressed]}>
       <GlossyFill />
       <View style={styles.tags}>
-        <KindTag hangout={hangout} pitstop={meetup.pitstop} small={compact} />
+        <KindTag kind={meetup.kind} category={meetup.event_category} pitstop={meetup.pitstop} small={compact} />
         <StatusTag status={status} joined={meetup.joined} small={compact} />
         {meetup.vibe && <VibeTag vibe={meetup.vibe} small={compact} short={compact} />}
         {badge && <DealTag label={badge} small={compact} />}
@@ -122,10 +128,30 @@ export function dealBadge(deal: Pick<VenueDeal, 'kind' | 'title_en'>, t: TFuncti
   return percent ? `−${percent}%` : t(`promoFilter.${deal.kind}`);
 }
 
-// 👥 Table / 🙌 Hangout / ⚡ Pit-stop.
-export function KindTag({ hangout, pitstop = false, small = false }: { hangout: boolean; pitstop?: boolean; small?: boolean }) {
+// 👥 Table / 🙌 Hangout / ⚡ Pit-stop / 🎵 Event (its category's emoji).
+export function KindTag({
+  kind,
+  category,
+  pitstop = false,
+  small = false,
+}: {
+  kind: MeetupKind;
+  category?: EventCategory | null;
+  pitstop?: boolean;
+  small?: boolean;
+}) {
   const styles = useStyles();
   const { t } = useTranslation();
+  const hangout = kind === 'hangout';
+  if (kind === 'event') {
+    return (
+      <View style={[styles.tag, small && styles.tagSmall, styles.tagPink]}>
+        <Text style={[styles.tagText, small && styles.tagTextSmall, styles.pinkText]}>
+          {`${EVENT_EMOJI[category ?? 'other']} ${t('events.event')}`}
+        </Text>
+      </View>
+    );
+  }
   if (pitstop) {
     return (
       <View style={[styles.tag, small && styles.tagSmall, styles.tagPitstop]}>

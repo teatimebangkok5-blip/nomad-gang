@@ -94,7 +94,12 @@ function NotificationRow({ item }: { item: AppNotification }) {
   const { t } = useTranslation();
   const language = useLanguage();
   const { title, detail } = notificationText(item, t, language);
-  const emoji = item.kind === 'promotion' && item.promo_kind ? PROMOTION_EMOJI[item.promo_kind] : KIND_EMOJI[item.kind];
+  const emoji =
+    item.kind === 'promotion' && item.promo_kind
+      ? PROMOTION_EMOJI[item.promo_kind]
+      : item.kind === 'new_table' && item.meetup_kind === 'event'
+        ? '🎟️'
+        : KIND_EMOJI[item.kind];
 
   return (
     <Pressable
@@ -177,17 +182,31 @@ function notificationText(item: AppNotification, t: TFunction, language: Languag
   const meetupLabel = item.title || place || '';
   switch (item.kind) {
     case 'new_table':
+      // The server lists new events as new_table with meetup_kind 'event'.
+      if (item.meetup_kind === 'event') {
+        return { title: t('notifications.newEvent', { name, title: item.title ?? '' }), detail: place };
+      }
       return { title: t('notifications.newTable', { name, place: place ?? '' }), detail: item.title || null };
     case 'new_hangout':
       return { title: t('notifications.newHangout', { name, title: item.title ?? '' }), detail: place };
     case 'joined':
       return {
-        title: item.meetup_kind === 'hangout' ? t('notifications.joinedHangout', { name }) : t('notifications.joinedTable', { name }),
+        title:
+          item.meetup_kind === 'event'
+            ? t('notifications.joinedEvent', { name })
+            : item.meetup_kind === 'hangout'
+              ? t('notifications.joinedHangout', { name })
+              : t('notifications.joinedTable', { name }),
         detail: meetupLabel || null,
       };
     case 'join_request':
       return {
-        title: item.meetup_kind === 'hangout' ? t('notifications.joinRequestHangout', { name }) : t('notifications.joinRequestTable', { name }),
+        title:
+          item.meetup_kind === 'event'
+            ? t('notifications.joinRequestEvent', { name })
+            : item.meetup_kind === 'hangout'
+              ? t('notifications.joinRequestHangout', { name })
+              : t('notifications.joinRequestTable', { name }),
         detail: meetupLabel || null,
       };
     case 'request_approved':

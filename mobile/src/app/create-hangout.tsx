@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FavoriteButton } from '@/components/favorite-button';
@@ -9,6 +9,7 @@ import { PlaceTips } from '@/components/place-tips';
 import { GlossyFill } from '@/components/glossy';
 import { Button } from '@/components/button';
 import { Chip } from '@/components/chip';
+import { EventForm, type ChosenPlace, type EventDraft } from '@/components/event-form';
 import { FormFooter, FormInput, FormSection, IconBadge, PlaceSummary, Stepper } from '@/components/form-parts';
 import { Icon } from '@/components/icon';
 import { MeetupExtras } from '@/components/meetup-extras';
@@ -37,12 +38,14 @@ import {
   zoneAt,
   type BangkokDay,
 } from '@/lib/bangkok-time';
+import { resolveMapsLink } from '@/lib/events';
 import { isSafeLink, openLink, ticketLink } from '@/lib/links';
 import { AREA_ZOOM, PLACE_ZOOM, useMapSearch, type SearchResult } from '@/lib/map-search';
 import { distanceMeters, useCurrentLocation } from '@/lib/location';
 import {
   createHangout,
   directionsUrl,
+  fetchMeetup,
   meetupCoords,
   meetupLocationKey,
   meetupPlaceName,
@@ -53,6 +56,7 @@ import {
   type CostLevel,
   type HangoutWhere,
   type JoinMode,
+  type MeetupDetail,
   type MeetupErrorKey,
   type OpenMeetup,
   type Vibe,
@@ -74,18 +78,19 @@ import {
 import { setMeetupChallenge } from '@/lib/passport';
 import { makeStyles, useColors } from '@/lib/theme';
 
-// Tapped on the hangout map: a partner venue, a place, a pin dropped anywhere, or a pin of hangouts at a spot.
+// Tapped on the hangout map: a partner venue, a place, a pin dropped anywhere (or set from a Google Maps link, maybe
+// with the place's name), or a pin of hangouts / events at a spot.
 type Selection =
   | { type: 'venue'; venueId: string }
   | { type: 'place'; place: Place }
-  | { type: 'spot'; lat: number; lng: number }
+  | { type: 'spot'; lat: number; lng: number; name?: string }
   | { type: 'group'; key: string };
 
-// Where the new hangout will be (step 2).
-type Chosen =
-  | { type: 'venue'; venue: Venue }
-  | { type: 'place'; place: Place }
-  | { type: 'spot'; lat: number; lng: number; name: string };
+// Where the new hangout or event will be (step 2).
+type Chosen = ChosenPlace;
+// Hangouts are never edited here, so their form never gets the event's 'current' place.
+type HangoutChosen = Exclude<ChosenPlace, { type: 'current' }>;
+type CreateKind = 'hangout' | 'event';
 
 const DAYS_AHEAD = 14; // the server allows up to 14 days ahead
 const MIN_PEOPLE = 2;
@@ -93,12 +98,16 @@ const MAX_PEOPLE = 30;
 const MIN_DURATION = 60; // minutes; the length stepper goes up by the hour
 const MAX_DURATION = 720;
 
-// Create a hangout anywhere in the world: 1) a full-screen map of places to hang out (Bangkok: temples, parks, malls,
-// markets, museums, attractions from the database, partner venues with ticket discounts, free entry and events;
-// elsewhere: world places from the map tiles), and open hangouts. Tap a place, or anywhere to drop a pin.
-// 2) Title, description, day, time (local time at the place), how long and how many people.
+// Create a hangout or an event anywhere in the world: 1) a full-screen map of places to hang out (Bangkok: temples,
+// parks, malls, markets, museums, attractions from the database, partner venues with ticket discounts, free entry and
+// events; elsewhere: world places from the map tiles), and open hangouts and events. Tap a place, anywhere to drop a
+// pin, or paste a Google Maps link; then "Create hangout" or "Create event" (`?mode=event` lists that one first).
+// 2) The hangout form below, or the event form (components/event-form.tsx).
+// `?editEventId=`: the organiser edits that event; it opens on the form at its current place, and "Change" picks
+// another place here.
 export default function CreateHangoutScreen() {
   const styles = useStyles();
+  const Colors = useColors();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const language = useLanguage();
@@ -122,7 +131,14 @@ export default function CreateHangoutScreen() {
     spotLat?: string;
     spotLng?: string;
     spotName?: string;
+    mode?: string;
+    editEventId?: string;
   }>();
+  const [kind, setKind] = useState<CreateKind>(params.mode === 'event' || params.editEventId ? 'event' : 'hangout');
+  // Editing an event: it, loaded once ('missing' = not found or not mine to edit), and what's typed in its form.
+  const [editing, setEditing] = useState<MeetupDetail | 'loading' | 'missing' | null>(params.editEventId ? 'loading' : null);
+  const [draft, setDraft] = useState<EventDraft | undefined>(undefined);
+  const [pasteOpen, setPasteOpen] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(params.venueId ? { type: 'venue', venueId: params.venueId } : null);
   const [chosen, setChosen] = useState<Chosen | null>(() =>
     params.spotLat && params.spotLng && Number.isFinite(Number(params.spotLat)) && Number.isFinite(Number(params.spotLng))
@@ -147,6 +163,17 @@ export default function CreateHangoutScreen() {
   const paramVenue = params.venueId ? venueById.get(params.venueId) : undefined;
   const paramFocus: MapFocus | null = paramVenue ? { lat: paramVenue.lat, lng: paramVenue.lng, zoom: PLACE_ZOOM, seq: 0 } : null;
   useEffect(() => {
+    if (!params.editEventId) return;
+    fetchMeetup(params.editEventId).then((found) => {
+      if (!found || found === 'error' || found.kind !== 'event' || found.host_id !== session?.user.id) {
+        setEditing('missing');
+        return;
+      }
+      setEditing(found);
+      setChosen(currentPlaceOf(found));
+    });
+  }, [params.editEventId, session?.user.id]);
+  useEffect(() => {
     if (!params.placeId) return;
     fetchPlace(params.placeId).then((found) => {
       if (!found) return;
@@ -159,9 +186,11 @@ export default function CreateHangoutScreen() {
     });
   }, [params.placeId, params.title]);
   const shownVenueIds = new Set(hangoutVenues.map((venue) => venue.id));
-  // With a filter on, only hangouts at venues that have that promotion.
+  // Hangouts and events (with a filter on, only those at venues that have that promotion).
   const hangouts = meetups.meetups.filter(
-    (meetup) => meetup.kind === 'hangout' && (promo === null || venueMatches(venueById.get(meetup.venue_id ?? ''))),
+    (meetup) =>
+      (meetup.kind === 'hangout' || meetup.kind === 'event') &&
+      (promo === null || venueMatches(venueById.get(meetup.venue_id ?? ''))),
   );
 
   // Hangouts at a partner venue on this map count on its pin; all others share one 🙌 pin per place or spot.
@@ -200,8 +229,19 @@ export default function CreateHangoutScreen() {
     }),
     ...[...groups].flatMap(([key, list]) => {
       const at = meetupCoords(list[0], venueById);
+      // Only events there: a pink 🎟️ pin.
+      const events = list.every((meetup) => meetup.kind === 'event');
       return at
-        ? [{ key: `h:${key}`, ...at, emoji: '🙌', tone: 'violet' as const, count: list.length, selected: selectedKey === key }]
+        ? [
+            {
+              key: `h:${key}`,
+              ...at,
+              emoji: events ? '🎟️' : '🙌',
+              tone: events ? ('event' as const) : ('violet' as const),
+              count: list.length,
+              selected: selectedKey === key,
+            },
+          ]
         : [];
     }),
     ...(selection?.type === 'spot'
@@ -272,14 +312,15 @@ export default function CreateHangoutScreen() {
     return [];
   }
 
-  function createAt(s: Selection) {
+  function createAt(s: Selection, what: CreateKind) {
+    setKind(what);
     if (s.type === 'venue') {
       const venue = venueById.get(s.venueId);
       if (venue) setChosen({ type: 'venue', venue });
     } else if (s.type === 'place') {
       setChosen({ type: 'place', place: s.place });
     } else if (s.type === 'spot') {
-      setChosen({ type: 'spot', lat: s.lat, lng: s.lng, name: '' });
+      setChosen({ type: 'spot', lat: s.lat, lng: s.lng, name: s.name ?? '' });
     } else {
       const first = groups.get(s.key)?.[0];
       if (first?.place_lat != null && first.place_lng != null) {
@@ -296,8 +337,46 @@ export default function CreateHangoutScreen() {
     />
   );
 
+  const editEvent = editing && typeof editing === 'object' ? editing : undefined;
+  if (editing === 'loading' || editing === 'missing') {
+    return (
+      <View style={[styles.safe, { paddingTop: insets.top }]}>
+        <ScreenHeader />
+        {editing === 'loading' ? (
+          <ActivityIndicator color={Colors.accent} size="large" style={styles.spinner} />
+        ) : (
+          <Text style={[styles.emptyBody, styles.missing]}>{t('events.cantEdit')}</Text>
+        )}
+      </View>
+    );
+  }
+
   if (chosen) {
-    return <HangoutForm chosen={chosen} initialTitle={params.title} onChange={() => setChosen(null)} />;
+    // An event's own venue: its name, once venues have loaded.
+    const shownChosen: ChosenPlace =
+      chosen.type === 'current' && chosen.venueId && venueById.get(chosen.venueId)
+        ? { ...chosen, name: localized(venueById.get(chosen.venueId)!, 'name', language) }
+        : chosen;
+    return kind === 'event' || shownChosen.type === 'current' ? (
+      <EventForm
+        chosen={shownChosen}
+        draft={draft}
+        edit={editEvent}
+        onChange={(typed) => {
+          setDraft(typed);
+          setChosen(null);
+        }}
+      />
+    ) : (
+      <HangoutForm chosen={shownChosen} initialTitle={params.title} onChange={() => setChosen(null)} />
+    );
+  }
+
+  // A pasted Google Maps link becomes a dropped pin (with the place's name when the link has one).
+  function handleMapsLink(found: { lat: number; lng: number; name: string | null }) {
+    setPasteOpen(false);
+    setSelection({ type: 'spot', lat: found.lat, lng: found.lng, name: found.name ?? undefined });
+    setFocus({ lat: found.lat, lng: found.lng, zoom: PLACE_ZOOM, seq: Date.now() });
   }
 
   const partnerList = hangoutVenues
@@ -350,18 +429,40 @@ export default function CreateHangoutScreen() {
             venue={selection.type === 'venue' ? venueById.get(selection.venueId) : undefined}
             hangouts={hangoutsAt(selection)}
             renderHangout={renderHangout}
-            onCreate={() => createAt(selection)}
+            first={kind}
+            editingEvent={Boolean(params.editEventId)}
+            onCreate={(what) => createAt(selection, what)}
             onClose={() => setSelection(null)}
           />
         ) : (
-          // Nothing tapped yet: how to start.
+          // Nothing tapped yet: hangout or event, how to start, or set the pin from a Google Maps link.
           <View style={[styles.card, styles.hintCard, styles.inset]}>
             <GlossyFill />
-            <IconBadge icon="touch" />
-            <View style={styles.flex}>
-              <Text style={styles.cardTitle}>{t('hangouts.dropHint')}</Text>
-              <Text style={styles.cardSub}>{t('hangouts.dropSub')}</Text>
+            {!params.editEventId && (
+            <View style={styles.kindRow}>
+              <Chip
+                tone="violet"
+                label={`🙌 ${t('hangouts.createHangout')}`}
+                selected={kind === 'hangout'}
+                onPress={() => setKind('hangout')}
+              />
+              <Chip label={`🎟️ ${t('events.createEvent')}`} selected={kind === 'event'} onPress={() => setKind('event')} />
             </View>
+            )}
+            <View style={styles.hintRow}>
+              <IconBadge icon="touch" />
+              <View style={styles.flex}>
+                <Text style={styles.cardTitle}>{kind === 'event' ? t('events.pickSpot') : t('hangouts.dropHint')}</Text>
+                <Text style={styles.cardSub}>{t('events.mapHint')}</Text>
+              </View>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setPasteOpen(true)}
+              style={({ pressed }) => [styles.pasteButton, pressed && styles.pressed]}>
+              <Icon name="link" size={18} color={Colors.violetText} />
+              <Text style={styles.pasteText}>{t('events.pasteLink')}</Text>
+            </Pressable>
           </View>
         )}
       </View>
@@ -374,6 +475,8 @@ export default function CreateHangoutScreen() {
         onPick={handleSearchPick}
         onClose={search.clear}
       />
+
+      <MapsLinkPanel open={pasteOpen} onClose={() => setPasteOpen(false)} onFound={handleMapsLink} />
 
       <SlideUpPanel open={listOpen} onClose={() => setListOpen(false)} title={t('hangouts.openHangouts')}>
         <ScrollView contentContainerStyle={styles.sheetContent}>
@@ -419,12 +522,15 @@ export default function CreateHangoutScreen() {
   );
 }
 
-// Bottom card for what was tapped: name, the venue's promotions, hangouts there, and "Create hangout here".
+// Bottom card for what was tapped: name, the venue's promotions, hangouts and events there, and "Create hangout" /
+// "Create event" (`first` comes first).
 function SelectionCard({
   selection,
   venue,
   hangouts,
   renderHangout,
+  first,
+  editingEvent = false,
   onCreate,
   onClose,
 }: {
@@ -432,7 +538,10 @@ function SelectionCard({
   venue: Venue | undefined;
   hangouts: OpenMeetup[];
   renderHangout: (meetup: OpenMeetup) => React.ReactNode;
-  onCreate: () => void;
+  first: CreateKind;
+  // Picking a new place for an event being edited: one "Use this place" button.
+  editingEvent?: boolean;
+  onCreate: (what: CreateKind) => void;
   onClose: () => void;
 }) {
   const styles = useStyles();
@@ -456,7 +565,7 @@ function SelectionCard({
     note = t('hangouts.noDealHere');
     target = selection.place;
   } else if (selection.type === 'spot') {
-    name = t('hangouts.droppedPin');
+    name = selection.name || t('hangouts.droppedPin');
     sub = `${selection.lat.toFixed(4)}, ${selection.lng.toFixed(4)}`;
     note = t('hangouts.pinnedSpotBody');
   } else if (hangouts[0]) {
@@ -561,23 +670,25 @@ function SelectionCard({
       ) : null}
 
       <View style={styles.placeActions}>
-        <View style={styles.flex}>
-          {selection.type === 'spot' ? (
+        {editingEvent ? (
+          <View style={styles.flex}>
             <Button
-              title={t('hangouts.useSpot')}
-              variant="violet"
+              title={t('events.useThisPlace')}
               trailingIcon={<Icon name="forward" size={20} color={Colors.white} />}
-              onPress={onCreate}
+              onPress={() => onCreate('event')}
             />
-          ) : (
+          </View>
+        ) : (first === 'event' ? (['event', 'hangout'] as const) : (['hangout', 'event'] as const)).map((what) => (
+          <View key={what} style={styles.flex}>
             <Button
-              title={t('hangouts.createHere')}
-              variant="violet"
-              icon={<Icon name="addCircle" size={22} color={Colors.white} />}
-              onPress={onCreate}
+              compact
+              title={what === 'event' ? t('events.createEvent') : t('hangouts.createHangout')}
+              variant={what === 'event' ? 'primary' : 'violet'}
+              icon={<Icon name={what === 'event' ? 'ticket' : 'addCircle'} size={20} color={Colors.white} />}
+              onPress={() => onCreate(what)}
             />
-          )}
-        </View>
+          </View>
+        ))}
         {target && (
           <RoundButton
             size={56}
@@ -638,8 +749,81 @@ function spotKey(at: { lat: number; lng: number }) {
   return `s:${at.lat.toFixed(5)},${at.lng.toFixed(5)}`;
 }
 
+// An event's place as it is: a spot (name and time zone kept), or its venue / place left unchanged.
+function currentPlaceOf(event: MeetupDetail): ChosenPlace {
+  if (!event.venue_id && !event.place_id && event.place_lat !== null && event.place_lng !== null) {
+    return { type: 'spot', lat: event.place_lat, lng: event.place_lng, name: event.place_name ?? '', timeZone: event.time_zone };
+  }
+  return {
+    type: 'current',
+    venueId: event.venue_id,
+    placeId: event.place_id,
+    lat: event.place_lat,
+    lng: event.place_lng,
+    name: event.place_name ?? '',
+    timeZone: event.time_zone,
+  };
+}
+
+// Paste a Google Maps share link (or "lat, lng") to drop the pin there. Short links are opened to see where they lead.
+function MapsLinkPanel({
+  open,
+  onClose,
+  onFound,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onFound: (found: { lat: number; lng: number; name: string | null }) => void;
+}) {
+  const styles = useStyles();
+  const { t } = useTranslation();
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [notFound, setNotFound] = useState(false);
+
+  async function find() {
+    setNotFound(false);
+    setBusy(true);
+    const found = await resolveMapsLink(text);
+    setBusy(false);
+    if (!found) {
+      setNotFound(true);
+      return;
+    }
+    setText('');
+    onFound(found);
+  }
+
+  return (
+    <SlideUpPanel open={open} onClose={onClose} title={t('events.pasteTitle')} subtitle={t('events.pasteHint')}>
+      <View style={styles.pasteBody}>
+        <FormInput
+          tone="violet"
+          icon="link"
+          value={text}
+          onChangeText={(value) => {
+            setText(value);
+            setNotFound(false);
+          }}
+          placeholder={t('events.pastePlaceholder')}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+          onSubmitEditing={find}
+        />
+        {notFound && (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {t('events.pasteNotFound')}
+          </Text>
+        )}
+        <Button title={t('events.pasteFind')} variant="violet" loading={busy} disabled={!text.trim()} onPress={find} />
+      </View>
+    </SlideUpPanel>
+  );
+}
+
 // Step 2: what, when, how long and how many people.
-function HangoutForm({ chosen, initialTitle, onChange }: { chosen: Chosen; initialTitle?: string; onChange: () => void }) {
+function HangoutForm({ chosen, initialTitle, onChange }: { chosen: HangoutChosen; initialTitle?: string; onChange: () => void }) {
   const styles = useStyles();
   const Colors = useColors();
   const { t } = useTranslation();
@@ -906,6 +1090,8 @@ function EmojiBadge({ emoji }: { emoji: string }) {
 
 const useStyles = makeStyles((Colors) => ({
   root: { flex: 1, backgroundColor: Colors.bg },
+  spinner: { marginTop: Spacing.xxl * 2 },
+  missing: { textAlign: 'center', padding: Spacing.xxl },
   safe: { flex: 1, backgroundColor: Colors.bg },
   flex: { flex: 1 },
   inset: { marginHorizontal: 14 },
@@ -919,7 +1105,21 @@ const useStyles = makeStyles((Colors) => ({
     overflow: 'hidden',
     ...Raised,
   },
-  hintCard: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingVertical: 14, paddingHorizontal: Spacing.lg },
+  hintCard: { gap: Spacing.sm, paddingVertical: 14, paddingHorizontal: Spacing.lg },
+  hintRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  kindRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  pasteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    minHeight: 36,
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.violetTint,
+  },
+  pasteText: { ...Type.label, fontSize: 13, color: Colors.violetText },
+  pasteBody: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xxl, gap: Spacing.md },
   cardTitle: { ...Type.heading, fontSize: 16, fontWeight: '800', color: Colors.text },
   cardSub: { ...Type.small, fontSize: 12, color: Colors.textMuted },
   emptyCard: {

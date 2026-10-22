@@ -31,7 +31,7 @@ export type AppNotification = {
   actor_name: string | null;
   actor_avatar: string | null;
   meetup_id: string | null;
-  meetup_kind: 'table' | 'hangout' | null;
+  meetup_kind: 'table' | 'hangout' | 'event' | null;
   title: string | null;
   place_name: string | null;
   place_name_en: string | null;

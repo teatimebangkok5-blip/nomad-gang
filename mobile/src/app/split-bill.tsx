@@ -81,6 +81,23 @@ export default function SplitBillScreen() {
   const grandTotal = owed.reduce((sum, share) => sum + share.amount, 0) + guestOwed;
   const canPost = owed.length > 0 && grandTotal > 0;
 
+  // The result's breakdown, in the order the server applies it.
+  const billSubtotal = subtotals.reduce((sum, share) => sum + share.subtotal, 0) + guestSubtotal;
+  const afterDiscount = billSubtotal * (1 - discount / 100);
+  const serviceAmount = afterDiscount * (rates.service / 100);
+  const vatAmount = (afterDiscount + serviceAmount) * (rates.vat / 100);
+  const tipAmount = (afterDiscount + serviceAmount + vatAmount) * (tip / 100);
+  // Split equally: what one person pays (the first few may pay a satang more from rounding).
+  const eachPays =
+    mode !== 'equal' || owed.length === 0
+      ? null
+      : guestParts.length > 0
+        ? shareAmount(guestParts[guestParts.length - 1], rates)
+        : owed[owed.length - 1].amount;
+  const money = (amount: number) => formatMoney(amount, currency, language);
+  const nameOf = (userId: string) =>
+    userId === myId ? t('tables.you') : (people.find((member) => member.user_id === userId)?.display_name ?? '');
+
   function toggleMember(userId: string) {
     setLeft((current) => {
       const next = new Set(current);
@@ -278,15 +295,87 @@ export default function SplitBillScreen() {
 
           <View style={styles.summary}>
             <GlossyFill />
-            <Text style={styles.summaryLabel}>{t('bill.everyoneOwes')}</Text>
-            <Text style={styles.summaryTotal}>{formatMoney(grandTotal, currency, language)}</Text>
-            <Text style={styles.hint}>{t('bill.youPaid')}</Text>
+            <Text style={styles.resultTitle}>🧾 {t('bill.result')}</Text>
+            {!canPost ? (
+              <Text style={styles.hint}>{mode === 'equal' ? t('bill.resultEmpty') : t('bill.resultEmptyParts')}</Text>
+            ) : (
+              <>
+                {eachPays !== null && (
+                  <View style={styles.eachBox}>
+                    <Text style={styles.summaryLabel}>{t('bill.eachPays', { count: headCount })}</Text>
+                    <Text style={styles.eachAmount}>{money(eachPays)}</Text>
+                  </View>
+                )}
+
+                <View style={styles.resultList}>
+                  {owed.map((share) => (
+                    <View key={share.userId} style={styles.resultRow}>
+                      <Text style={styles.resultName} numberOfLines={1}>
+                        {nameOf(share.userId)}
+                      </Text>
+                      <Text style={styles.resultAmount}>{money(share.amount)}</Text>
+                    </View>
+                  ))}
+                  {guestCount > 0 && guestOwed > 0 && (
+                    <View style={styles.resultRow}>
+                      <Text style={styles.resultName} numberOfLines={1}>
+                        {t('bill.guests', { count: guestCount })}
+                      </Text>
+                      <Text style={styles.resultAmount}>{money(guestOwed)}</Text>
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.breakdown}>
+                  <View style={styles.resultRow}>
+                    <Text style={styles.breakdownLabel}>{t('bill.subtotal')}</Text>
+                    <Text style={styles.breakdownValue}>{money(billSubtotal)}</Text>
+                  </View>
+                  {discount > 0 && (
+                    <View style={styles.resultRow}>
+                      <Text style={styles.breakdownLabel}>{t('bill.discountLine', { pct: discount })}</Text>
+                      <Text style={styles.breakdownValue}>−{money(billSubtotal - afterDiscount)}</Text>
+                    </View>
+                  )}
+                  {service && (
+                    <View style={styles.resultRow}>
+                      <Text style={styles.breakdownLabel}>{t('bill.service')}</Text>
+                      <Text style={styles.breakdownValue}>+{money(serviceAmount)}</Text>
+                    </View>
+                  )}
+                  {vat && (
+                    <View style={styles.resultRow}>
+                      <Text style={styles.breakdownLabel}>{t('bill.vat')}</Text>
+                      <Text style={styles.breakdownValue}>+{money(vatAmount)}</Text>
+                    </View>
+                  )}
+                  {tip > 0 && (
+                    <View style={styles.resultRow}>
+                      <Text style={styles.breakdownLabel}>{t('bill.tipLine', { pct: tip })}</Text>
+                      <Text style={styles.breakdownValue}>+{money(tipAmount)}</Text>
+                    </View>
+                  )}
+                  <View style={[styles.resultRow, styles.totalRow]}>
+                    <Text style={styles.totalLabel}>{t('bill.everyoneOwes')}</Text>
+                    <Text style={styles.summaryTotal}>{money(grandTotal)}</Text>
+                  </View>
+                </View>
+                <Text style={styles.hint}>{t('bill.postOptional')}</Text>
+              </>
+            )}
           </View>
           {error && <Text style={styles.error}>{error}</Text>}
         </ScrollView>
       </KeyboardAvoidingView>
       <FormFooter>
-        <Button variant="violet" title={t('bill.post')} disabled={!canPost} loading={busy} onPress={post} />
+        <View style={styles.footerRow}>
+          <View style={styles.flex}>
+            <Button variant="secondary" compact title={t('bill.close')} onPress={() => router.back()} />
+          </View>
+          <View style={styles.flex}>
+            <Button variant="violet" compact title={t('bill.post')} disabled={!canPost} loading={busy} onPress={post} />
+          </View>
+        </View>
       </FormFooter>
     </SafeAreaView>
   );
@@ -369,6 +458,30 @@ const useStyles = makeStyles((Colors) => ({
     overflow: 'hidden',
   },
   summaryLabel: { ...Type.small, fontWeight: '700', color: Colors.textSecondary },
-  summaryTotal: { ...Type.heading, fontSize: 28, lineHeight: 34, color: Colors.text },
+  summaryTotal: { ...Type.heading, fontSize: 24, lineHeight: 30, color: Colors.text },
+  resultTitle: { ...Type.label, fontSize: 17, fontWeight: '800', color: Colors.text, marginBottom: Spacing.sm },
+  eachBox: {
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.violetTint,
+  },
+  eachAmount: { ...Type.heading, fontSize: 32, lineHeight: 38, color: Colors.violetText },
+  resultList: { gap: 6, paddingVertical: Spacing.sm },
+  resultRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.md },
+  resultName: { ...Type.body, flex: 1, color: Colors.text },
+  resultAmount: { ...Type.label, fontSize: 16, color: Colors.text, fontVariant: ['tabular-nums'] },
+  breakdown: {
+    gap: 4,
+    paddingTop: Spacing.sm,
+    marginBottom: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  breakdownLabel: { ...Type.small, color: Colors.textSecondary },
+  breakdownValue: { ...Type.small, color: Colors.textSecondary, fontVariant: ['tabular-nums'] },
+  totalRow: { marginTop: Spacing.xs },
+  totalLabel: { ...Type.label, fontSize: 16, fontWeight: '800', color: Colors.text },
+  footerRow: { flexDirection: 'row', gap: Spacing.md },
   error: { ...Type.small, color: Colors.danger },
 }));

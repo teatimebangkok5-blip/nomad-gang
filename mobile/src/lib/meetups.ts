@@ -2,12 +2,13 @@ import type { PostgrestError } from '@supabase/supabase-js';
 import { useCallback, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 
+import type { EventCategory } from '@/lib/events';
 import { supabase, uniqueChannelName } from '@/lib/supabase';
 
-// "Tables" and "hangouts" in the app are `meetups` in the database (TABLE is an SQL keyword), told apart by `kind`.
-// All writes go through database functions that enforce the rules (see supabase/migrations/*_meetups.sql and
-// *_hangouts.sql). Joining, leaving, cancelling and the group chat work the same for both.
-export type MeetupKind = 'table' | 'hangout';
+// "Tables", "hangouts" and "events" in the app are `meetups` in the database (TABLE is an SQL keyword), told apart by
+// `kind`. All writes go through database functions that enforce the rules (see supabase/migrations/*_meetups.sql,
+// *_hangouts.sql and *_events.sql). Joining, leaving, cancelling and the group chat work the same for all three.
+export type MeetupKind = 'table' | 'hangout' | 'event';
 
 // Where a meetup is: a partner venue (venue_id), a Bangkok place from OpenStreetMap (place_id; place_* filled in
 // from public.places), or, for hangouts only, a spot anywhere on the map (no ids; place_name/lat/lng are the spot).
@@ -54,6 +55,11 @@ export type OpenMeetup = MeetupPlace & {
   pitstop?: boolean;
   // Only verified women see and join it.
   women_only?: boolean;
+  // Events only (null / empty otherwise): category, entry price (null = free) and photo paths (event-photos bucket).
+  event_category?: EventCategory | null;
+  entry_fee_thb?: number | null;
+  entry_fee_usd?: number | null;
+  photo_paths?: string[];
 };
 
 export type JoinMode = 'open' | 'private';
@@ -67,7 +73,14 @@ export const VIBE_EMOJI: Record<Vibe, string> = { chill: '🤫', party: '🍻', 
 export const COST_LEVELS = [0, 1, 2, 3, 4] as const;
 export type CostLevel = (typeof COST_LEVELS)[number];
 
-export type MeetupMember = { user_id: string; joined_at: string; display_name: string; avatar_path: string | null };
+export type MeetupMember = {
+  user_id: string;
+  joined_at: string;
+  display_name: string;
+  avatar_path: string | null;
+  // Events: when they plan to arrive.
+  arrival_at: string | null;
+};
 
 export type MeetupDetail = MeetupPlace & {
   id: string;
@@ -89,6 +102,13 @@ export type MeetupDetail = MeetupPlace & {
   women_only: boolean;
   // A second round started from this table / hangout.
   second_round_of: string | null;
+  // Events only.
+  event_category: EventCategory | null;
+  entry_fee_thb: number | null;
+  entry_fee_usd: number | null;
+  ticket_url: string | null;
+  photo_paths: string[];
+  announce_only: boolean;
   members: MeetupMember[];
   // The place's official website (OpenStreetMap), if any.
   place_website: string | null;
@@ -456,18 +476,21 @@ type MeetupRow = Omit<
   meetup_members: {
     user_id: string;
     joined_at: string;
+    arrival_at: string | null;
     profiles: { display_name: string; avatar_path: string | null } | null;
   }[];
 };
 
-async function fetchMeetup(id: string): Promise<MeetupDetail | null | 'error'> {
+// One meetup with its members; null when it doesn't exist (or I can't see it).
+export async function fetchMeetup(id: string): Promise<MeetupDetail | null | 'error'> {
   const { data, error } = await supabase
     .from('meetups')
     .select(
       'id, kind, time_zone, venue_id, place_id, place:places(name, name_en, name_th, lat, lng, website), spot_name, spot_lat, spot_lng, ' +
         'host_id, title, description, starts_at, ends_at, max_people, status, cost_level, meeting_point, challenge_id, join_mode, ' +
         'vibe, pitstop, women_only, second_round_of, ' +
-        'meetup_members(user_id, joined_at, profiles(display_name, avatar_path))',
+        'event_category, entry_fee_thb, entry_fee_usd, ticket_url, photo_paths, announce_only, ' +
+        'meetup_members(user_id, joined_at, arrival_at, profiles(display_name, avatar_path))',
     )
     .eq('id', id)
     .maybeSingle();
@@ -481,6 +504,7 @@ async function fetchMeetup(id: string): Promise<MeetupDetail | null | 'error'> {
     .map((m) => ({
       user_id: m.user_id,
       joined_at: m.joined_at,
+      arrival_at: m.arrival_at,
       display_name: m.profiles?.display_name ?? '',
       avatar_path: m.profiles?.avatar_path ?? null,
     }))

@@ -22,6 +22,8 @@ const ICONS = {
   hangout: { android: 'celebration', ios: 'party.popper.fill' },
   pin: { android: 'pin_drop', ios: 'mappin.and.ellipse' },
   ticket: { android: 'confirmation_number', ios: 'ticket.fill' },
+  streetView: { android: 'streetview', ios: 'binoculars.fill' },
+  link: { android: 'link', ios: 'link' },
   website: { android: 'open_in_new', ios: 'arrow.up.right.square' },
   search: { android: 'search', ios: 'magnifyingglass' },
   camera: { android: 'photo_camera', ios: 'camera.fill' },

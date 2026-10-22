@@ -23,7 +23,7 @@ export type ChatSummary = {
   other_avatar: string | null;
   dm_status: 'pending' | 'accepted' | 'declined' | null;
   requested_by: string | null;
-  meetup_kind: 'table' | 'hangout' | null;
+  meetup_kind: 'table' | 'hangout' | 'event' | null;
   place_name: string | null;
   place_name_en: string | null;
   place_name_th: string | null;

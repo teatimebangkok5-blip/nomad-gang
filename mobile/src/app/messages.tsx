@@ -19,8 +19,18 @@ import { makeStyles, useColors } from '@/lib/theme';
 import { emojiPreview } from '@/lib/tm-emoji';
 import type { TFunction } from 'i18next';
 
-type Filter = 'all' | ChatKind | 'archived';
-const FILTERS: Filter[] = ['all', 'dm', 'group', 'meetup', 'archived'];
+// 'meetup' = table and hangout chats; event chats have their own filter.
+type Filter = 'all' | ChatKind | 'event' | 'archived';
+const FILTERS: Filter[] = ['all', 'dm', 'group', 'meetup', 'event', 'archived'];
+
+function inFilter(chat: ChatSummary, filter: Filter): boolean {
+  if (filter === 'archived') return chat.archived;
+  if (chat.archived) return false;
+  if (filter === 'all') return true;
+  const isEvent = chat.chat_kind === 'meetup' && chat.meetup_kind === 'event';
+  if (filter === 'event') return isEvent;
+  return chat.chat_kind === filter && !isEvent;
+}
 
 // All my chats in one list: private chats, group chats, and table / hangout chats (also after they end, until I
 // leave them). Pinned first, then newest, with unread counts. Swipe a chat right to delete or leave it, left to pin or
@@ -35,9 +45,7 @@ export default function MessagesScreen() {
   const { chats, reload } = useChats(Boolean(session));
   const [filter, setFilter] = useState<Filter>('all');
 
-  const shown = (chats ?? []).filter((chat) =>
-    filter === 'archived' ? chat.archived : !chat.archived && (filter === 'all' || chat.chat_kind === filter),
-  );
+  const shown = (chats ?? []).filter((chat) => inFilter(chat, filter));
 
   async function flag(chat: ChatSummary, what: 'pin' | 'archive') {
     await setChatFlag(chat.chat_kind, chat.chat_id, what, what === 'pin' ? !chat.pinned : !chat.archived);
@@ -190,7 +198,7 @@ function SwipeAction({ icon, label, color, onPress }: { icon: IconName; label: s
   );
 }
 
-// A table is named by its title, else its place; a hangout by its title.
+// A table is named by its title, else its place; a hangout or an event by its title.
 function chatTitle(chat: ChatSummary, t: TFunction, language: Language): string {
   if (chat.chat_kind !== 'meetup') return chat.title || '—';
   const place =
@@ -199,6 +207,7 @@ function chatTitle(chat: ChatSummary, t: TFunction, language: Language): string 
     chat.place_name ||
     '';
   if (chat.meetup_kind === 'hangout') return chat.title || place || t('hangouts.hangout');
+  if (chat.meetup_kind === 'event') return chat.title || place || t('events.event');
   return chat.title ? `${chat.title} · ${place}` : place || t('chat.openChat');
 }
 
@@ -238,7 +247,11 @@ function ChatRow({
       : chat.chat_kind === 'group'
         ? t('messages.people', { count: chat.member_count })
         : [
-            chat.meetup_kind === 'hangout' ? `🙌 ${t('hangouts.hangout')}` : `👥 ${t('messages.table')}`,
+            chat.meetup_kind === 'event'
+              ? `🎟️ ${t('events.event')}`
+              : chat.meetup_kind === 'hangout'
+                ? `🙌 ${t('hangouts.hangout')}`
+                : `👥 ${t('messages.table')}`,
             chat.cancelled ? t('messages.cancelled') : chat.ended ? t('messages.ended') : null,
           ]
             .filter(Boolean)
@@ -277,7 +290,17 @@ function ChatRow({
       <ChatAvatar
         name={title}
         photoPath={chat.chat_kind === 'dm' ? chat.other_avatar : null}
-        emoji={chat.chat_kind === 'group' ? chat.emoji : chat.chat_kind === 'meetup' ? (chat.meetup_kind === 'hangout' ? '🙌' : '👥') : null}
+        emoji={
+          chat.chat_kind === 'group'
+            ? chat.emoji
+            : chat.chat_kind === 'meetup'
+              ? chat.meetup_kind === 'event'
+                ? '🎟️'
+                : chat.meetup_kind === 'hangout'
+                  ? '🙌'
+                  : '👥'
+              : null
+        }
         userId={chat.chat_kind === 'dm' ? chat.other_id : null}
       />
       <View style={styles.rowBody}>

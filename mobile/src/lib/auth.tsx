@@ -145,7 +145,7 @@ export async function signOut() {
   await GoogleSignin.signOut().catch(() => {});
 }
 
-// Deletes my account for good: first my files (chat photos / voice notes, profile, gem and story photos, which only I can
+// Deletes my account for good: first my files (chat photos / voice notes, profile, gem, story and event photos, which only I can
 // delete), then everything else in one database call (delete_my_account), then signs out on this phone.
 export async function deleteAccount(myId: string): Promise<boolean> {
   const { data: files } = await supabase.rpc('my_account_files');
@@ -155,7 +155,7 @@ export async function deleteAccount(myId: string): Promise<boolean> {
   for (let i = 0; i < chatFiles.length; i += 100) {
     await supabase.storage.from('chat-media').remove(chatFiles.slice(i, i + 100));
   }
-  for (const bucket of ['profile-photos', 'gem-photos', 'story-photos', 'verifications']) {
+  for (const bucket of ['profile-photos', 'gem-photos', 'story-photos', 'event-photos', 'verifications']) {
     const { data: photos } = await supabase.storage.from(bucket).list(myId, { limit: 1000 });
     if (photos?.length) {
       await supabase.storage.from(bucket).remove(photos.map((photo) => `${myId}/${photo.name}`));

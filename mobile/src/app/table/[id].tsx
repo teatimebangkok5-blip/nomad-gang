@@ -9,6 +9,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { GlossyFill } from '@/components/glossy';
 import { Button } from '@/components/button';
 import { CouponBox } from '@/components/coupon-box';
+import { ArrivalSheet, EventPhotos, WhoWhen } from '@/components/event-details';
 import { LevelBadge } from '@/components/level-badge';
 import { Icon, type IconName } from '@/components/icon';
 import { DealTag, KindTag, StatusTag, VibeTag, WomenOnlyTag, dealBadge } from '@/components/meetup-card';
@@ -23,8 +24,22 @@ import { VenueMap } from '@/components/venue-map';
 import { avatarColor, Radius, Raised, Spacing, Type } from '@/constants/theme';
 import { localized, useLanguage } from '@/i18n';
 import { useAuth } from '@/lib/auth';
-import { deviceZone, formatUtcOffset, formatWhen, formatWhenRange, sameClock } from '@/lib/bangkok-time';
+import { bangkokDay, deviceZone, formatUtcOffset, formatWhen, formatWhenRange, sameClock } from '@/lib/bangkok-time';
 import { COUPONS_ENABLED, useCheckedIn } from '@/lib/coupons';
+import {
+  EVENT_EMOJI,
+  eventPriceLabel,
+  googleMapsPinUrl,
+  isPaidEvent,
+  joinEvent,
+  joinWaitlist,
+  leaveWaitlist,
+  setEventAnnounceOnly,
+  setEventArrival,
+  streetViewUrl,
+  useEventWaitlist,
+  type EventErrorKey,
+} from '@/lib/events';
 import { meetupStatus } from '@/lib/feed';
 import { isSafeLink, openLink, ticketLink } from '@/lib/links';
 import {
@@ -52,8 +67,10 @@ import { makeStyles, useColors } from '@/lib/theme';
 
 const HERO = 196;
 
-// One table or hangout: a small map of where, what and when, the check-in box, who's coming, and join / leave /
-// cancel / chat in the bar at the bottom.
+// One table, hangout or event: a small map of where (an event's photos, if it has any), what and when, the check-in
+// box, who's coming, and join / leave / cancel / chat in the bar at the bottom. Events also show the entry price,
+// Google Maps / Street View links, everyone's arrival time ("who's coming when"), the waiting list when full, and the
+// organiser's chat setting.
 export default function TableScreen() {
   const styles = useStyles();
   const Colors = useColors();
@@ -65,7 +82,9 @@ export default function TableScreen() {
   const { state, reload } = useMeetup(id);
   const venues = useVenues();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<MeetupErrorKey | null>(null);
+  const [error, setError] = useState<MeetupErrorKey | EventErrorKey | null>(null);
+  // Events: the arrival-time sheet, for joining, the waiting list or changing my time.
+  const [arrivalFor, setArrivalFor] = useState<'join' | 'waitlist' | 'change' | null>(null);
   // 👍 / 👎 for the other members: once it has ended (not cancelled), for 14 days, if you were there.
   const [openedAt] = useState(() => Date.now());
   const loaded = state.status === 'ready' ? state.meetup : null;
@@ -81,8 +100,10 @@ export default function TableScreen() {
   // A day hangout made from a day plan links to the plan.
   const dayPlan = usePlanForMeetup(id);
   const challenges = useChallenges();
+  const isEventLoaded = loaded?.kind === 'event';
+  const waitlist = useEventWaitlist(id, isEventLoaded && !!session, loaded?.members.length ?? 0);
 
-  async function run(action: (meetupId: string) => Promise<{ error: MeetupErrorKey | null }>) {
+  async function run(action: (meetupId: string) => Promise<{ error: MeetupErrorKey | EventErrorKey | null }>) {
     setError(null);
     setBusy(true);
     const result = await action(id);
@@ -90,6 +111,15 @@ export default function TableScreen() {
     if (result.error) setError(result.error);
     reload();
     joinRequests.reload();
+    waitlist.reload();
+  }
+
+  async function pickArrival(at: Date | null) {
+    const what = arrivalFor;
+    await run((meetupId) =>
+      what === 'join' ? joinEvent(meetupId, at) : what === 'waitlist' ? joinWaitlist(meetupId, at) : setEventArrival(meetupId, at),
+    );
+    setArrivalFor(null);
   }
 
   if (state.status === 'loading') {
@@ -131,12 +161,30 @@ export default function TableScreen() {
   const ended = new Date(meetup.ends_at) <= new Date();
   const cancelled = meetup.status === 'cancelled';
   const seatsLeft = Math.max(0, meetup.max_people - meetup.members.length);
-  const isHangout = meetup.kind === 'hangout';
+  const isEvent = meetup.kind === 'event';
+  // Events read like hangouts (where, description, times as a range), with their own wording.
+  const isHangout = meetup.kind === 'hangout' || isEvent;
   const placeLabel = venue ? localized(venue, 'name', language) : meetupPlaceName(meetup, language);
-  const errorText = error ? (isHangout ? t(`hangouts.errors.${error}`) : t(`tables.errors.${error}`)) : null;
-  // Hangouts: the official ticket page the founder added, else the place's official website (OpenStreetMap).
-  const tickets = isHangout && venue ? ticketLink(venue) : null;
+  const errorText = error
+    ? isEvent
+      ? t(`events.errors.${error}`)
+      : isHangout
+        ? t(`hangouts.errors.${error as MeetupErrorKey}`)
+        : t(`tables.errors.${error as MeetupErrorKey}`)
+    : null;
+  // Events: the organiser's own ticket page. Hangouts: the official ticket page the founder added, else the place's
+  // official website (OpenStreetMap).
+  const tickets = isEvent
+    ? isSafeLink(meetup.ticket_url)
+      ? meetup.ticket_url
+      : null
+    : isHangout && venue
+      ? ticketLink(venue)
+      : null;
   const website = isHangout && !tickets && isSafeLink(meetup.place_website) ? meetup.place_website : null;
+  const myArrival = meetup.members.find((m) => m.user_id === userId)?.arrival_at ?? null;
+  const onWaitlist = waitlist.myPosition !== null;
+  const multiDay = bangkokDay(new Date(meetup.starts_at), meetup.time_zone) !== bangkokDay(new Date(meetup.ends_at), meetup.time_zone);
   const status =
     cancelled || ended
       ? null
@@ -159,13 +207,17 @@ export default function TableScreen() {
   }
 
   const leave = () =>
-    isHangout
-      ? confirm(t('hangouts.leaveConfirm'), t('hangouts.leave'), () => run(leaveMeetup))
-      : confirm(t('tables.leaveConfirm'), t('tables.leave'), () => run(leaveMeetup));
+    isEvent
+      ? confirm(t('events.leaveConfirm'), t('events.leave'), () => run(leaveMeetup))
+      : isHangout
+        ? confirm(t('hangouts.leaveConfirm'), t('hangouts.leave'), () => run(leaveMeetup))
+        : confirm(t('tables.leaveConfirm'), t('tables.leave'), () => run(leaveMeetup));
   const cancel = () =>
-    isHangout
-      ? confirm(t('hangouts.cancelConfirm'), t('hangouts.cancel'), () => run(cancelMeetup))
-      : confirm(t('tables.cancelConfirm'), t('tables.cancelTable'), () => run(cancelMeetup));
+    isEvent
+      ? confirm(t('events.cancelConfirm'), t('events.cancel'), () => run(cancelMeetup))
+      : isHangout
+        ? confirm(t('hangouts.cancelConfirm'), t('hangouts.cancel'), () => run(cancelMeetup))
+        : confirm(t('tables.cancelConfirm'), t('tables.cancelTable'), () => run(cancelMeetup));
   const open = !cancelled && !ended;
 
   return (
@@ -173,7 +225,9 @@ export default function TableScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         {/* Where: a small map of the place (or the venue's photo), under the back and share buttons. */}
         <View style={[styles.hero, { height: insets.top + HERO }]}>
-          {at ? (
+          {isEvent && meetup.photo_paths.length > 0 ? (
+            <EventPhotos paths={meetup.photo_paths} height={insets.top + HERO} />
+          ) : at ? (
             // A picture of the place: touches go to the scroll view.
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
             <VenueMap
@@ -186,8 +240,8 @@ export default function TableScreen() {
                 {
                   key: 'here',
                   ...at,
-                  emoji: isHangout ? '🙌' : '👥',
-                  tone: isHangout ? 'violet' : 'orange',
+                  emoji: isEvent ? EVENT_EMOJI[meetup.event_category ?? 'other'] : isHangout ? '🙌' : '👥',
+                  tone: isEvent ? 'event' : isHangout ? 'violet' : 'orange',
                   count: meetup.members.length,
                 },
               ]}
@@ -217,7 +271,7 @@ export default function TableScreen() {
 
         <View style={styles.body}>
           <View style={styles.tags}>
-            <KindTag hangout={isHangout} pitstop={meetup.pitstop} />
+            <KindTag kind={meetup.kind} category={meetup.event_category} pitstop={meetup.pitstop} />
             {cancelled || ended ? (
               <View style={styles.endedTag}>
                 <Text style={styles.endedText}>
@@ -256,12 +310,18 @@ export default function TableScreen() {
             </InfoRow>
             {isHangout && <InfoRow icon={venue ? venue.category : 'pin'}>{placeLabel}</InfoRow>}
             {meetup.meeting_point ? <InfoRow icon="pin">{meetup.meeting_point}</InfoRow> : null}
-            {typeof meetup.cost_level === 'number' ? (
+            {isEvent ? (
+              <InfoRow icon={isPaidEvent(meetup) ? 'ticket' : 'doorOpen'}>
+                {isPaidEvent(meetup) ? eventPriceLabel(meetup, language, t('events.free')) : t('events.freeEntry')}
+                {isPaidEvent(meetup) && !tickets ? <Text style={styles.infoMuted}>{`  ·  ${t('events.payAtEvent')}`}</Text> : null}
+              </InfoRow>
+            ) : typeof meetup.cost_level === 'number' ? (
               <InfoRow icon="payments">{t('feed.costPerPerson', { cost: t(`feed.cost.${meetup.cost_level}`) })}</InfoRow>
             ) : null}
             <InfoRow icon="group">
               {t('tables.peopleCount', { count: meetup.members.length, max: meetup.max_people })}
               {open && seatsLeft > 0 ? ` · ${t('tables.seatsLeft', { count: seatsLeft })}` : ''}
+              {isEvent && open && waitlist.waiting > 0 ? ` · ${t('events.waitlistCount', { count: waitlist.waiting })}` : ''}
             </InfoRow>
             {challenge && (
               <InfoRow emoji={challenge.emoji}>
@@ -295,7 +355,59 @@ export default function TableScreen() {
                 onPress={() => openLink(tickets ?? website)}
               />
             )}
+            {/* Events: the organiser edits it (place, time, price, photos…). */}
+            {isEvent && isHost && open && (
+              <LinkChip
+                icon="edit"
+                label={t('events.edit')}
+                onPress={() => router.push({ pathname: '/create-hangout', params: { editEventId: id } })}
+              />
+            )}
+            {/* Events: the spot in Google Maps and Street View (free links, no API). */}
+            {isEvent && at && (
+              <>
+                <LinkChip icon="map" label={t('events.googleMaps')} onPress={() => openLink(googleMapsPinUrl(at.lat, at.lng))} />
+                <LinkChip icon="streetView" label={t('events.streetView')} onPress={() => openLink(streetViewUrl(at.lat, at.lng))} />
+              </>
+            )}
           </View>
+
+          {/* Events: my arrival time (members), and the organiser's chat setting. */}
+          {isEvent && isMember && open && (
+            <View style={styles.arrival}>
+              <Icon name="time" size={22} color={Colors.pinkText} />
+              <Text style={[styles.infoText, styles.flex]}>
+                {myArrival
+                  ? t('events.myArrival', { time: formatWhen(myArrival, t, undefined, meetup.time_zone) })
+                  : t('events.noArrival')}
+              </Text>
+              <Pressable accessibilityRole="button" onPress={() => setArrivalFor('change')} hitSlop={8}>
+                <Text style={styles.arrivalLink}>{myArrival ? t('events.changeArrival') : t('events.setArrival')}</Text>
+              </Pressable>
+            </View>
+          )}
+          {isEvent && isHost && open && (
+            <Pressable
+              accessibilityRole="switch"
+              accessibilityState={{ checked: meetup.announce_only }}
+              disabled={busy}
+              onPress={() => run((meetupId) => setEventAnnounceOnly(meetupId, !meetup.announce_only))}
+              style={({ pressed }) => [styles.arrival, pressed && styles.pressed]}>
+              <Text style={styles.dealEmoji}>📣</Text>
+              <View style={styles.flex}>
+                <Text style={styles.infoText}>{t('events.announceOnly')}</Text>
+                <Text style={styles.dealNote}>{t('events.announceOnlyHint')}</Text>
+              </View>
+              <Icon
+                name={meetup.announce_only ? 'checkCircle' : 'circle'}
+                size={24}
+                color={meetup.announce_only ? Colors.pinkText : Colors.textMuted}
+              />
+            </Pressable>
+          )}
+          {isEvent && (
+            <WhoWhen arrivals={meetup.members.map((m) => m.arrival_at)} zone={meetup.time_zone} multiDay={multiDay} />
+          )}
 
           {dayPlan && <PlanMap start={null} stops={dayPlan.stops} height={220} />}
 
@@ -335,7 +447,7 @@ export default function TableScreen() {
               )}
 
           {/* Continuing the night? Members, from 30 minutes before the end until 3 hours after. */}
-          {isMember && !cancelled && !meetup.second_round_of && secondRoundOpen(meetup.ends_at, openedAt) && (
+          {isMember && !isEvent && !cancelled && !meetup.second_round_of && secondRoundOpen(meetup.ends_at, openedAt) && (
             <SecondRoundPrompt meetupId={id} />
           )}
 
@@ -349,7 +461,11 @@ export default function TableScreen() {
 
           {(cancelled || ended) && (
             <Text style={styles.status}>
-              {isHangout
+              {isEvent
+                ? cancelled
+                  ? t('events.cancelled')
+                  : t('events.ended')
+                : isHangout
                 ? cancelled
                   ? t('hangouts.cancelled')
                   : t('hangouts.ended')
@@ -468,11 +584,15 @@ export default function TableScreen() {
                         </Text>
                         <VerifiedBadge userId={member.user_id} size={15} withHost={member.user_id === meetup.host_id} />
                       </View>
-                      {open && isMember && (
+                      {isEvent && open && member.arrival_at ? (
+                        <Text style={styles.memberSub}>
+                          {`🕒 ${formatWhen(member.arrival_at, t, undefined, meetup.time_zone)}`}
+                        </Text>
+                      ) : !isEvent && open && isMember ? (
                         <Text style={[styles.memberSub, here && styles.memberHere]}>
                           {here ? t('coupon.memberCheckedIn') : t('coupon.memberNotYet')}
                         </Text>
-                      )}
+                      ) : null}
                     </View>
                     {member.user_id === meetup.host_id && <Text style={styles.hostTag}>{t('tables.host')}</Text>}
                   </Pressable>
@@ -526,7 +646,7 @@ export default function TableScreen() {
             <>
               <View style={styles.flex}>
                 <Button
-                  title={isHangout ? t('hangouts.chat') : t('chat.openChat')}
+                  title={isEvent ? t('events.chat') : isHangout ? t('hangouts.chat') : t('chat.openChat')}
                   variant="secondary"
                   icon={<Icon name="forum" size={22} color={Colors.text} />}
                   onPress={() => router.push({ pathname: '/table-chat/[id]', params: { id } })}
@@ -534,7 +654,15 @@ export default function TableScreen() {
               </View>
               {open && (
                 <Button
-                  title={isHost ? (isHangout ? t('hangouts.cancel') : t('tables.cancelTable')) : t('tables.leaveShort')}
+                  title={
+                    isHost
+                      ? isEvent
+                        ? t('events.cancel')
+                        : isHangout
+                          ? t('hangouts.cancel')
+                          : t('tables.cancelTable')
+                      : t('tables.leaveShort')
+                  }
                   variant="danger"
                   loading={busy}
                   onPress={isHost ? cancel : leave}
@@ -562,6 +690,21 @@ export default function TableScreen() {
                     onPress={() => run(requestToJoin)}
                   />
                 )
+              ) : isEvent ? (
+                // Events: pick an arrival time first; when full, the waiting list.
+                onWaitlist ? (
+                  <View style={styles.waitlist}>
+                    <Text style={styles.waitlistText}>{t('events.waitlistPosition', { position: waitlist.myPosition })}</Text>
+                    <Button title={t('events.waitlistLeave')} variant="secondary" loading={busy} onPress={() => run(leaveWaitlist)} />
+                  </View>
+                ) : seatsLeft > 0 ? (
+                  <Button title={t('events.join')} icon={<Icon name="ticket" size={20} color={Colors.white} />} loading={busy} onPress={() => setArrivalFor('join')} />
+                ) : (
+                  <View style={styles.waitlist}>
+                    <Text style={styles.waitlistText}>{t('events.waitlistHint')}</Text>
+                    <Button title={t('events.waitlistJoin')} variant="secondary" loading={busy} onPress={() => setArrivalFor('waitlist')} />
+                  </View>
+                )
               ) : (
                 <Button
                   title={seatsLeft > 0 ? t('tables.join') : t('tables.full')}
@@ -574,6 +717,21 @@ export default function TableScreen() {
             </View>
           )}
         </View>
+      )}
+
+      {isEvent && arrivalFor && (
+        <ArrivalSheet
+          key={arrivalFor}
+          open
+          onClose={() => setArrivalFor(null)}
+          startsAt={meetup.starts_at}
+          endsAt={meetup.ends_at}
+          zone={meetup.time_zone}
+          initial={arrivalFor === 'change' ? myArrival : null}
+          busy={busy}
+          confirmLabel={arrivalFor === 'join' ? t('events.join') : arrivalFor === 'waitlist' ? t('events.waitlistJoin') : t('events.saveArrival')}
+          onPick={pickArrival}
+        />
       )}
     </View>
   );
@@ -715,6 +873,17 @@ const useStyles = makeStyles((Colors) => ({
     overflow: 'hidden',
   },
   votes: { flexDirection: 'row', gap: Spacing.xs },
+  arrival: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    padding: 14,
+    borderRadius: Radius.lg,
+    backgroundColor: Colors.pinkTint,
+  },
+  arrivalLink: { ...Type.label, fontWeight: '800', color: Colors.pinkText, textDecorationLine: 'underline' },
+  waitlist: { gap: Spacing.sm },
+  waitlistText: { ...Type.small, fontWeight: '600', color: Colors.textSecondary, textAlign: 'center' },
   privateTag: {
     flexDirection: 'row',
     alignItems: 'center',

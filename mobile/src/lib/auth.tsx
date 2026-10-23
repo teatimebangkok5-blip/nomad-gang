@@ -8,6 +8,7 @@ import type { Session } from '@supabase/supabase-js';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import { createContext, use, useEffect, useState, type ReactNode } from 'react';
+import { Platform } from 'react-native';
 
 import { skipLogin } from '@/lib/preview';
 import { unregisterPush } from '@/lib/push';
@@ -16,6 +17,8 @@ import { supabase } from '@/lib/supabase';
 GoogleSignin.configure({
   // Supabase checks Google's ID token against this "Web application" client ID.
   webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+  // iPhone only: the "iOS" OAuth client (also listed in Supabase's Google provider).
+  iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || undefined,
 });
 
 type AuthState = {
@@ -129,6 +132,12 @@ export async function signInWithApple(): Promise<AppleSignInResult> {
       console.warn('Supabase Apple sign-in failed', error.message);
       return 'error';
     }
+    // Kept so deleting the account can revoke it (Apple's rule). Best effort: sign-in doesn't wait for it.
+    if (credential.authorizationCode) {
+      supabase.functions
+        .invoke('apple-account', { body: { action: 'save', code: credential.authorizationCode } })
+        .then(({ error: saveError }) => saveError && console.warn('Keeping the Apple token failed', saveError.message));
+    }
     return 'signed-in';
   } catch (error) {
     if (error instanceof Error && 'code' in error && error.code === 'ERR_REQUEST_CANCELED') return 'cancelled';
@@ -145,8 +154,27 @@ export async function signOut() {
   await GoogleSignin.signOut().catch(() => {});
 }
 
+// Apple requires that deleting an account also revokes its Sign in with Apple token (supabase/functions/apple-account).
+// Without a kept token (it couldn't be saved at sign-in), one more Apple confirmation on the iPhone gives a fresh code
+// to revoke. Never stops the deletion: if Apple can't be reached, the account is still deleted.
+async function revokeAppleSignIn() {
+  try {
+    const { data } = await supabase.auth.getUser();
+    if (!data.user?.identities?.some((identity) => identity.provider === 'apple')) return;
+    const { data: result } = await supabase.functions.invoke('apple-account', { body: { action: 'revoke' } });
+    if ((result as { reason?: string } | null)?.reason !== 'no_token' || Platform.OS !== 'ios') return;
+    const credential = await AppleAuthentication.signInAsync({ requestedScopes: [] });
+    if (credential.authorizationCode) {
+      await supabase.functions.invoke('apple-account', { body: { action: 'revoke', code: credential.authorizationCode } });
+    }
+  } catch (error) {
+    console.warn('Revoking Sign in with Apple failed', error);
+  }
+}
+
 // Deletes my account for good: first my files (chat photos / voice notes, profile, gem, story and event photos, which only I can
-// delete), then everything else in one database call (delete_my_account), then signs out on this phone.
+// delete), the Sign in with Apple token, then everything else in one database call (delete_my_account), then signs out
+// on this phone.
 export async function deleteAccount(myId: string): Promise<boolean> {
   const { data: files } = await supabase.rpc('my_account_files');
   const chatFiles = ((files ?? []) as { bucket: string; path: string }[])
@@ -163,6 +191,7 @@ export async function deleteAccount(myId: string): Promise<boolean> {
   }
 
   await unregisterPush().catch(() => {});
+  await revokeAppleSignIn();
   const { error } = await supabase.rpc('delete_my_account');
   if (error) {
     console.warn('Deleting the account failed', error.message);

@@ -24,11 +24,17 @@ Product spec and tech stack below are agreed. Built so far:
   5 km as fuzzy violet dots + list) and Messages (inbox) tabs, and direct messages (`src/app/dm/[userId].tsx`).
   Shared UI: `src/components/chat-view.tsx`; data: `src/lib/chat.ts`, `src/lib/travellers.ts`; Block/Report menu:
   `src/lib/safety-menu.ts`. Settings has a "Show me to travellers nearby" switch.
-  Rules (database, `*_chat_and_travellers.sql`): visibility is **opt-in** (`profiles.discoverable`; off deletes the
-  location); exact locations are never returned (`user_locations` has no API access); dots are moved 150–400 m in a
-  direction fixed per person per day; distances rounded to 0.5 km; locations older than 2 h are ignored; you must be
-  visible to see others. A first DM is a **request** (one message until the receiver replies or accepts); blocking
-  hides both ways; reports are readable only by admins. Sending DMs needs a verified phone or an allowed guest.
+  Rules (database, `*_chat_and_travellers.sql`, changed by `*_nearby_last_seen_profile_dm.sql` 2026-10-23):
+  visibility is **opt-in** (`profiles.discoverable`; off deletes the location; home asks once per account on the
+  phone, `askToBeVisibleOnce`); exact locations are never returned (`user_locations` has no API access); a visible
+  person's position is saved **every time the app opens / returns** (`useShareLocationOnOpen` in the root layout, max
+  every 10 min, only if location is already allowed) and counts for **7 days** ("active 3 days ago"); dots are moved
+  150–400 m in a direction fixed per person and **saved day** (`fuzzed_location_on`); distances rounded to 0.5 km; you
+  must be visible to see others. **Private messages start from any profile** (chat button next to Follow): between
+  friends (mutual follows) the thread is accepted at once, otherwise the first DM is a **request** (one message until
+  the receiver replies or accepts; becoming friends opens it); no nearby check any more; max 20 new threads per person
+  per 24 h (`too_many_requests`). Blocking hides both ways; reports are readable only by admins. Sending DMs needs a
+  verified phone or an allowed guest.
 - **Hangouts** (added 2026-10-16): groups that meet to do something (park walk, market, museum, event) anywhere in
   Bangkok. Home has a violet **"Create hangout"** button next to "Create table" (List is now an icon button). It opens
   `src/app/create-hangout.tsx`: step 1 is a **full-screen Hangout map** (violet dots = OSM hangout places, partner
@@ -310,6 +316,22 @@ link"), tries
   point, price, ticket link, photos, announcements only; not who can join / women-only. Arrival times outside new hours
   are cleared; a new place resets the city; members get a push (`event_update`) when time, place or price change.
   Removed photos are deleted by the app after saving.
+- **iPhone release prep** (2026-10-23, founder has an Apple Developer account and an iPhone for TestFlight): **no ads on
+  iOS** at first (founder): `src/lib/ads.ios.ts` is a no-op twin of `ads.ts`, and `mobile/react-native.config.js` keeps
+  `react-native-google-mobile-ads` out of the iOS build (no ATT prompt needed). `plus.tsx` hides Monthly / Yearly,
+  "Contact us" and "No ads" on iOS (Apple 3.1.1); only "free at level 15" shows. `directionsUrl()` opens Apple Maps
+  on iOS (`geo:` is Android-only). Google sign-in on iOS: `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` → `iosClientId` in
+  `auth.tsx`, and `app.config.ts` adds the Google Sign-In plugin with the reversed ID as `iosUrlScheme` only when it's
+  set. Store kit in `app-store/` (listing EN + TH, review notes, App Privacy answers, 6.9" screenshots made by
+  `mobile/scripts/gen-app-store-screenshots.mjs` from `store-screenshots/`); steps in README "iPhone / App Store".
+  **Sign in with Apple revocation** (`*_apple_token_revocation.sql` + Edge Function `supabase/functions/apple-account`,
+  Deno, deployed by hand with `--no-verify-jwt`; secrets `APPLE_TEAM_ID` / `APPLE_KEY_ID` / `APPLE_PRIVATE_KEY`): after
+  an Apple sign-in the app sends the one-time code (`save`), the function swaps it for a refresh token kept in
+  `apple_tokens` (no API access; `save_apple_token`, `apple_token_for(user)` own or admin). `deleteAccount()` and the
+  admin panel's `deleteUser` call `revoke` first (never blocks the deletion); without a kept token the iPhone gets a
+  fresh code with one more Apple confirmation. The function acts with the caller's session + apikey (no service key).
+  Screenshots: no partner-discount screens while coupons are off; the Thai set uses only Thai captures
+  (`store-screenshots/th/`, list in `app-store/README.md`).
 - Privacy Policy updated 2026-10-21 for verification (explicit consent, photos deleted on decision, gender never
   shown), tips, bills and Frankfurter.
 - **Login without SMS for now** (founder's decision 2026-10-16): `app_settings.require_phone_verification` (default
@@ -486,8 +508,7 @@ link"), tries
   members with "Checked in ✓" (`useCheckedIn`), chat + leave / cancel / join in a bottom bar, Share. Welcome: the
   icon artwork as hero until a photo is supplied. Phone code: six boxes over one hidden input.
 - **Not started:** web push to the founder's phone for redemptions, tables in the admin panel, viewing / blocking users (only
-  deletion exists), Apple token
-  revocation on account deletion. Places missing from OpenStreetMap can be added by the founder (admin insert into `places`; no UI yet).
+  deletion exists). Places missing from OpenStreetMap can be added by the founder (admin insert into `places`; no UI yet).
 - Running on the founder's Redmi as a local release APK, connected to the real Supabase project
   (`zxghiilryqzexzvacbrl`, migrations applied by Supabase's GitHub integration on push to `main`).
 - **Production builds (Play Store)**: `eas build --platform android --profile production` (AAB, versionCode
@@ -690,7 +711,7 @@ How the key rules map onto this:
   - `src/lib/supabase.ts`: client with expo-sqlite `localStorage` session storage. Env vars are `EXPO_PUBLIC_*`
     (see `mobile/.env.example`) and are baked into the app, so never put secrets there.
   - The Google Sign-In config plugin is deliberately **not** in `app.json`: without Firebase it only configures iOS
-    and throws without `iosUrlScheme`. Add it (with `iosUrlScheme`) when building for iPhone.
+    and throws without `iosUrlScheme`. `app.config.ts` adds it once `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` is set.
 - `web/`: Next.js admin panel (`src/app/admin/`) and, later, the staff QR coupon page.
   - `src/lib/auth.ts`: `requireAdmin()`. Call it at the top of **every** admin page and Server Action. It returns a
     Supabase client acting as the founder.
@@ -700,6 +721,8 @@ How the key rules map onto this:
     Server Actions with `useActionState` and return a `FormState`. Return errors instead of throwing, because
     thrown messages are hidden in production.
   - `src/lib/types.ts`: hand-written row types. Replace with generated Supabase types once a project is linked.
+- `supabase/functions/`: Edge Functions (Deno), deployed by hand with the Supabase CLI (README), not by the GitHub
+  integration. Only `apple-account` so far.
 - `supabase/migrations/`: SQL migrations, applied in filename order. `supabase/tests/rls.test.mjs` applies them to
   PGlite (in-memory Postgres with PostGIS and pgcrypto) with a stand-in for Supabase roles and checks the security
   rules. Add a check there for every new table, policy or function.

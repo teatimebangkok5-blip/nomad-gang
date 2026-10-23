@@ -322,12 +322,23 @@ export default function ProfileScreen() {
           </>
         ) : !isOwner ? (
           <View style={styles.followRow}>
-            <Button
-              title={profile.i_follow ? t('profile.unfollow') : t('profile.follow')}
-              variant={profile.i_follow ? 'secondary' : 'primary'}
-              loading={busy}
-              onPress={() => toggleFollow(profile)}
-            />
+            <View style={styles.flex}>
+              <Button
+                title={profile.i_follow ? t('profile.unfollow') : t('profile.follow')}
+                variant={profile.i_follow ? 'secondary' : 'primary'}
+                loading={busy}
+                onPress={() => toggleFollow(profile)}
+              />
+            </View>
+            {/* Private chat: opens at once between friends, otherwise the first message is a request. */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('profile.message')}
+              onPress={() => router.push({ pathname: '/dm/[userId]', params: { userId: profile.id } })}
+              style={({ pressed }) => [styles.messageButton, pressed && styles.pressed]}>
+              <GlossyFill />
+              <Icon name="chat" size={24} color={Colors.violetText} />
+            </Pressable>
           </View>
         ) : null}
 
@@ -598,7 +609,20 @@ const useStyles = makeStyles((Colors) => ({
   actionDashed: { borderStyle: 'dashed', backgroundColor: 'transparent', elevation: 0, shadowOpacity: 0 },
   actionIcon: { width: 44, paddingHorizontal: 0, justifyContent: 'center' },
   actionText: { ...Type.label, fontSize: 14, color: Colors.text },
-  followRow: { marginTop: Spacing.xl },
+  followRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, marginTop: Spacing.xl },
+  flex: { flex: 1 },
+  messageButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 1.5,
+    borderColor: Colors.borderStrong,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    ...Raised,
+  },
   tabs: {
     flexDirection: 'row',
     marginTop: Spacing.xl,

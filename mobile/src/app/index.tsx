@@ -58,6 +58,7 @@ import { onAppReopened, setAdsUser, showLaunchAd, showOpenAd } from '@/lib/ads';
 import { usePlus } from '@/lib/plus';
 import { clearMyExpiredStories, groupStories, useStories } from '@/lib/stories';
 import { makeStyles, useColors } from '@/lib/theme';
+import { askToBeVisibleOnce } from '@/lib/travellers';
 
 // What's open over the map: the place sheet for a partner venue or any Bangkok food place (OpenStreetMap) someone
 // tapped, or the pop-up cards of the tables / hangouts at one pin.
@@ -159,6 +160,14 @@ export default function HomeScreen() {
       if (homeFocused.current) showOpenAd(false);
     });
   }, [session, plus.status, plusMember]);
+
+  // Once per account: ask whether to show me to travellers nearby (after the launch ad has had its moment).
+  const askUserId = skipLogin ? undefined : session?.user.id;
+  useEffect(() => {
+    if (!askUserId) return;
+    const timer = setTimeout(() => askToBeVisibleOnce(askUserId, t), 4000);
+    return () => clearTimeout(timer);
+  }, [askUserId, t]);
 
   // Stories: one pin per person (their profile picture in a brand ring) at their latest story. Key s:<user id>.
   const { stories } = useStories(!!session);

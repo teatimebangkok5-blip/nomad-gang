@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import type { TFunction } from 'i18next';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, Text, View } from 'react-native';
@@ -17,7 +18,7 @@ import { useFollowing } from '@/lib/profiles';
 import { makeStyles, useColors } from '@/lib/theme';
 import { useDiscoverable, useNearbyTravellers, type Traveller } from '@/lib/travellers';
 
-// Travellers: people within 5 km who chose to be visible (fuzzy dots + list). Messages are on home's Messages button.
+// Travellers: people within 5 km who chose to be visible, where they last opened the app (fuzzy dots + list). Messages are on home's Messages button.
 export default function TravellersScreen() {
   const styles = useStyles();
   const { t } = useTranslation();
@@ -132,8 +133,7 @@ function NearbyTab({ myId }: { myId: string | undefined }) {
                   {item.display_name}
                 </Text>
                 <Text style={styles.muted} numberOfLines={1}>
-                  {t('travellers.distance', { km: item.distance_km.toFixed(1) })} ·{' '}
-                  {item.minutes_ago < 5 ? t('travellers.activeNow') : t('travellers.activeAgo', { min: item.minutes_ago })}
+                  {t('travellers.distance', { km: item.distance_km.toFixed(1) })} · {activeLabel(item.minutes_ago, t)}
                 </Text>
               </View>
             </Pressable>
@@ -161,6 +161,14 @@ function NearbyTab({ myId }: { myId: string | undefined }) {
       }}
     />
   );
+}
+
+// People stay listed at the last place they opened the app for 7 days.
+function activeLabel(minutes: number, t: TFunction) {
+  if (minutes < 5) return t('travellers.activeNow');
+  if (minutes < 60) return t('travellers.activeAgo', { min: minutes });
+  if (minutes < 24 * 60) return t('travellers.activeHoursAgo', { count: Math.floor(minutes / 60) });
+  return t('travellers.activeDaysAgo', { count: Math.floor(minutes / (24 * 60)) });
 }
 
 const AVATAR_SIZE = 44;

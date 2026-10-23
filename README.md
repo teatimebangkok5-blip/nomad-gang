@@ -186,7 +186,7 @@ Redemption QR codes open `<website>/r/<code>`, so the website must be online bef
 The Terms / Privacy text lives in `mobile/src/legal/content.ts`. After editing it run `cd mobile && npm run sync:legal`
 (copies it to `web/src/lib/legal-content.ts`). It is a draft: have it checked (ideally by a Thai lawyer) before launch.
 
-## Release builds with EAS (Google Play, later App Store)
+## Release builds with EAS (Google Play, App Store)
 
 Cloud builds don't see `.env.local`. Add every `EXPO_PUBLIC_*` value from `mobile/.env.example` on expo.dev →
 your project → **Environment variables**, for the `preview` and `production` environments (or
@@ -212,18 +212,60 @@ your project → **Environment variables**, for the `preview` and `production` e
 4. App signing: Google Play App Signing creates a new SHA-1. Add it (Play Console → App integrity) as another
    **Android** OAuth client in Google Cloud, or Google sign-in fails in the Play build.
 
-### iPhone (needs an Apple Developer account, $99/year)
+### iPhone / App Store (no Mac needed)
 
-The app is ready for iOS (`ios.bundleIdentifier` `com.tablemeet.app`, Sign in with Apple, no Mac needed). When you
-have the account:
+The app builds for iOS in the cloud with EAS (`ios.bundleIdentifier` `com.tablemeet.app`). Differences from Android:
+**no ads** on iPhone for now (`src/lib/ads.ios.ts`, and the ads SDK is left out by `mobile/react-native.config.js`),
+the Plus screen shows only "free at level 15" (Apple doesn't allow selling features outside in-app purchase), and
+"Open in Maps" opens Apple Maps. Store texts, screenshots and privacy answers are in `app-store/README.md`.
 
-1. Supabase → Authentication → Sign In / Providers → **Apple**: turn on and add the bundle ID `com.tablemeet.app`.
-2. Google Cloud: create an **iOS** OAuth client (bundle ID `com.tablemeet.app`) and add the Google Sign-In config
-   plugin to `app.json` with its `iosUrlScheme` (see CLAUDE.md).
-3. `npx eas-cli@latest build --profile production --platform ios` (EAS creates the certificates), then
-   `npx eas-cli@latest submit --platform ios` (asks for your Apple ID and creates the App Store Connect app).
-4. Before review: Apple also expects deleting an account to revoke its Sign in with Apple token (needs a small
-   server function with your Apple key), and a way to filter objectionable content in chats.
+1. **Apple Developer account**: sign in at developer.apple.com once and accept the latest agreement. In App Store
+   Connect → **Business**, accept the Free Apps agreement (paid agreement + bank details only matter if you sell
+   something later).
+2. **Sign in with Apple in Supabase**: Authentication → Sign In / Providers → **Apple** → turn on, and in **Client IDs**
+   put `com.tablemeet.app`. (The secret key fields are only for web sign-in; the app doesn't need them.)
+3. **Google sign-in on iPhone**: Google Cloud Console → APIs & Services → Credentials → Create credentials → OAuth
+   client ID → type **iOS**, bundle ID `com.tablemeet.app`. Copy its client ID (`…apps.googleusercontent.com`) and:
+   - Supabase → Providers → **Google** → **Client IDs**: add it after the web client ID, comma-separated. If Google
+     sign-in on the iPhone then fails with a "nonce" error, also turn on **Skip nonce checks** there.
+   - EAS: `npx eas-cli@latest env:create --environment production --name EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID --value
+     <the iOS client ID> --visibility plaintext` (and in `mobile/.env.local` for local builds). `app.config.ts` then
+     adds the Google Sign-In plugin with the right URL scheme. Without it the iPhone app still works, with Sign in with
+     Apple only.
+4. **Create the app in App Store Connect**: Apps → **+** → New App → iOS, name `TableMeet`, primary language English,
+   bundle ID `com.tablemeet.app` (if it isn't in the list yet, step 5 registers it; come back after), SKU
+   `tablemeet-ios`, Full Access. Add **Thai** under App Information → Localizations.
+5. **Build**: from `mobile/`, `npx eas-cli@latest build --profile production --platform ios`. Log in with your Apple
+   ID when asked (two-factor code from your iPhone) and say **yes** to everything EAS offers: it registers the bundle
+   ID with Sign in with Apple and Push, creates the distribution certificate, the provisioning profile and the push
+   key (APNs) for phone notifications. The build number goes up by itself. Takes about 20–30 minutes.
+6. **Revoking Sign in with Apple when an account is deleted** (Apple's rule; `supabase/functions/apple-account`):
+   - developer.apple.com → Certificates, IDs & Profiles → **Keys** → **+** → name `TableMeet Sign in with Apple`, tick
+     **Sign in with Apple** → Configure → primary App ID `com.tablemeet.app` (registered by step 5) → Save → Continue →
+     Register → **Download** the `.p8` file (only possible once; keep it safe, never commit it). Note the **Key ID**,
+     and your **Team ID** (top right, or Membership details).
+   - Supabase → Edge Functions → **Secrets**: add `APPLE_TEAM_ID`, `APPLE_KEY_ID` and `APPLE_PRIVATE_KEY` (open the
+     `.p8` in Notepad and paste all of it, including the BEGIN / END lines).
+   - Deploy the function from the project folder: `npx supabase login`, then
+     `npx supabase functions deploy apple-account --project-ref zxghiilryqzexzvacbrl --no-verify-jwt`. Redeploy after
+     changing `supabase/functions/`. (`--no-verify-jwt`: the function checks the session itself.)
+   - From then on, Sign in with Apple keeps a token for the account, and deleting the account (Settings, or
+     /admin/users) revokes it with Apple first. If no token was kept, the iPhone asks to confirm with Apple once.
+7. **Upload**: `npx eas-cli@latest submit --profile production --platform ios --latest` (pick the App Store Connect
+   app from step 4). Next time you can do both at once with `build … --auto-submit`.
+8. **TestFlight**: after Apple processes the build (10–30 min), App Store Connect → your app → **TestFlight**. Answer the
+   export compliance question if asked (the app uses no non-exempt encryption; `ITSAppUsesNonExemptEncryption` is
+   already false). Add yourself under **Internal Testing**, install the **TestFlight** app on your iPhone and install
+   TableMeet from there. Test: Sign in with Apple, Google sign-in, onboarding, map, create / join a table, chat with
+   photo and voice note, push notifications, check-in, Travellers nearby, and last Delete account on a test account
+   signed in with Apple (afterwards it should be gone from iPhone Settings → your name → Sign in with Apple).
+9. **Screenshots**: take captures on the iPhone and regenerate the framed ones (`app-store/README.md`), or use the
+   ready ones in `app-store/screenshots/`.
+10. **Store listing**: App Store tab → version 1.0 → paste the texts from `app-store/README.md` (English and Thai), upload
+    the screenshots, pick the build, fill in **App Privacy**, **Age Rating** and the **App Review notes**, set the
+    price to Free and the countries, then **Add for Review** → **Submit**. Review usually takes 1–3 days.
+
+Known gap Apple may ask about: chats have block / report but no automatic word filter.
 
 ## Checks
 

@@ -14,7 +14,7 @@ export type LegalDoc = { title: string; updated: string; intro: string[]; sectio
 // sets them; the texts then use generic wording.
 export type LegalContact = { operator: string | null; email: string | null; webUrl: string | null };
 
-const UPDATED: Record<LegalLanguage, string> = { en: '22 October 2026', th: '22 ตุลาคม 2569' };
+const UPDATED: Record<LegalLanguage, string> = { en: '23 October 2026', th: '23 ตุลาคม 2569' };
 
 type RawDoc = { title: string; intro: string[]; sections: LegalSection[] };
 
@@ -210,7 +210,7 @@ const PRIVACY: Record<LegalLanguage, RawDoc> = {
         paragraphs: [
           '• Map: your location is used on your phone to centre the map and show what is near you.',
           '• Check-in: when you tap Check in, your position is sent to our server to confirm you are within 50 m of the venue. We keep that you checked in and when, not your coordinates.',
-          '• Travellers: only if you turn on "Show me to travellers nearby". We keep your latest location for up to 2 hours. Others see a dot moved 150–400 m away and a rounded distance, never your exact position. Turning it off deletes your location.',
+          '• Travellers: only if you turn on "Show me to travellers nearby". We keep the location where you last opened the app, for up to 7 days. Others see a dot moved 150–400 m away and a rounded distance, never your exact position. Turning it off deletes your location.',
           '• Live location in a chat: only when you start it, updated only while the app is open, and it stops at the time you chose.',
           '• Stories: when you post a story, its photo and caption are shown on the map for 24 hours, and on the story map on your profile for 10 days, to everyone signed in to TableMeet, or only to your friends if you choose Friends. We store only a point moved 100–250 m from where you posted it, never your exact position. People who can see a story can like it; you see who liked your stories.',
           '• Phone notifications: if you allow notifications and location, we keep a rough area for your phone (rounded to about 5 km, updated when you open the app) only to tell you about new tables and hangouts within 20 km. Turning off phone notifications in Settings deletes it.',
@@ -245,7 +245,7 @@ const PRIVACY: Record<LegalLanguage, RawDoc> = {
       {
         heading: '6. How long we keep it',
         paragraphs: [
-          'We keep your data while your account exists. Travellers locations are kept for up to 2 hours, unsent messages are removed straight away, and verification photos are deleted as soon as we approve or reject them.',
+          'We keep your data while your account exists. Travellers locations are kept for up to 7 days, unsent messages are removed straight away, and verification photos are deleted as soon as we approve or reject them.',
           'Coupon records (venue, time, staff login and the names of the people checked in) are kept for up to 5 years for accounting with venues, also after an account is deleted.',
         ],
       },
@@ -307,7 +307,7 @@ const PRIVACY: Record<LegalLanguage, RawDoc> = {
         paragraphs: [
           '• แผนที่: ใช้ตำแหน่งของคุณบนโทรศัพท์เพื่อแสดงแผนที่รอบตัวคุณและสิ่งที่อยู่ใกล้',
           '• เช็กอิน: เมื่อคุณกดเช็กอิน ตำแหน่งจะถูกส่งไปยังเซิร์ฟเวอร์เพื่อยืนยันว่าคุณอยู่ภายใน 50 เมตรจากร้าน เราเก็บเพียงว่าคุณเช็กอินแล้วและเวลาใด ไม่เก็บพิกัดของคุณ',
-          '• นักเดินทาง: เฉพาะเมื่อคุณเปิด "แสดงฉันให้นักเดินทางใกล้ๆ เห็น" เราเก็บตำแหน่งล่าสุดของคุณไม่เกิน 2 ชั่วโมง ผู้อื่นเห็นจุดที่ถูกขยับไป 150–400 เมตรและระยะทางแบบปัดเศษ ไม่เห็นตำแหน่งจริงของคุณ การปิดจะลบตำแหน่งของคุณ',
+          '• นักเดินทาง: เฉพาะเมื่อคุณเปิด "แสดงฉันให้นักเดินทางใกล้ๆ เห็น" เราเก็บตำแหน่งล่าสุดที่คุณเปิดแอปไว้ไม่เกิน 7 วัน ผู้อื่นเห็นจุดที่ถูกขยับไป 150–400 เมตรและระยะทางแบบปัดเศษ ไม่เห็นตำแหน่งจริงของคุณ การปิดจะลบตำแหน่งของคุณ',
           '• ตำแหน่งสดในแชท: เฉพาะเมื่อคุณเริ่มแชร์ อัปเดตเฉพาะขณะเปิดแอป และหยุดตามเวลาที่คุณเลือก',
           '• สตอรี่: เมื่อคุณโพสต์สตอรี่ รูปภาพและคำบรรยายจะแสดงบนแผนที่เป็นเวลา 24 ชั่วโมง และบนแผนที่สตอรี่ในโปรไฟล์ของคุณ 10 วัน ให้ทุกคนที่ลงชื่อเข้าใช้ TableMeet เห็น หรือเฉพาะเพื่อนของคุณหากคุณเลือก เพื่อน เราเก็บเพียงจุดที่ถูกขยับไป 100–250 เมตรจากที่คุณโพสต์ ไม่เก็บตำแหน่งจริงของคุณ คนที่เห็นสตอรี่สามารถกดถูกใจได้ และคุณจะเห็นว่าใครถูกใจสตอรี่ของคุณ',
           '• การแจ้งเตือนในโทรศัพท์: หากคุณอนุญาตการแจ้งเตือนและตำแหน่ง เราเก็บพื้นที่โดยประมาณของโทรศัพท์คุณ (ปัดเป็นประมาณ 5 กม. อัปเดตเมื่อคุณเปิดแอป) เพื่อแจ้งโต๊ะและแฮงเอาท์ใหม่ภายใน 20 กม. เท่านั้น การปิดการแจ้งเตือนในโทรศัพท์ที่หน้าการตั้งค่าจะลบข้อมูลนี้',
@@ -342,7 +342,7 @@ const PRIVACY: Record<LegalLanguage, RawDoc> = {
       {
         heading: '6. ระยะเวลาการเก็บข้อมูล',
         paragraphs: [
-          'เราเก็บข้อมูลของคุณตราบเท่าที่บัญชียังอยู่ ตำแหน่งในหน้านักเดินทางเก็บไม่เกิน 2 ชั่วโมง ข้อความที่ยกเลิกการส่งจะถูกลบทันที และรูปที่ใช้ยืนยันตัวตนจะถูกลบทันทีเมื่อเราอนุมัติหรือปฏิเสธ',
+          'เราเก็บข้อมูลของคุณตราบเท่าที่บัญชียังอยู่ ตำแหน่งในหน้านักเดินทางเก็บไม่เกิน 7 วัน ข้อความที่ยกเลิกการส่งจะถูกลบทันที และรูปที่ใช้ยืนยันตัวตนจะถูกลบทันทีเมื่อเราอนุมัติหรือปฏิเสธ',
           'บันทึกการใช้คูปอง (ร้าน เวลา บัญชีพนักงาน และชื่อของผู้ที่เช็กอิน) เก็บไว้ไม่เกิน 5 ปีเพื่อการบัญชีกับร้าน แม้บัญชีจะถูกลบแล้ว',
         ],
       },

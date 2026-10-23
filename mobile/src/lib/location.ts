@@ -10,7 +10,7 @@ export type LocationState =
   // canAskAgain false means Android won't show the prompt again; the user has to use Settings.
   | { status: 'denied'; canAskAgain: boolean };
 
-async function readPosition(): Promise<Coords | null> {
+export async function readPosition(): Promise<Coords | null> {
   try {
     // A recent cached fix shows distances instantly; a fresh one replaces it moments later.
     const position =

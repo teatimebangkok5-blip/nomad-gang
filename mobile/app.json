@@ -138,7 +138,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "TableMeet uses your location to show partner places near you and to check you in when you arrive."
+          "locationWhenInUsePermission": "TableMeet uses your location to show places and groups near you, to check you in when you arrive and, only if you turn it on, to show a rough spot of you to travellers nearby."
         }
       ],
       "@maplibre/maplibre-react-native",

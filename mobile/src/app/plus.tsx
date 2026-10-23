@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import { Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/button';
@@ -24,6 +24,11 @@ const BENEFITS = [
 // TableMeet Plus: what it unlocks, monthly or yearly, and how to get it. Payments aren't in the app yet: people ask
 // the TableMeet team (email), and the founder turns Plus on in the admin panel. Reaching level 15 (My rewards) gives
 // Plus for free.
+// On iPhone only the free way is shown: Apple doesn't allow selling app features outside in-app purchase, and there
+// are no ads on iOS yet (src/lib/ads.ios.ts), so the plans, the contact button and "No ads" are hidden there.
+const SELL_PLUS = Platform.OS !== 'ios';
+const SHOWN_BENEFITS = SELL_PLUS ? BENEFITS : BENEFITS.filter((benefit) => benefit.key !== 'noAds');
+
 export default function PlusScreen() {
   const styles = useStyles();
   const { t } = useTranslation();
@@ -74,7 +79,7 @@ export default function PlusScreen() {
         )}
 
         <View style={styles.benefits}>
-          {BENEFITS.map((benefit) => (
+          {SHOWN_BENEFITS.map((benefit) => (
             <View key={benefit.key} style={styles.benefit}>
               <Text style={styles.benefitEmoji}>{benefit.emoji}</Text>
               <View style={styles.flex}>
@@ -99,31 +104,35 @@ export default function PlusScreen() {
               <Text style={styles.freeLink}>{t('plus.freeLink')}</Text>
             </Pressable>
 
-            <Text style={styles.section}>{t('plus.choosePlan')}</Text>
-            <View style={styles.plans}>
-              {(['monthly', 'yearly'] as const).map((option) => (
-                <Pressable
-                  key={option}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: plan === option }}
-                  onPress={() => setPlan(option)}
-                  style={[styles.plan, plan === option && styles.planSelected]}>
-                  <GlossyFill />
-                  <Text style={styles.planTitle}>{t(`plus.plans.${option}`)}</Text>
-                  <Text style={styles.planText}>{t(`plus.planHints.${option}`)}</Text>
-                </Pressable>
-              ))}
-            </View>
+            {SELL_PLUS && (
+              <>
+                <Text style={styles.section}>{t('plus.choosePlan')}</Text>
+                <View style={styles.plans}>
+                  {(['monthly', 'yearly'] as const).map((option) => (
+                    <Pressable
+                      key={option}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: plan === option }}
+                      onPress={() => setPlan(option)}
+                      style={[styles.plan, plan === option && styles.planSelected]}>
+                      <GlossyFill />
+                      <Text style={styles.planTitle}>{t(`plus.plans.${option}`)}</Text>
+                      <Text style={styles.planText}>{t(`plus.planHints.${option}`)}</Text>
+                    </Pressable>
+                  ))}
+                </View>
 
-            <Text style={styles.how}>{t('plus.how')}</Text>
-            {legalContact.email ? (
-              <View style={styles.cta}>
-                <Button title={t('plus.contact')} onPress={contact} />
-              </View>
-            ) : (
-              <Text style={styles.how}>{t('plus.askTeam')}</Text>
+                <Text style={styles.how}>{t('plus.how')}</Text>
+                {legalContact.email ? (
+                  <View style={styles.cta}>
+                    <Button title={t('plus.contact')} onPress={contact} />
+                  </View>
+                ) : (
+                  <Text style={styles.how}>{t('plus.askTeam')}</Text>
+                )}
+                {email && <Text style={styles.account}>{t('plus.yourAccount', { email })}</Text>}
+              </>
             )}
-            {email && <Text style={styles.account}>{t('plus.yourAccount', { email })}</Text>}
           </>
         )}
       </ScrollView>

@@ -41,6 +41,7 @@ const CHAT_ERRORS = [
   'request_declined',
   'not_found',
   'invalid_attachment',
+  'too_many_requests',
 ] as const;
 export type ChatErrorKey = (typeof CHAT_ERRORS)[number] | 'generic';
 

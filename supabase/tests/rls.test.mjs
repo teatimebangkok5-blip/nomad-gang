@@ -338,9 +338,26 @@ r = await tryQuery("authenticated", g2, `select count(*)::int n from public.near
 check("people who aren't discoverable can't browse travellers", r.rows?.[0]?.n === 0);
 r = await tryQuery("authenticated", user, `select * from public.user_locations`);
 check("exact locations unreadable through the API", !!r.error);
-await db.exec(`update public.user_locations set updated_at = now() - interval '3 hours' where user_id = '${g0}'`);
+await db.exec(`update public.user_locations set updated_at = now() - interval '3 days' where user_id = '${g0}'`);
+r = await tryQuery("authenticated", user, `select user_id, minutes_ago from public.nearby_travellers()`);
+check("the last place someone opened the app counts for days", r.rows?.length === 1 && r.rows[0].minutes_ago >= 3 * 24 * 60 - 1);
+// Times on one Bangkok day 3 days ago, and on the day after.
+const bkkDay = (days, hour) => `(date_trunc('day', now() at time zone 'Asia/Bangkok') - interval '${days} days' + interval '${hour} hours') at time zone 'Asia/Bangkok'`;
+const dotAt = async (when) => {
+  await db.exec(`update public.user_locations set updated_at = ${when} where user_id = '${g0}'`);
+  return (await tryQuery("authenticated", user, `select fuzzy_lat from public.nearby_travellers()`)).rows?.[0]?.fuzzy_lat;
+};
+const dot1 = await dotAt(bkkDay(3, 9));
+const dot2 = await dotAt(bkkDay(3, 20));
+const dot3 = await dotAt(bkkDay(2, 9));
+check("an old dot stays put however often it's looked at (offset fixed per saved day)", dot1 !== undefined && dot1 === dot2);
+check("a position saved on another day gets a new offset", dot3 !== undefined && dot3 !== dot1);
+await db.exec(`update public.user_locations set updated_at = now() - interval '8 days' where user_id = '${g0}'`);
 r = await tryQuery("authenticated", user, `select count(*)::int n from public.nearby_travellers()`);
-check("locations older than 2 hours are hidden", r.rows?.[0]?.n === 0);
+check("locations older than 7 days are hidden", r.rows?.[0]?.n === 0);
+await loc(user, ...BKK);
+r = await tryQuery("service_role", null, `select count(*)::int n from public.user_locations where user_id = $1`, [g0]);
+check("and deleted on the next save", r.rows?.[0]?.n === 0);
 await loc(g0, BKK[0] + 0.009, BKK[1]);
 
 const dm = (from, to, body) => tryQuery("authenticated", from, `select public.send_direct_message($1, $2) as id`, [to, body]);
@@ -359,10 +376,13 @@ r = await tryQuery("authenticated", g1, `select count(*)::int n from public.dire
 check("outsiders can't read it", r.rows?.[0]?.n === 0);
 r = await tryQuery("authenticated", user, `insert into public.direct_messages (thread_id, sender_id, body) values ($1, $2, 'x')`, [threadId, user]);
 check("direct inserts blocked (must use send_direct_message)", !!r.error);
-r = await dm(user, g1, "hey");
-check("can't message someone 8 km away", /too_far/.test(r.error ?? ""));
-r = await dm(user, g2, "hey");
-check("can't message someone who isn't discoverable", /not_visible/.test(r.error ?? ""));
+r = await dm(g2, g1, "Saw your profile, hi!");
+check("anyone can send a request from a profile (not nearby, not discoverable)", !r.error);
+r = await tryQuery("authenticated", g2, `select status from public.direct_threads where id = $1`, [r.rows?.[0]?.id]);
+check("a message to a non-friend is a request", r.rows?.[0]?.status === "pending");
+r = await dm(g2, g1, "Hello?");
+check("still one message until they reply", /request_pending/.test(r.error ?? ""));
+await db.exec(`delete from public.direct_threads where requested_by = '${g2}'`);
 r = await dm(user, g0, "   ");
 check("empty message rejected", /empty_message/.test(r.error ?? ""));
 r = await dm(unverified, g0, "hey");

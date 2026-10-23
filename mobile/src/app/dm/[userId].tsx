@@ -16,7 +16,8 @@ import { useMarkChatRead } from '@/lib/messages';
 import { openSafetyMenu } from '@/lib/safety-menu';
 import { makeStyles, useColors } from '@/lib/theme';
 
-// One-to-one chat with someone nearby. The first message is a request; the receiver accepts, declines or replies.
+// One-to-one chat (from a profile, Travellers nearby or Messages). Between friends it opens at once; otherwise the
+// first message is a request and the receiver accepts, declines or replies.
 export default function DirectChatScreen() {
   const styles = useStyles();
   const Colors = useColors();

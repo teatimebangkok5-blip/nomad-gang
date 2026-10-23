@@ -9,6 +9,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, requirePhoneVerification, useAuth } from '@/lib/auth';
 import { useLiveLocationSharing } from '@/lib/live-location';
 import { usePushNotifications } from '@/lib/push';
+import { useShareLocationOnOpen } from '@/lib/travellers';
 import { OnboardingProvider, useOnboarding } from '@/lib/onboarding';
 import { skipLogin } from '@/lib/preview';
 import { ThemeProvider, useTheme } from '@/lib/theme';
@@ -42,6 +43,8 @@ function RootNavigator() {
   // Keep the splash screen up until we know whether the first-time questions are needed.
   const waiting = !ready || (signedIn && onboarding === 'unknown');
   useLiveLocationSharing(session?.user.id);
+  // Visible travellers appear at the last place they opened the app.
+  useShareLocationOnOpen(signedIn ? session?.user.id : undefined);
   // After the first-time questions, so a tapped notification opens over home.
   usePushNotifications(session?.user.id, signedIn && onboarding === 'done');
 

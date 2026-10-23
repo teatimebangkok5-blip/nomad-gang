@@ -18,7 +18,8 @@ export async function findUsers(query: string): Promise<{ users: FoundUser[]; er
 }
 
 // Deletes someone's account like "Delete account" in the app: their files first (chat photos / voice notes, profile,
-// gem and story photos), then the account and everything that belongs to it (admin_delete_user).
+// gem and story photos), their Sign in with Apple token (Apple's rule, supabase/functions/apple-account), then the
+// account and everything that belongs to it (admin_delete_user).
 export async function deleteUser(userId: string): Promise<FormState> {
   const supabase = await requireAdmin();
   if (!z.string().uuid().safeParse(userId).success) return { error: "Unknown person" };
@@ -39,6 +40,13 @@ export async function deleteUser(userId: string): Promise<FormState> {
     }
   }
 
+  // Not a reason to stop: the account is deleted either way, and the message says if Apple couldn't be reached.
+  const { data: apple, error: appleError } = await supabase.functions.invoke("apple-account", {
+    body: { action: "revoke", userId },
+  });
+  const appleResult = apple as { revoked?: boolean; reason?: string } | null;
+  const appleFailed = !!appleError || (appleResult?.revoked === false && appleResult.reason !== "no_token");
+
   const { error } = await supabase.rpc("admin_delete_user", { p_user: userId });
   if (error) {
     if (error.message.includes("cannot_delete_admin")) return { error: "This is an admin account, so it can't be deleted here." };
@@ -46,5 +54,10 @@ export async function deleteUser(userId: string): Promise<FormState> {
     return { error: `Couldn't delete the account: ${error.message}` };
   }
   refresh();
-  return { ok: true, message: "Account deleted." };
+  return {
+    ok: true,
+    message: appleFailed
+      ? "Account deleted. Their Sign in with Apple couldn't be revoked (is the apple-account function deployed?)."
+      : "Account deleted.",
+  };
 }

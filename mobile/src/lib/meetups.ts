@@ -1,6 +1,6 @@
 import type { PostgrestError } from '@supabase/supabase-js';
 import { useCallback, useEffect, useState } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 import type { EventCategory } from '@/lib/events';
 import { supabase, uniqueChannelName } from '@/lib/supabase';
@@ -250,8 +250,13 @@ export function meetupCoords(
   return meetup.place_lat !== null && meetup.place_lng !== null ? { lat: meetup.place_lat, lng: meetup.place_lng } : null;
 }
 
-// Opens the spot in the phone's maps app (Google Maps, etc.) for directions. Free: it's just a link.
+// Opens the spot in the phone's maps app (Google Maps, etc. on Android; Apple Maps on iPhone, which has no geo:
+// links) for directions. Free: it's just a link.
 export function directionsUrl(place: { lat: number; lng: number; name?: string | null }) {
+  if (Platform.OS === 'ios') {
+    const name = place.name ? `&q=${encodeURIComponent(place.name)}` : '';
+    return `https://maps.apple.com/?ll=${place.lat},${place.lng}${name}`;
+  }
   const label = place.name ? `(${encodeURIComponent(place.name)})` : '';
   return `geo:${place.lat},${place.lng}?q=${place.lat},${place.lng}${label}`;
 }

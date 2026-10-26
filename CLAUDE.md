@@ -262,6 +262,14 @@ Product spec and tech stack below are agreed. Built so far:
   venue, max 20 a day, "Helpful" votes (not your own), most helpful first; only via `place_tips()`, `save_tip`,
   `delete_tip`, `vote_tip`. Reports (`reports.context = 'tip'`) hide a tip for the reporter at once and for everyone
   at 3 open reports. Admin **/admin/tips** (`admin_tips`, `admin_clear_tip_reports`, delete).
+- **Message reports + admin Reports page** (added 2026-10-26 after Apple's first review, `*_report_message_context.sql`
+  + `*_report_messages.sql`): press and hold someone else's message in any chat → Report message (spam / harassment /
+  inappropriate) → offer to Block (`ChatView`, `reportMessage` in `src/lib/chat-media.ts`). `report_message(kind,
+  message, reason)` only for messages the caller can read, not their own; once per person and message, 50 a day; the
+  report keeps a copy (`reports.excerpt`, `media_path`, `chat_kind`, context `message`) that direct inserts can't fill.
+  Admin **/admin/reports** (`admin_reports`): every report with names and what was reported (message copy + photo,
+  story caption + photo, tip), Close / Remove message (`admin_remove_message`) / Delete story / Delete tip / Delete
+  account. The Terms promise action within 24 hours. App Review answer + recording plan: `app-store/review-info.md`.
 - **Verification, badges, women-only** (added 2026-10-21, `*_verification_women_only.sql`). Settings → Get verified
   (`src/app/verify.tsx`, `src/lib/verification.ts`): gender + selfie + ID photo → private `verifications` bucket
   (`<user id>/…`) → `submit_verification` (one waiting at a time, 3 a month). The founder decides at

@@ -449,7 +449,11 @@ const th: Translation = {
     reportTitle: 'ทำไมคุณถึงรายงาน {{name}}?',
     reasonSpam: 'สแปมหรือหลอกลวง',
     reasonHarassment: 'คุกคาม',
+    reasonInappropriate: 'ภาพโป๊ ความเกลียดชัง หรือความรุนแรง',
     reported: 'ขอบคุณที่แจ้ง เราจะตรวจสอบ',
+    reportMessage: 'รายงานข้อความ',
+    reportMessageTitle: 'ทำไมคุณถึงรายงานข้อความนี้?',
+    blockName: 'บล็อก {{name}}',
     errors: {
       auth_required: 'กรุณาเข้าสู่ระบบก่อน',
       not_allowed: 'กรุณายืนยันเบอร์โทรศัพท์เพื่อส่งข้อความ',

@@ -8,9 +8,18 @@ Everything to paste into App Store Connect for the first iPhone release. Build a
 | `app-icon-1024.png` | Not uploaded by hand: it's built into the app (`mobile/assets/images/icon.png`, 1024 × 1024, no transparency). Kept here for reference. |
 | `screenshots/en/*.png` | App Store → iOS app → **English** → iPhone 6.9" Display (1320 × 2868). Upload in number order. Apple scales them down for smaller iPhones. |
 | `screenshots/th/*.png` | Same, under the **Thai** localization. |
+| `screenshots/en-medium/*.png`, `th-medium/*.png` | The same pictures at 1206 × 2622 for **iPhone with Dynamic Island (medium display)** (6.1" / 6.3"), if App Store Connect asks for that size. |
+| `header/header-3840x1646.png` | Version page → Product Page Information → **Header** (21:9). No text, so the same file for English and Thai. Shown on iOS 27+ only; optional. |
+| `header/search-results-<lang>-3840x2560.png` | Same section → **Search Results** (3:2), `en` under English, `th` under Thai. |
+
+The header and search results images are made by `node mobile/scripts/gen-app-store-header.mjs` from the same
+captures. Apple doesn't allow prices, discounts, URLs or logos in them, so the create-table screen (it shows a partner
+discount) is left out.
 
 The screenshots are made from the phone captures in `store-screenshots/` by
-`node mobile/scripts/gen-app-store-screenshots.mjs` (headlines are in that script). Screens showing partner discounts
+`node mobile/scripts/gen-app-store-screenshots.mjs` (headlines are in that script). Each capture is drawn in an iPhone
+frame with the Dynamic Island and an iOS status bar (9:41); the captures come from Android without system bars, so the
+status bar strip is a blur of the capture's top edge and nothing in the app is covered. Screens showing partner discounts
 are left out while coupons are switched off for launch.
 
 **Thai set**: made only from captures of the app in Thai (`store-screenshots/th/`, taken on the Redmi on 2026-10-23 in
@@ -36,7 +45,10 @@ shows the English ones. No iPad screenshots are needed (`supportsTablet` is fals
 - **Privacy Policy URL**: `https://sites.google.com/view/tablemeet/home` (must open the policy; a page that links to it
   is OK)
 - **Support URL**: the same Google Site, or a page with `tablemeet.helpdesk@gmail.com`
-- **Copyright**: `2026 TableMeet`
+- **Copyright**: `2026 TableMeet` (plain text, not a URL; Apple adds the ©)
+- **Marketing URL** (optional): `https://sites.google.com/view/tablemeet/home`, or leave empty
+- **Routing App Coverage File**: leave empty. Only for apps that give turn-by-turn directions
+  (`MKDirectionsApplicationSupportedModes`); TableMeet only opens Apple Maps.
 
 ## Promotional text (170 max)
 
@@ -123,6 +135,10 @@ TableMeet ช่วยให้นักเดินทาง ดิจิทั
 ```
 
 ## App Review notes (App Review Information → Notes)
+
+**Use `review-info.md` now**: Apple asked for more information on the first submission (Guideline 2.1, 2026-10-26),
+and that file has the full answer for the Notes field plus how to record the demo video. The short version below is
+the original.
 
 ```
 TableMeet is a social dining app for Bangkok, Thailand. Sign in with "Sign in with Apple" (or Google). On first start

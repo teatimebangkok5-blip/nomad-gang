@@ -35,11 +35,12 @@ import { BigEmoji, EmojiImage, EmojiPanel, EmojiText, emojiLabel } from '@/compo
 import { Radius, RaisedSmall, Spacing, Type } from '@/constants/theme';
 import { useLanguage } from '@/i18n';
 import { bangkokDay, bangkokMinutes, deviceZone, formatClock, formatDayLabel } from '@/lib/bangkok-time';
-import type { ChatErrorKey, ChatMessage } from '@/lib/chat';
+import { blockUser, type ChatErrorKey, type ChatMessage } from '@/lib/chat';
 import {
   editMessage,
   LIVE_DURATIONS,
   MAX_VOICE_MS,
+  reportMessage,
   sendChatCard,
   sendPhoto,
   sendVoiceNote,
@@ -47,6 +48,7 @@ import {
   unsendMessage,
   type ChatRef,
   type LiveMinutes,
+  type MessageReportReason,
   type PhotoSource,
 } from '@/lib/chat-media';
 import { useChatReactions, type ReactionCount } from '@/lib/reactions';
@@ -72,7 +74,8 @@ type Selection = { start: number; end: number };
 // TableMeet's emoji (greetings are sent at once as stickers). Messages that are only emoji show big and animated.
 // Used by table / hangout chats,
 // private chats and group chats. Other people's messages show their profile picture; tapping it opens their
-// profile. Press and hold a message to react (anyone who can write here), copy it, or edit / unsend your own.
+// profile. Press and hold a message to react (anyone who can write here), copy it, edit / unsend your own, or report
+// someone else's (then block them if you like).
 export function ChatView({
   messages,
   myId,
@@ -122,6 +125,8 @@ export function ChatView({
   // The message pressed and held (reactions and actions sheet), and whether its full emoji list is open.
   const [held, setHeld] = useState<ChatMessage | null>(null);
   const [allReactions, setAllReactions] = useState(false);
+  // The held message's sheet shows the report reasons instead of the actions.
+  const [reporting, setReporting] = useState(false);
   const inputRef = useRef<TextInput>(null);
   // Where the cursor was, so emoji go there even while the keyboard is hidden.
   const selection = useRef<Selection | null>(null);
@@ -196,6 +201,36 @@ export function ChatView({
   function closeHeld() {
     setHeld(null);
     setAllReactions(false);
+    setReporting(false);
+  }
+
+  async function report(message: ChatMessage, reason: MessageReportReason) {
+    if (!chat || !myId) return;
+    closeHeld();
+    const result = await reportMessage(chat.kind, message.id, reason);
+    if (result) {
+      setError(result);
+      return;
+    }
+    Alert.alert(t('chat.reported'), undefined, [
+      { text: t('common.ok'), style: 'cancel' },
+      { text: t('chat.blockName', { name: message.sender_name }), style: 'destructive', onPress: () => block(message) },
+    ]);
+  }
+
+  function block(message: ChatMessage) {
+    if (!myId) return;
+    Alert.alert(t('chat.blockConfirm', { name: message.sender_name }), undefined, [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('chat.block'),
+        style: 'destructive',
+        onPress: () =>
+          blockUser(myId, message.sender_id).then((result) => {
+            if (result) setError(result);
+          }),
+      },
+    ]);
   }
 
   function myReaction(message: ChatMessage): string | null {
@@ -343,7 +378,8 @@ export function ChatView({
             const day = bangkokDay(new Date(item.created_at), zone);
             const newDay = !older || bangkokDay(new Date(older.created_at), zone) !== day;
             const firstOfRun = newDay || older.sender_id !== item.sender_id;
-            const holdable = item.kind !== 'unsent' && Boolean(chat) && (canReact || mine);
+            // Anyone in the chat can report other people's messages, even where they can't react.
+            const holdable = item.kind !== 'unsent' && Boolean(chat && myId);
             const chips = reactions.get(item.id);
             const row = (
               <View style={[styles.row, mine ? styles.rowMine : styles.rowTheirs, firstOfRun && styles.rowFirst]}>
@@ -515,7 +551,7 @@ export function ChatView({
           <Pressable style={[styles.sheet, { paddingBottom: insets.bottom + Spacing.md }]} onPress={() => {}}>
             <GlossyFill />
             <View style={styles.handle} />
-            {held && canReact && !allReactions && (
+            {held && canReact && !allReactions && !reporting && (
               <View style={styles.quickRow}>
                 {QUICK_REACTIONS.map((id) => {
                   const emoji = EMOJI_BY_ID.get(id)!;
@@ -551,7 +587,7 @@ export function ChatView({
                 />
               </View>
             )}
-            {held && !allReactions && (
+            {held && !allReactions && !reporting && (
               <View style={styles.actions}>
                 {heldText && (
                   <SheetAction icon="copy" label={t('chat.copy')} onPress={() => copy(held)} />
@@ -562,6 +598,17 @@ export function ChatView({
                 {heldMine && (
                   <SheetAction icon="delete" label={t('chat.unsend')} danger onPress={() => unsend(held)} />
                 )}
+                {!heldMine && (
+                  <SheetAction icon="flag" label={t('chat.reportMessage')} danger onPress={() => setReporting(true)} />
+                )}
+              </View>
+            )}
+            {held && reporting && (
+              <View style={styles.actions}>
+                <Text style={[styles.sheetTitle, styles.reportTitle]}>{t('chat.reportMessageTitle')}</Text>
+                <SheetAction icon="flag" label={t('chat.reasonSpam')} onPress={() => report(held, 'spam')} />
+                <SheetAction icon="flag" label={t('chat.reasonHarassment')} onPress={() => report(held, 'harassment')} />
+                <SheetAction icon="flag" label={t('chat.reasonInappropriate')} onPress={() => report(held, 'inappropriate')} />
               </View>
             )}
           </Pressable>
@@ -937,4 +984,5 @@ const useStyles = makeStyles((Colors) => ({
   actionPressed: { backgroundColor: Colors.pressed },
   actionLabel: { ...Type.body, color: Colors.text },
   actionDanger: { color: Colors.danger },
+  reportTitle: { marginTop: 0, marginBottom: Spacing.sm, paddingHorizontal: Spacing.sm },
 }));

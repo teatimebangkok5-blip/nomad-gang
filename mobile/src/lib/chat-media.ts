@@ -157,6 +157,14 @@ export async function unsendMessage(kind: ChatKind, messageId: string): Promise<
   return chatError(error);
 }
 
+export type MessageReportReason = 'spam' | 'harassment' | 'inappropriate';
+
+// Someone else's message. The server keeps a copy for the founder; reporting the same message again does nothing.
+export async function reportMessage(kind: ChatKind, messageId: string, reason: MessageReportReason): Promise<ChatErrorKey | null> {
+  const { error } = await supabase.rpc('report_message', { p_chat_kind: kind, p_message_id: messageId, p_reason: reason });
+  return chatError(error);
+}
+
 export async function stopLiveLocation(kind: ChatKind, messageId: string): Promise<ChatErrorKey | null> {
   const { error } = await supabase.rpc('stop_live_location', { p_chat_kind: kind, p_message_id: messageId });
   liveSharesChanged();

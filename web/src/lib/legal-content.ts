@@ -14,7 +14,7 @@ export type LegalDoc = { title: string; updated: string; intro: string[]; sectio
 // sets them; the texts then use generic wording.
 export type LegalContact = { operator: string | null; email: string | null; webUrl: string | null };
 
-const UPDATED: Record<LegalLanguage, string> = { en: '23 October 2026', th: '23 ตุลาคม 2569' };
+const UPDATED: Record<LegalLanguage, string> = { en: '26 October 2026', th: '26 ตุลาคม 2569' };
 
 type RawDoc = { title: string; intro: string[]; sections: LegalSection[] };
 
@@ -54,7 +54,7 @@ const TERMS: Record<LegalLanguage, RawDoc> = {
       {
         heading: '4. Blocking, reporting and moderation',
         paragraphs: [
-          'You can block or report anyone from their profile, from a chat, or in Travellers. Blocking hides you from each other.',
+          'You can block or report anyone from their profile, from a chat, or in Travellers, and report a single message by pressing and holding it. Blocking hides you from each other.',
           "We review reports and may remove content, and suspend or delete accounts that break these Terms, without notice. We aim to act on reports of objectionable content within 24 hours.",
         ],
       },
@@ -135,7 +135,7 @@ const TERMS: Record<LegalLanguage, RawDoc> = {
       {
         heading: '4. การบล็อก การรายงาน และการดูแลเนื้อหา',
         paragraphs: [
-          'คุณสามารถบล็อกหรือรายงานผู้ใช้คนใดก็ได้จากโปรไฟล์ แชท หรือหน้านักเดินทาง การบล็อกจะซ่อนคุณทั้งสองจากกันและกัน',
+          'คุณสามารถบล็อกหรือรายงานผู้ใช้คนใดก็ได้จากโปรไฟล์ แชท หรือหน้านักเดินทาง และรายงานข้อความใดข้อความหนึ่งได้โดยกดค้างที่ข้อความนั้น การบล็อกจะซ่อนคุณทั้งสองจากกันและกัน',
           'เราตรวจสอบรายงาน และอาจลบเนื้อหา ระงับ หรือลบบัญชีที่ละเมิดข้อกำหนดนี้ได้โดยไม่ต้องแจ้งล่วงหน้า เราตั้งเป้าดำเนินการกับรายงานเนื้อหาที่ไม่เหมาะสมภายใน 24 ชั่วโมง',
         ],
       },
@@ -201,7 +201,7 @@ const PRIVACY: Record<LegalLanguage, RawDoc> = {
           '• Tips: tips you write about places, shown with your name to everyone signed in, and which tips you marked helpful (kept private).',
           '• Stories: the photos and captions you post on the map (shown on the map for 24 hours and on your profile\'s story map for 10 days; deleted, photo included, the next time you open the app after that, or earlier when you delete them or your account).',
           '• Events: events you create (name, description, photos, place, times, entry price and ticket link) are shown to everyone signed in, and the arrival time you pick is shown to the people who can see the event. TableMeet does not sell tickets or handle payments for events.',
-          '• Safety: people you block and reports you send.',
+          '• Safety: people you block and reports you send (a report of a message keeps a copy of that message for our review).',
           '• Technical: your IP address and device information, which our service providers log when the app connects.',
         ],
       },
@@ -298,7 +298,7 @@ const PRIVACY: Record<LegalLanguage, RawDoc> = {
           '• เคล็ดลับ: เคล็ดลับเกี่ยวกับสถานที่ที่คุณเขียน ซึ่งแสดงพร้อมชื่อของคุณให้ทุกคนที่ลงชื่อเข้าใช้เห็น และเคล็ดลับที่คุณกดว่ามีประโยชน์ (เก็บเป็นความลับ)',
           '• สตอรี่: รูปภาพและคำบรรยายที่คุณโพสต์บนแผนที่ (แสดงบนแผนที่ 24 ชั่วโมง และบนแผนที่สตอรี่ในโปรไฟล์ของคุณ 10 วัน หลังจากนั้นจะถูกลบพร้อมรูปภาพเมื่อคุณเปิดแอปครั้งถัดไป หรือก่อนหน้านั้นเมื่อคุณลบเองหรือลบบัญชี)',
           '• อีเวนต์: อีเวนต์ที่คุณสร้าง (ชื่อ รายละเอียด รูปภาพ สถานที่ เวลา ราคาค่าเข้า และลิงก์ซื้อตั๋ว) จะแสดงให้ทุกคนที่ลงชื่อเข้าใช้เห็น และเวลาที่คุณเลือกว่าจะมาถึงจะแสดงให้คนที่เห็นอีเวนต์นั้น TableMeet ไม่ขายตั๋วและไม่รับชำระเงินสำหรับอีเวนต์',
-          '• ความปลอดภัย: ผู้ที่คุณบล็อกและรายงานที่คุณส่ง',
+          '• ความปลอดภัย: ผู้ที่คุณบล็อกและรายงานที่คุณส่ง (การรายงานข้อความจะเก็บสำเนาข้อความนั้นไว้ให้เราตรวจสอบ)',
           '• ข้อมูลทางเทคนิค: ที่อยู่ IP และข้อมูลอุปกรณ์ ซึ่งผู้ให้บริการของเราบันทึกเมื่อแอปเชื่อมต่อ',
         ],
       },

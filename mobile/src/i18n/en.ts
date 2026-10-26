@@ -448,7 +448,11 @@ const en = {
     reportTitle: 'Why are you reporting {{name}}?',
     reasonSpam: 'Spam or scam',
     reasonHarassment: 'Harassment',
+    reasonInappropriate: 'Nudity, hate or violence',
     reported: "Thanks for telling us. We'll look into it.",
+    reportMessage: 'Report message',
+    reportMessageTitle: 'Why are you reporting this message?',
+    blockName: 'Block {{name}}',
     errors: {
       auth_required: 'Please sign in first.',
       not_allowed: 'Verify your phone number to send messages.',

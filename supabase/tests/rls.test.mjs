@@ -2594,5 +2594,41 @@ check("max 30 lookups an hour", /too_many_requests/.test(r.error ?? ""));
 r = await tryQuery("authenticated", ev1, `select * from public.maps_link_lookups`);
 check("lookups aren't readable", !!r.error);
 
+// --- Reporting a chat message + the admin Reports page
+r = await tryQuery("authenticated", g2, `insert into public.meetup_messages (meetup_id, sender_id, body) values ($1, $2, 'Something nasty') returning id`, [parisWalk, g2]);
+const nastyId = r.rows?.[0]?.id;
+check("a member writes in the Paris hangout chat", !!nastyId);
+r = await tryQuery("authenticated", user, `select public.report_message('meetup', $1, 'harassment')`, [nastyId]);
+check("a member reports someone's message", !r.error);
+await tryQuery("authenticated", user, `select public.report_message('meetup', $1, 'spam')`, [nastyId]);
+r = await db.query(`select reported_id, context::text, chat_kind, excerpt, reason from public.reports where context_id = $1`, [nastyId]);
+check("the report keeps a copy of the message, once per person",
+  r.rows.length === 1 && r.rows[0].reported_id === g2 && r.rows[0].chat_kind === "meetup" && r.rows[0].excerpt === "Something nasty" && r.rows[0].reason === "harassment");
+r = await tryQuery("authenticated", g1, `select public.report_message('meetup', $1, 'spam')`, [nastyId]);
+check("people outside the chat can't report its messages", /not_found/.test(r.error ?? ""));
+r = await tryQuery("authenticated", g2, `select public.report_message('meetup', $1, 'spam')`, [nastyId]);
+check("can't report my own message", /not_found/.test(r.error ?? ""));
+r = await tryQuery("authenticated", host, `select public.report_message('meetup', $1, 'because')`, [nastyId]);
+check("only the listed reasons", /invalid_reason/.test(r.error ?? ""));
+r = await tryQuery("authenticated", host, `insert into public.reports (reporter_id, reported_id, context, context_id, reason, chat_kind, excerpt) values ($1, $2, 'message', $3, 'spam', 'meetup', 'made up')`, [host, g2, nastyId]);
+check("message reports can't be faked with a direct insert", !!r.error);
+r = await tryQuery("authenticated", host, `insert into public.reports (reporter_id, reported_id, context, reason) values ($1, $2, 'traveller', 'spam')`, [host, g2]);
+check("people can still be reported directly", !r.error);
+r = await tryQuery("authenticated", user, `select * from public.admin_reports(true, 100)`);
+check("only admins list reports", !!r.error);
+r = await tryQuery("authenticated", admin, `select * from public.admin_reports(true, 100)`);
+const nastyReport = r.rows?.find((x) => x.context_id === nastyId);
+check("the admin sees the report with names and the person's open reports",
+  !!nastyReport && nastyReport.reported_name && nastyReport.reporter_name && nastyReport.reported_open_reports >= 2);
+r = await tryQuery("authenticated", user, `select public.admin_remove_message('meetup', $1)`, [nastyId]);
+check("only admins remove other people's messages", !!r.error);
+r = await tryQuery("authenticated", admin, `select public.admin_remove_message('meetup', $1)`, [nastyId]);
+check("the admin removes the message", !r.error);
+r = await db.query(`select kind, body from public.meetup_messages where id = $1`, [nastyId]);
+check("a removed message is unsent", r.rows[0]?.kind === "unsent" && r.rows[0].body === "");
+r = await tryQuery("authenticated", admin, `update public.reports set resolved = true where id = $1`, [nastyReport?.id]);
+r = await tryQuery("authenticated", admin, `select * from public.admin_reports(true, 100)`);
+check("closed reports leave the open list", !r.rows?.some((x) => x.context_id === nastyId));
+
 console.log(failures === 0 ? "\nALL PASSED" : `\n${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
